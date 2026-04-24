@@ -1,0 +1,14 @@
+# Artefatos e segredos que não devem ir para o Git.
+.env
+.venv/
+venv/
+__pycache__/
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+dist/
+*.egg-info/
+
+# Materiais locais de estágio / análise (não versionar).
+analise-inicial/
