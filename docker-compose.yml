@@ -1,17 +1,23 @@
-# Orquestração local: Redis + API.
-services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      API_KEY: ${API_KEY:-dev-change-me}
-      REDIS_URL: redis://redis:6379/0
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    depends_on:
-      - redis
+# Orquestração local: Redis + API.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      API_KEY: ${API_KEY:-dev-change-me}
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+      MENSAGENS_PROVEDOR_EMAIL: ${MENSAGENS_PROVEDOR_EMAIL:-zenvia}
+      MENSAGENS_PROVEDOR_SMS: ${MENSAGENS_PROVEDOR_SMS:-zenvia}
+      ZENVIA_API_BASE_URL: ${ZENVIA_API_BASE_URL:-https://api.zenvia.com}
+      ZENVIA_API_TOKEN: ${ZENVIA_API_TOKEN:-}
+      ZENVIA_EMAIL_FROM: ${ZENVIA_EMAIL_FROM:-}
+      ZENVIA_SMS_FROM: ${ZENVIA_SMS_FROM:-}
+    depends_on:
+      - redis
