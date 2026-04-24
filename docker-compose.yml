@@ -1,18 +1,17 @@
-# Orquestração local: Redis + API.
-services:
-  redis:
-    image: redis:7-alpine
-    ports:
-      - "6379:6379"
-
-  api:
-    build: .
-    ports:
-      - "8000:8000"
-    environment:
-      API_KEY: ${API_KEY:-dev-change-me}
-      REDIS_URL: redis://redis:6379/0
-      WEBHOOK_SECRET: ${WEBHOOK_SECRET:-}
-      LOG_LEVEL: ${LOG_LEVEL:-INFO}
-    depends_on:
-      - redis
+# Orquestração local: Redis + API.
+services:
+  redis:
+    image: redis:7-alpine
+    ports:
+      - "6379:6379"
+
+  api:
+    build: .
+    ports:
+      - "8000:8000"
+    environment:
+      API_KEY: ${API_KEY:-dev-change-me}
+      REDIS_URL: redis://redis:6379/0
+      LOG_LEVEL: ${LOG_LEVEL:-INFO}
+    depends_on:
+      - redis
