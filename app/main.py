@@ -1,6 +1,6 @@
 from fastapi import FastAPI
 
-from app.api.rotas import envio_mensagens, ping_autenticado, saude
+from app.mensageria.api.rotas import envio_mensagens, ping_autenticado, saude
 
 app = FastAPI(
     title="API do sistema de notificações da ABC Advise",

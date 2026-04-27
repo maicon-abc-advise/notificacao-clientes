@@ -1,5 +1,5 @@
 from typing import Protocol, runtime_checkable
-from app.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms, ResultadoEnvioMensagem
+from app.mensageria.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms, ResultadoEnvioMensagem
 
 @runtime_checkable
 class ProvedorCanalEmail(Protocol):

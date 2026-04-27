@@ -13,7 +13,7 @@ os.environ.setdefault("MENSAGENS_PROVEDOR_SMS", "zenvia")
 @pytest.fixture(autouse=True)
 def _limpar_cache_configuracao() -> None:
     from app.config.config import obter_configuracao
-    from app.api.externo.zenvia.parametros import obter_parametros_zenvia
+    from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
 
     obter_configuracao.cache_clear()
     obter_parametros_zenvia.cache_clear()

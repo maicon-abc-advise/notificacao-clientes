@@ -1,8 +1,8 @@
-from app.api.externo.zenvia.adaptador_envio import AdaptadorEnvioZenvia
-from app.api.externo.zenvia.parametros import obter_parametros_zenvia
-from app.excecoes.erro_provedor import FalhaConfiguracaoProvedor
-from app.servicos.mensageria.porta import PortaEnvioMensagem, ProvedorCanalEmail, ProvedorCanalSms
-from app.servicos.mensageria.porta_composta import PortaMensagemComposta
+from app.mensageria.api.externo.zenvia.adaptador_envio import AdaptadorEnvioZenvia
+from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
+from app.mensageria.excecoes.erro_provedor import FalhaConfiguracaoProvedor
+from app.mensageria.servicos.porta import PortaEnvioMensagem, ProvedorCanalEmail, ProvedorCanalSms
+from app.mensageria.servicos.porta_composta import PortaMensagemComposta
 from app.config.config import Configuracao
 from app.config.provedor_mensagens import ProvedorMensagem
 

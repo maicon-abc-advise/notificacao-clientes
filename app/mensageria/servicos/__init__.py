@@ -1,11 +1,11 @@
 """Portas e modelos de envio (sem acoplamento a provedor específico)."""
 
-from app.api.dto.modelos import (
+from app.mensageria.api.dto.modelos import (
     PedidoEnvioEmail,
     PedidoEnvioSms,
     ResultadoEnvioMensagem,
 )
-from app.servicos.mensageria.porta import PortaEnvioMensagem
+from app.mensageria.servicos.porta import PortaEnvioMensagem
 
 __all__ = [
     "PedidoEnvioEmail",

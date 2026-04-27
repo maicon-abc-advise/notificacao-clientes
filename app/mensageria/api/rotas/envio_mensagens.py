@@ -1,12 +1,12 @@
 from typing import Annotated
 from fastapi import APIRouter, Depends, HTTPException, status
-from app.api.dto.modelos import (
+from app.mensageria.api.dto.modelos import (
     PedidoEnvioEmail,
     PedidoEnvioSms,
     ResultadoEnvioMensagem,
 )
-from app.excecoes.erro import ErroEnvioZenvia
-from app.servicos.mensageria.porta import PortaEnvioMensagem
+from app.mensageria.excecoes.erro import ErroEnvioZenvia
+from app.mensageria.servicos.porta import PortaEnvioMensagem
 from app.config.dependencias import obter_porta_envio_mensagem, verificar_chamada_interna
 
 router = APIRouter( prefix="/v1/mensagens",dependencies=[Depends(verificar_chamada_interna)],)

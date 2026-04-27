@@ -1,5 +1,5 @@
-from app.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms, ResultadoEnvioMensagem
-from app.servicos.mensageria.porta import PortaEnvioMensagem, ProvedorCanalEmail, ProvedorCanalSms
+from app.mensageria.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms, ResultadoEnvioMensagem
+from app.mensageria.servicos.porta import PortaEnvioMensagem, ProvedorCanalEmail, ProvedorCanalSms
 
 class PortaMensagemComposta(PortaEnvioMensagem):
 

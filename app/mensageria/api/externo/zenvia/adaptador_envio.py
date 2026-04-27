@@ -1,14 +1,14 @@
 import json
 from typing import Any
 import httpx
-from app.api.dto.modelos import (
+from app.mensageria.api.dto.modelos import (
     CanalMensagem,
     PedidoEnvioEmail,
     PedidoEnvioSms,
     ResultadoEnvioMensagem,
 )
-from app.excecoes.erro import ErroEnvioZenvia
-from app.api.externo.zenvia.parametros import ParametrosZenvia
+from app.mensageria.excecoes.erro import ErroEnvioZenvia
+from app.mensageria.api.externo.zenvia.parametros import ParametrosZenvia
 
 _CABECALHO_TOKEN = "X-API-TOKEN"
 _TIMEOUT = httpx.Timeout(30.0, connect=10.0)

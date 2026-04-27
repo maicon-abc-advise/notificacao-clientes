@@ -10,6 +10,8 @@ API em **FastAPI** para o fluxo de notificações (ABC Advise). Hoje o código c
 
 A raiz do projeto (ex.: a pasta clonada como `notificacao-clientes/`) contém o seguinte. **Não existe** pasta com o nome `provedor`; a escolha do conector de mensageria fica no **módulo** `app.config.provedor_mensagens` (ficheiro `provedor_mensagens.py` dentro de `app/config/`, juntamente com `config.py`, `dependencias.py` e `security.py`).
 
+O código de negócio do envio está agrupado em **`app.mensageria`**. **`app.orquestracao`** e **`app.reenvio`** repetem a mesma subdivisão (`api`, `excecoes`, `repositorios`, `servicos`) para evolução futura; hoje estão só com pacotes vazios.
+
 ### Raiz do repositório
 
 ```
@@ -31,53 +33,66 @@ A raiz do projeto (ex.: a pasta clonada como `notificacao-clientes/`) contém o 
 app/
 ├── __init__.py
 ├── main.py
-├── api/                         # Borda HTTP
-│   ├── __init__.py
-│   ├── dto/                     # Corpos e respostas (Pydantic)
-│   │   ├── __init__.py
-│   │   └── modelos.py
-│   ├── rotas/                   # Routers FastAPI
-│   │   ├── __init__.py
-│   │   ├── envio_mensagens.py
-│   │   ├── ping_autenticado.py
-│   │   └── saude.py
-│   └── externo/                 # Conectores a serviços externos
-│       ├── __init__.py
-│       └── zenvia/
-│           ├── __init__.py
-│           ├── adaptador_envio.py
-│           └── parametros.py
-├── config/                      
+├── config/
 │   ├── __init__.py
 │   ├── config.py
 │   ├── dependencias.py
 │   ├── security.py
 │   └── provedor_mensagens.py
-├── excecoes/
+├── mensageria/
 │   ├── __init__.py
-│   ├── erro.py
-│   └── erro_provedor.py
-├── repositorios/                 
-│   └── __init__.py
-└── servicos/
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── dto/
+│   │   │   ├── __init__.py
+│   │   │   └── modelos.py
+│   │   ├── rotas/
+│   │   │   ├── __init__.py
+│   │   │   ├── envio_mensagens.py
+│   │   │   ├── ping_autenticado.py
+│   │   │   └── saude.py
+│   │   └── externo/
+│   │       ├── __init__.py
+│   │       └── zenvia/
+│   │           ├── __init__.py
+│   │           ├── adaptador_envio.py
+│   │           └── parametros.py
+│   ├── excecoes/
+│   │   ├── __init__.py
+│   │   ├── erro.py
+│   │   └── erro_provedor.py
+│   ├── repositorios/
+│   │   └── __init__.py
+│   └── servicos/
+│       ├── __init__.py
+│       ├── fabrica_provedor_mensagem.py
+│       ├── porta.py
+│       └── porta_composta.py
+├── orquestracao/
+│   ├── __init__.py
+│   ├── api/__init__.py
+│   ├── excecoes/__init__.py
+│   ├── repositorios/__init__.py
+│   └── servicos/__init__.py
+└── reenvio/
     ├── __init__.py
-    └── mensageria/               # Portas, fábrica e composição e-mail/SMS
-        ├── __init__.py
-        ├── fabrica_provedor_mensagem.py
-        ├── porta.py
-        └── porta_composta.py
+    ├── api/__init__.py
+    ├── excecoes/__init__.py
+    ├── repositorios/__init__.py
+    └── servicos/__init__.py
 ```
 
 ### O que é cada bloco (resumido)
 
 | Local | Papel |
 |--------|--------|
-| `app.api.dto` + `app.api.rotas` | Contrato JSON e rotas (FastAPI). |
-| `app.api.externo.zenvia` | Chamada HTTP à API v2 da Zenvia. |
+| `app.mensageria.api.dto` + `app.mensageria.api.rotas` | Contrato JSON e rotas (FastAPI). |
+| `app.mensageria.api.externo.zenvia` | Chamada HTTP à API v2 da Zenvia. |
 | `app.config` | `Configuracao` a partir do `.env`, `Depends` compartilhado, leitura de `API_KEY` e ficheiro `provedor_mensagens` (qual conector de e-mail/SMS usar). |
-| `app.excecoes` | `ErroEnvioZenvia`, `FalhaConfiguracaoProvedor` e similares. |
-| `app.servicos.mensageria` | Abstração de “enviar mensagem” (porta + fábrica) sem lógica HTTP do Zenvia. |
-| `app.repositorios` | Ainda reservada; podes preencher quando houver camada de persistência. |
+| `app.mensageria.excecoes` | `ErroEnvioZenvia`, `FalhaConfiguracaoProvedor` e similares. |
+| `app.mensageria.servicos` | Abstração de “enviar mensagem” (porta + fábrica) sem lógica HTTP do Zenvia. |
+| `app.mensageria.repositorios` | Reservada; preencher quando houver persistência neste domínio. |
+| `app.orquestracao.*` / `app.reenvio.*` | Estrutura reservada (mesma convenção de pastas). |
 
 A pasta **`analise-inicial/`** fica fora do Git (está no `.gitignore`) e não entra nessa árvore versionada.
 

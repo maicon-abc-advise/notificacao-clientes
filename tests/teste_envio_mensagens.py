@@ -4,10 +4,10 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.api.externo.zenvia.adaptador_envio import AdaptadorEnvioZenvia
-from app.api.externo.zenvia.parametros import obter_parametros_zenvia
+from app.mensageria.api.externo.zenvia.adaptador_envio import AdaptadorEnvioZenvia
+from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
 from app.main import app
-from app.api.dto.modelos import (
+from app.mensageria.api.dto.modelos import (
     CanalMensagem,
     PedidoEnvioEmail,
     PedidoEnvioSms,
@@ -99,7 +99,7 @@ def test_post_email_200_com_override() -> None:
 
 
 def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> None:
-    from app.api.externo.zenvia.parametros import obter_parametros_zenvia
+    from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
     from app.config.config import obter_configuracao
 
     # String vazia: conector zenvia trata como inexistente; o .env local pode ainda preencher via pydantic

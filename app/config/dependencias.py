@@ -2,9 +2,9 @@ from typing import Annotated
 
 from fastapi import Depends, HTTPException, Security, status
 from fastapi.security import APIKeyHeader, HTTPAuthorizationCredentials, HTTPBearer
-from app.excecoes.erro_provedor import FalhaConfiguracaoProvedor
-from app.servicos.mensageria.fabrica_provedor_mensagem import construir_porta_mensagem
-from app.servicos.mensageria.porta import PortaEnvioMensagem
+from app.mensageria.excecoes.erro_provedor import FalhaConfiguracaoProvedor
+from app.mensageria.servicos.fabrica_provedor_mensagem import construir_porta_mensagem
+from app.mensageria.servicos.porta import PortaEnvioMensagem
 from app.config.config import Configuracao, obter_configuracao
 from app.config.security import exigir_api_key
 

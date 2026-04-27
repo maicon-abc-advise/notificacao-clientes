@@ -1,0 +1,1 @@
+"""Reenvio e retentativas (reservado)."""
