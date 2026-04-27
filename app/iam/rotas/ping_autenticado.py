@@ -1,5 +1,5 @@
 from fastapi import APIRouter, Depends
-from app.config.dependencias import verificar_chamada_interna
+from app.iam.dependencias import verificar_chamada_interna
 
 router = APIRouter(prefix="/v1", dependencies=[Depends(verificar_chamada_interna)])
 

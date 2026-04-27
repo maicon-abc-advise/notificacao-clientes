@@ -1,0 +1,14 @@
+services:
+  postgres-templates:
+    image: postgres:16-alpine
+    ports:
+      - "5433:5432"
+    environment:
+      POSTGRES_USER: notificacao
+      POSTGRES_PASSWORD: notificacao_dev
+      POSTGRES_DB: notificacao
+    volumes:
+      - pg_templates_data:/var/lib/postgresql/data
+
+volumes:
+  pg_templates_data:

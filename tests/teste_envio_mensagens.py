@@ -4,16 +4,18 @@ import httpx
 import pytest
 from fastapi.testclient import TestClient
 
-from app.mensageria.api.externo.zenvia.adaptador_envio import AdaptadorEnvioZenvia
-from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
+from app.config.dependencias_templates import obter_porta_templates
 from app.main import app
 from app.mensageria.api.dto.modelos import (
     CanalMensagem,
-    PedidoEnvioEmail,
-    PedidoEnvioSms,
+    PedidoEmailProvedor,
+    PedidoSmsProvedor,
     ResultadoEnvioMensagem,
 )
+from app.mensageria.api.externo.zenvia.adaptador_envio import AdaptadorEnvioZenvia
+from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
 from app.config.dependencias import obter_porta_envio_mensagem
+from app.templates.modelo import TemplateNotificacao
 
 
 def _cliente_mensagem_200() -> httpx.Client:
@@ -39,7 +41,7 @@ def test_adaptador_email_e_sms_ok() -> None:
     cli = _cliente_mensagem_200()
     a = AdaptadorEnvioZenvia(pz, cliente=cli)
     r1 = a.enviar_email(
-        PedidoEnvioEmail(
+        PedidoEmailProvedor(
             destinatario="x@y.com",
             assunto="hi",
             corpo_html="<p>o</p>",
@@ -48,7 +50,7 @@ def test_adaptador_email_e_sms_ok() -> None:
     )
     assert r1.id_provedor == "e1"
     r2 = a.enviar_sms(
-        PedidoEnvioSms(
+        PedidoSmsProvedor(
             destinatario="5511999999999",
             texto="hello",
             remetente="sms-account",
@@ -62,22 +64,46 @@ def test_post_email_401() -> None:
     with TestClient(app) as client:
         r = client.post(
             "/v1/mensagens/email",
-            json={"destinatario": "a@b.com", "assunto": "s", "corpo_html": "<p>x</p>"},
+            json={
+                "destinatario": "a@b.com",
+                "tipo_template": "APARECEU_BUSCA",
+                "contexto": {},
+            },
         )
     assert r.status_code == 401
 
 
+async def _templates_fixos() -> object:
+    class _T:
+        async def obter_por_tipo(self, codigo: str) -> TemplateNotificacao:
+            return TemplateNotificacao(
+                id="1",
+                tipo=codigo,
+                email="<p>ok</p>",
+                sms="sms",
+            )
+
+        async def listar_todos(self) -> list[TemplateNotificacao]:
+            return []
+
+    return _T()
+
+
 def test_post_email_200_com_override() -> None:
     class FalsaPorta:
-        def enviar_email(self, pedido: PedidoEnvioEmail) -> ResultadoEnvioMensagem:
+        def enviar_email(self, pedido: PedidoEmailProvedor) -> ResultadoEnvioMensagem:
             return ResultadoEnvioMensagem(
                 id_provedor="fake-1", canal=CanalMensagem.EMAIL, resposta_parcial={}
             )
 
-        def enviar_sms(self, pedido: PedidoEnvioSms) -> ResultadoEnvioMensagem:
+        def enviar_sms(self, pedido: PedidoSmsProvedor) -> ResultadoEnvioMensagem:
             raise NotImplementedError
 
+    async def _fake_dep() -> object:
+        return await _templates_fixos()
+
     app.dependency_overrides[obter_porta_envio_mensagem] = lambda: FalsaPorta()
+    app.dependency_overrides[obter_porta_templates] = _fake_dep
     r = None
     try:
         with TestClient(app) as client:
@@ -86,14 +112,14 @@ def test_post_email_200_com_override() -> None:
                 headers={"Authorization": "Bearer test-api-key-unit"},
                 json={
                     "destinatario": "a@b.com",
-                    "assunto": "s",
-                    "corpo_html": "<p>ok</p>",
+                    "tipo_template": "APARECEU_BUSCA",
+                    "contexto": {},
                 },
             )
     finally:
         app.dependency_overrides.clear()
-    assert r is not None
 
+    assert r is not None
     assert r.status_code == 200
     assert r.json()["id_provedor"] == "fake-1"
 
@@ -102,16 +128,26 @@ def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> No
     from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
     from app.config.config import obter_configuracao
 
-    # String vazia: conector zenvia trata como inexistente; o .env local pode ainda preencher via pydantic
+    async def _fake_dep() -> object:
+        return await _templates_fixos()
+
     monkeypatch.setenv("ZENVIA_API_TOKEN", "")
     obter_configuracao.cache_clear()
     obter_parametros_zenvia.cache_clear()
-    with TestClient(app) as client:
-        r = client.post(
-            "/v1/mensagens/sms",
-            headers={"X-Api-Key": "test-api-key-unit"},
-            json={"destinatario": "5511987654321", "texto": "hi", "remetente": "snd"},
-        )
+    app.dependency_overrides[obter_porta_templates] = _fake_dep
+    try:
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/mensagens/sms",
+                headers={"X-Api-Key": "test-api-key-unit"},
+                json={
+                    "destinatario": "5511987654321",
+                    "tipo_template": "APARECEU_BUSCA",
+                    "contexto": {"link_area_conta": "https://exemplo.com"},
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
     assert r.status_code == 503
     monkeypatch.setenv("ZENVIA_API_TOKEN", "test-zenvia-token-somente-para-testes")
     obter_configuracao.cache_clear()

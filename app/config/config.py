@@ -10,6 +10,10 @@ class Configuracao(BaseSettings):
 
     api_key: str = Field(validation_alias="API_KEY")
     redis_url: str = Field(validation_alias="REDIS_URL")
+    database_url: str = Field(
+        default="postgresql://notificacao:notificacao_dev@127.0.0.1:5433/notificacao",
+        validation_alias="DATABASE_URL",
+    )
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
     # provedor de email
@@ -34,4 +38,4 @@ class Configuracao(BaseSettings):
 
 @lru_cache
 def obter_configuracao() -> Configuracao:
-    return Configuracao() 
+    return Configuracao()

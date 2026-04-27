@@ -1,0 +1,206 @@
+"""Textos literais dos templates (alinhado a analise-inicial/PLANO_TEMPLATES.md)."""
+
+from app.templates.modelo import CodigoTipoTemplate
+
+IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
+    CodigoTipoTemplate.APARECEU_BUSCA: "a1b2c3d4-e5f6-4789-a012-345678abcdef",
+    CodigoTipoTemplate.CREDITOS_NO_FIM: "b2c3d4e5-f6a7-4890-b123-456789abcdef",
+    CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS: "c3d4e5f6-a7b8-4901-c234-56789abcdef0",
+    CodigoTipoTemplate.CONSULTADO_SEM_EMAIL: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
+}
+
+SMS_APARECEU_BUSCA = (
+    "BuscaFornecedor: você apareceu em uma busca! Veja detalhes em {{ link_area_conta }}."
+)
+
+SMS_CREDITOS_NO_FIM = (
+    "{{ nome_fantasia }}: seus créditos mensais estão no fim na BuscaFornecedor. "
+    "Renove ou ajuste seu plano: {{ link_area_creditos }}"
+)
+
+SMS_LEMBRETE_CREDITOS = (
+    "Lembrete BuscaFornecedor: seus créditos mensais acabaram. "
+    "Acesse {{ link_area_creditos }} para regularizar e continuar visível."
+)
+
+SMS_CONSULTADO_SEM_EMAIL = (
+    "BuscaFornecedor: você foi consultado mas não encontramos seu e-mail. "
+    "Cadastre na plataforma: {{ url_plataforma }}"
+)
+
+EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Você apareceu em uma busca</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
+    .header { background: linear-gradient(90deg, #0f172a, #00c38a); color: #fff; text-align: center; padding: 24px; font-size: 22px; font-weight: 600; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .content h1 { font-size: 20px; color: #0f172a; margin-bottom: 16px; text-align: left; }
+    .content p { font-size: 15px; color: #475569; margin-bottom: 20px; }
+    .highlight { background: #f1f5f9; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 28px; font-size: 14px; color: #475569; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
+    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
+    @media (max-width: 600px) { .content { padding: 24px 16px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">BuscaFornecedor</div>
+    <div class="content">
+      <h1>Você apareceu em uma busca!</h1>
+      <div class="highlight">
+        Olá{{ saudacao_nome }} sua empresa foi encontrada por compradores na BuscaFornecedor. Isso mostra que sua presença está gerando interesse.
+      </div>
+      <p>
+        Acesse sua área para ver detalhes da atividade, manter seus dados atualizados e aproveitar ao máximo as oportunidades de contato.
+      </p>
+      <p style="text-align:center;">
+        <a href="{{ link_area_conta }}" class="button" target="_blank">Ver minha conta</a>
+      </p>
+      <p>
+        Quanto mais completo estiver seu cadastro, melhor será a experiência de quem busca por você.
+      </p>
+    </div>
+    <div class="footer">
+      © BuscaFornecedor — Todos os direitos reservados.<br/>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
+      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
+      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+    </div>
+  </div>
+</body>
+</html>"""
+
+EMAIL_CREDITOS_NO_FIM = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Créditos mensais no fim</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
+    .header { background: linear-gradient(90deg, #0f172a, #00c38a); color: #fff; text-align: center; padding: 24px; font-size: 22px; font-weight: 600; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .content h1 { font-size: 20px; color: #0f172a; margin-bottom: 16px; text-align: left; }
+    .content p { font-size: 15px; color: #475569; margin-bottom: 20px; }
+    .highlight { background: #fff7ed; padding: 16px; border-radius: 10px; border: 1px solid #fed7aa; margin-bottom: 28px; font-size: 14px; color: #9a3412; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
+    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
+    @media (max-width: 600px) { .content { padding: 24px 16px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">BuscaFornecedor</div>
+    <div class="content">
+      <h1>Seus créditos mensais estão no fim</h1>
+      <div class="highlight">
+        Estamos avisando com antecedência: seus créditos de visibilidade/consultas estão quase esgotados. Renovar a tempo evita interrupção na sua presença para compradores.
+      </div>
+      <p>
+        Acesse a área de planos e créditos para ajustar seu pacote ou renovar antes do limite.
+      </p>
+      <p style="text-align:center;">
+        <a href="{{ link_area_creditos }}" class="button" target="_blank">Gerenciar créditos e plano</a>
+      </p>
+      <p>
+        Se precisar de ajuda, nossa equipe pode orientar a melhor opção para o seu perfil.
+      </p>
+    </div>
+    <div class="footer">
+      © BuscaFornecedor — Todos os direitos reservados.<br/>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
+      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
+      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+    </div>
+  </div>
+</body>
+</html>"""
+
+EMAIL_LEMBRETE_CREDITOS = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Lembrete: créditos esgotados</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
+    .header { background: linear-gradient(90deg, #0f172a, #00c38a); color: #fff; text-align: center; padding: 24px; font-size: 22px; font-weight: 600; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .content h1 { font-size: 20px; color: #0f172a; margin-bottom: 16px; text-align: left; }
+    .content p { font-size: 15px; color: #475569; margin-bottom: 20px; }
+    .highlight { background: #f1f5f9; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 28px; font-size: 14px; color: #475569; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
+    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
+    @media (max-width: 600px) { .content { padding: 24px 16px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">BuscaFornecedor</div>
+    <div class="content">
+      <h1>Lembre-se! Seus créditos mensais acabaram</h1>
+      <div class="highlight">
+        Este é um lembrete semanal: seus créditos mensais estão esgotados. Enquanto não regularizar, sua visibilidade ou recursos podem permanecer limitados na plataforma.
+      </div>
+      <p>
+        Assim que renovar ou migrar de plano, você volta a concorrer com plena presença nas buscas e ferramentas associadas ao seu pacote.
+      </p>
+      <p style="text-align:center;">
+        <a href="{{ link_area_creditos }}" class="button" target="_blank">Regularizar créditos agora</a>
+      </p>
+      <p>
+        Estamos à disposição para ajudar você a escolher a melhor opção.
+      </p>
+    </div>
+    <div class="footer">
+      © BuscaFornecedor — Todos os direitos reservados.<br/>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
+      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
+      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
+def linhas_seed() -> list[tuple[str, str, str | None, str]]:
+    """Tuplas (id, tipo, email, sms) na ordem de inserção."""
+    return [
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.APARECEU_BUSCA],
+            CodigoTipoTemplate.APARECEU_BUSCA.value,
+            EMAIL_APARECEU_BUSCA,
+            SMS_APARECEU_BUSCA,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.CREDITOS_NO_FIM],
+            CodigoTipoTemplate.CREDITOS_NO_FIM.value,
+            EMAIL_CREDITOS_NO_FIM,
+            SMS_CREDITOS_NO_FIM,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS],
+            CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS.value,
+            EMAIL_LEMBRETE_CREDITOS,
+            SMS_LEMBRETE_CREDITOS,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.CONSULTADO_SEM_EMAIL],
+            CodigoTipoTemplate.CONSULTADO_SEM_EMAIL.value,
+            None,
+            SMS_CONSULTADO_SEM_EMAIL,
+        ),
+    ]

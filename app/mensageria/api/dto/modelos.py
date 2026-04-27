@@ -1,19 +1,21 @@
 from enum import StrEnum
 from typing import Any
 from pydantic import BaseModel, Field
+from app.templates.modelo import CodigoTipoTemplate
 
 class CanalMensagem(StrEnum):
     EMAIL = "email"
     SMS = "sms"
 
-# Pedido de envio de email
 class PedidoEnvioEmail(BaseModel):
     destinatario: str = Field(..., min_length=3, description="E-mail do destinatário (campo to na API do provedor)")
-    assunto: str = Field(..., min_length=1)
-    corpo_html: str = Field(
+    tipo_template: CodigoTipoTemplate = Field(
         ...,
-        min_length=1,
-        description="Conteúdo HTML do e-mail (Zenvia: conteúdo type email, campo html).",
+        description="Código do registo em public.templates_notificacao.",
+    )
+    contexto: dict[str, str] = Field(
+        default_factory=dict,
+        description="Valores para substituir {{ chave }} no HTML do template.",
     )
     remetente: str | None = Field(
         default=None,
@@ -23,7 +25,6 @@ class PedidoEnvioEmail(BaseModel):
     )
     id_externo: str | None = Field(default=None, max_length=64, description="Mapeia para externalId se informado.")
 
-# Pedido de envio de sms
 class PedidoEnvioSms(BaseModel):
     destinatario: str = Field(
         ...,
@@ -31,7 +32,14 @@ class PedidoEnvioSms(BaseModel):
         max_length=20,
         description="Destinatário no formato exigido pelo provedor (ex. E.164, sem espaços).",
     )
-    texto: str = Field(..., min_length=1, description="Corpo do SMS (texto curto).")
+    tipo_template: CodigoTipoTemplate = Field(
+        ...,
+        description="Código do registo em public.templates_notificacao.",
+    )
+    contexto: dict[str, str] = Field(
+        default_factory=dict,
+        description="Valores para substituir {{ chave }} no texto SMS do template.",
+    )
     remetente: str | None = Field(
         default=None,
         min_length=1,
@@ -40,7 +48,19 @@ class PedidoEnvioSms(BaseModel):
     )
     id_externo: str | None = Field(default=None, max_length=64)
 
-# Resultado do envio de mensagem
+class PedidoEmailProvedor(BaseModel):
+    destinatario: str = Field(..., min_length=3)
+    assunto: str = Field(..., min_length=1)
+    corpo_html: str = Field(..., min_length=1)
+    remetente: str | None = Field(default=None, min_length=1, max_length=64)
+    id_externo: str | None = Field(default=None, max_length=64)
+
+class PedidoSmsProvedor(BaseModel):
+    destinatario: str = Field(..., min_length=5, max_length=20)
+    texto: str = Field(..., min_length=1)
+    remetente: str | None = Field(default=None, min_length=1, max_length=64)
+    id_externo: str | None = Field(default=None, max_length=64)
+
 class ResultadoEnvioMensagem(BaseModel):
     id_provedor: str
     canal: CanalMensagem

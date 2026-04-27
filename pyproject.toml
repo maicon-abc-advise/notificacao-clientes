@@ -15,6 +15,7 @@ dependencies = [
   "pydantic-settings>=2.6",
   "redis>=5.2",
   "httpx>=0.28",
+  "asyncpg>=0.30",
 ]
 
 [project.optional-dependencies]

@@ -1,6 +1,6 @@
 # Sistema de e-mail / notificações
 
-API em **FastAPI** para o fluxo de notificações (ABC Advise). Hoje o código cobre **envio de e-mail e SMS** (Zenvia), autenticação interna com API key, saúde da API e, opcionalmente, Docker/Redis.
+API em **FastAPI** para o fluxo de notificações (ABC Advise). Hoje o código cobre **envio de e-mail e SMS** (Zenvia), autenticação interna com API key, saúde da API, Docker/Redis e **templates** em **Postgres** (`public.templates_notificacao`). Os pedidos `POST /v1/mensagens/email` e `POST /v1/mensagens/sms` usam **só modo template**: `tipo_template` (enum alinhado à coluna `tipo`) + `contexto` (mapa para substituir `{{ chave }}`); o HTML e o texto SMS vêm da base. O **assunto** do e-mail é **inferido no servidor** a partir de `tipo_template` (`app/templates/assunto_email.py`), sem campo no JSON. Textos literais seguem o plano em `analise-inicial/PLANO_TEMPLATES.md` quando o mono-repo inclui essa pasta.
 
 **Requisitos:** Python 3.11 ou superior.
 
@@ -22,6 +22,7 @@ O código de negócio do envio está agrupado em **`app.mensageria`**. **`app.or
 ├── .env.example
 ├── .gitignore
 ├── docker-compose.yml
+├── docker-compose.postgres.yml  # só Postgres (templates), porta 5433
 ├── Dockerfile
 ├── pyproject.toml
 └── README.md
@@ -39,6 +40,16 @@ app/
 │   ├── dependencias.py
 │   ├── security.py
 │   └── provedor_mensagens.py
+├── templates/
+│   ├── __init__.py
+│   ├── banco.py          # aplicar schema.sql + seed (asyncpg)
+│   ├── dados_seed.py     # HTML/SMS literais
+│   ├── modelo.py         # TemplateNotificacao, CodigoTipoTemplate
+│   ├── popular.py        # python -m app.templates.popular
+│   ├── porta.py          # PortaTemplates (Protocol)
+│   ├── repositorio_postgres.py
+│   └── sql/
+│       └── schema.sql    # CREATE TABLE (sem Alembic)
 ├── mensageria/
 │   ├── __init__.py
 │   ├── api/
@@ -92,13 +103,42 @@ app/
 | `app.mensageria.excecoes` | `ErroEnvioZenvia`, `FalhaConfiguracaoProvedor` e similares. |
 | `app.mensageria.servicos` | Abstração de “enviar mensagem” (porta + fábrica) sem lógica HTTP do Zenvia. |
 | `app.mensageria.repositorios` | Reservada; preencher quando houver persistência neste domínio. |
+| `app.templates` | Tabela `templates_notificacao` no Postgres, porta `PortaTemplates`, `RepositorioTemplatesPostgres`. |
 | `app.orquestracao.*` / `app.reenvio.*` | Estrutura reservada (mesma convenção de pastas). |
 
 A pasta **`analise-inicial/`** fica fora do Git (está no `.gitignore`) e não entra nessa árvore versionada.
 
 ---
 
-## 2. Como rodar
+## 2. Postgres só para templates (Docker)
+
+Na **raiz deste projeto** (`notificacao-clientes/`, a pasta onde estão `app/`, `pyproject.toml` e este `README.md`), existe `docker-compose.postgres.yml` com um único serviço Postgres na porta **5433**, credenciais de desenvolvimento alinhadas ao `.env.example`.
+
+**Subir só o banco:**
+
+```powershell
+cd caminho\para\notificacao-clientes
+docker compose -f docker-compose.postgres.yml up -d
+```
+
+**Parar:**
+
+```powershell
+docker compose -f docker-compose.postgres.yml down
+```
+
+**Popular tabela e dados** (com o Postgres acessível e `DATABASE_URL` no ambiente ou no `.env`):
+
+```powershell
+cd caminho\para\notificacao-clientes
+.\.venv\Scripts\python -m app.templates.popular
+```
+
+O comando aplica `app/templates/sql/schema.sql` e insere/atualiza as quatro linhas (`ON CONFLICT (tipo) DO UPDATE`). Para conferir: `SELECT id, tipo, email IS NULL AS sem_email, length(sms) FROM public.templates_notificacao;`.
+
+---
+
+## 3. Como rodar
 
 ### Opção A — ambiente virtual (desenvolvimento)
 
@@ -113,7 +153,7 @@ copy .env.example .env
 - Documentação: **http://127.0.0.1:8000/docs**  
 - Testes: `.\.venv\Scripts\python -m pytest`
 
-### Opção B — Docker Compose (API + Redis)
+### Opção B — Docker Compose (API + Redis, sem Postgres)
 
 ```powershell
 docker compose up --build

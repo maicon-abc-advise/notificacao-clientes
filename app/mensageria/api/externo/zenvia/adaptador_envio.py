@@ -3,8 +3,8 @@ from typing import Any
 import httpx
 from app.mensageria.api.dto.modelos import (
     CanalMensagem,
-    PedidoEnvioEmail,
-    PedidoEnvioSms,
+    PedidoEmailProvedor,
+    PedidoSmsProvedor,
     ResultadoEnvioMensagem,
 )
 from app.mensageria.excecoes.erro import ErroEnvioZenvia
@@ -50,7 +50,7 @@ class AdaptadorEnvioZenvia:
             msg = f"Zenvia HTTP {r.status_code}"
         raise ErroEnvioZenvia(msg, status_code=r.status_code, corpo=corpo)
 
-    def enviar_email(self, pedido: PedidoEnvioEmail) -> ResultadoEnvioMensagem:
+    def enviar_email(self, pedido: PedidoEmailProvedor) -> ResultadoEnvioMensagem:
 
         # extrai o remetente do pedido ou usa o remetente padrão
         remetente = pedido.remetente or self._parametros.email_remetente_padrao
@@ -60,28 +60,22 @@ class AdaptadorEnvioZenvia:
         conteudo: dict[str, Any] = {
             "type": "email",
             "subject": pedido.assunto,
+            "html": pedido.corpo_html,
         }
-        # se o corpo html foi informado, adiciona ao conteudo
-        if pedido.corpo_html:
-            conteudo["html"] = pedido.corpo_html
 
-        # cria o corpo da requisição
         corpo_req: dict[str, Any] = {
             "from": remetente,
             "to": pedido.destinatario,
             "contents": [conteudo],
         }
 
-        # se o id externo foi informado, adiciona ao corpo da requisição
         if pedido.id_externo:
             corpo_req["externalId"] = pedido.id_externo
 
-        # envia a requisição
         r = self._cliente.post(_PATH_EMAIL, json=corpo_req)
         if r.is_error:
             self._falha(r)
         try:
-            # extrai os dados da resposta
             dados = r.json()
         except json.JSONDecodeError as e:
             raise ErroEnvioZenvia("Resposta Zenvia não é JSON", status_code=r.status_code) from e
@@ -89,14 +83,13 @@ class AdaptadorEnvioZenvia:
         if not id_:
             id_ = "(sem id na resposta)"
 
-        # cria o resultado do envio de mensagem
         return ResultadoEnvioMensagem(
             id_provedor=id_,
             canal=CanalMensagem.EMAIL,
             resposta_parcial={k: dados[k] for k in ("id", "from", "to", "channel", "externalId") if k in dados},
         )
 
-    def enviar_sms(self, pedido: PedidoEnvioSms) -> ResultadoEnvioMensagem:
+    def enviar_sms(self, pedido: PedidoSmsProvedor) -> ResultadoEnvioMensagem:
 
         remetente = pedido.remetente or self._parametros.sms_remetente_padrao
         if not remetente:
