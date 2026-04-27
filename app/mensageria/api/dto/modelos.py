@@ -1,5 +1,7 @@
 from enum import StrEnum
 from typing import Any
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 from app.templates.modelo import CodigoTipoTemplate
 
@@ -24,6 +26,15 @@ class PedidoEnvioEmail(BaseModel):
         description="ID do remetente (from); se omitido, usa ZENVIA_EMAIL_FROM no servidor.",
     )
     id_externo: str | None = Field(default=None, max_length=64, description="Mapeia para externalId se informado.")
+    telefone_sms_fallback: str | None = Field(
+        default=None,
+        max_length=20,
+        description="E.164 do SMS se o e-mail falhar (bounce) ou para o sweep; necessário para enfileirar SMS.",
+    )
+    usuario_id: UUID | None = Field(
+        default=None,
+        description="Opcional: atualiza engajamento_usuarios em eventos de e-mail (API + webhooks).",
+    )
 
 class PedidoEnvioSms(BaseModel):
     destinatario: str = Field(
@@ -47,6 +58,10 @@ class PedidoEnvioSms(BaseModel):
         description="ID do remetente; se omitido, usa ZENVIA_SMS_FROM no servidor.",
     )
     id_externo: str | None = Field(default=None, max_length=64)
+    usuario_id: UUID | None = Field(
+        default=None,
+        description="Opcional: liga o envio a engajamento_usuarios e webhooks de estado.",
+    )
 
 class PedidoEmailProvedor(BaseModel):
     destinatario: str = Field(..., min_length=3)
