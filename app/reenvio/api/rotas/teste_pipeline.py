@@ -26,6 +26,7 @@ from app.reenvio.api.dependencias_teste_pipeline import exigir_teste_pipeline_ha
 from app.reenvio.api.dto.webhook_zenvia import WebhookMessageStatusZenvia
 from app.reenvio.redis_app import obter_cliente_redis
 from app.reenvio.servicos.enfileirar_apos_envio_email import enfileirar_email_enviado_apos_sucesso
+from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
 from app.reenvio.servicos.engajamento_usuario import tocar_engajamento
 from app.reenvio.servicos.processar_status_email import processar_webhook_status_email
 from app.mensageria.servicos.registrar_email_enviado import registrar_email_enviado_apos_sucesso
@@ -56,7 +57,7 @@ class EngajamentoSeedCorpo(BaseModel):
         default=None,
         description="Se omitido, gera um UUID novo.",
     )
-    estado: str = Field(default="ativo", max_length=64)
+    estado: EngajamentoEstado = Field(default=EngajamentoEstado.ATIVO)
 
 
 @router.post(
@@ -78,9 +79,9 @@ async def post_seed_engajamento(
             engajamento_atualizado_em = now()
         """,
         uid,
-        corpo.estado[:64],
+        corpo.estado.value[:64],
     )
-    return {"usuario_id": str(uid), "engajamento_estado": corpo.estado[:64]}
+    return {"usuario_id": str(uid), "engajamento_estado": corpo.estado.value}
 
 
 class SimularEmailCorpo(BaseModel):
@@ -132,7 +133,7 @@ async def post_simular_email_enviado(
     await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
     await registrar_email_enviado_apos_sucesso(pool, pedido, resultado)
     if corpo.tocar_engajamento_api:
-        await tocar_engajamento(pool, corpo.usuario_id, "email_enviado_api")
+        await tocar_engajamento(pool, corpo.usuario_id, EngajamentoEstado.EMAIL_ENVIADO_API)
     return {
         "message_id_zenvia_falso": msg_id,
         "id_externo": corpo.id_externo,
@@ -276,7 +277,7 @@ async def post_cenario_bounce_para_sms(
     )
     await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
     await registrar_email_enviado_apos_sucesso(pool, pedido, resultado)
-    await tocar_engajamento(pool, corpo.usuario_id, "email_enviado_api")
+    await tocar_engajamento(pool, corpo.usuario_id, EngajamentoEstado.EMAIL_ENVIADO_API)
 
     evt = f"test-evt-bounce-{uuid.uuid4().hex}"
     payload = WebhookMessageStatusZenvia.model_validate(

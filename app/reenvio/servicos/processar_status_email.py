@@ -1,16 +1,11 @@
-"""Regras de negócio do webhook de **e-mail**: atualiza Redis e enfileira SMS pendente no Redis."""
-
 from __future__ import annotations
-
 import json
 import logging
 import time
 import uuid
 from typing import Any
-
 import asyncpg
 from redis.asyncio import Redis
-
 from app.config.config import Configuracao
 from app.reenvio.api.dto.webhook_zenvia import WebhookMessageStatusZenvia
 from app.reenvio.repositorios.postgres_webhook_eventos import registrar_evento_se_novo
@@ -20,12 +15,12 @@ from app.reenvio.servicos.classificar_cause_email import (
     ResultadoClassificacaoEmail,
     classificar_falha_email,
 )
+from app.reenvio.servicos.engajamento_estado import EngajamentoEstado, engajamento_falha_recuperavel_email
 from app.reenvio.servicos.engajamento_usuario import parse_usuario_id, tocar_engajamento
 
 _log = logging.getLogger(__name__)
 
 TEMPLATE_SMS_EMAIL_INVALIDO = "CONSULTADO_SEM_EMAIL"
-
 
 def _contexto_sms_de_hash(campos: dict[str, str]) -> dict[str, str]:
     base = json.loads(campos.get("contexto_json") or "{}")
@@ -35,13 +30,13 @@ def _contexto_sms_de_hash(campos: dict[str, str]) -> dict[str, str]:
     out.setdefault("url_plataforma", "https://plataforma.local")
     return out
 
-
 async def processar_webhook_status_email(
     pool: asyncpg.Pool,
     redis: Redis,
     cfg: Configuracao,
     payload: WebhookMessageStatusZenvia,
 ) -> dict[str, Any]:
+
     if payload.channel != "email":
         return {"acao": "ignorado", "motivo": "canal não é email"}
 
@@ -66,17 +61,17 @@ async def processar_webhook_status_email(
     uid = parse_usuario_id(dados.get("usuario_id"))
 
     if code == "READ":
-        await tocar_engajamento(pool, uid, "email_lido")
+        await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_LIDO)
         await repo.remover(redis, message_id)
         return {"acao": "removido_fila", "message_id": message_id, "code": code}
 
     if code == "SENT":
-        await tocar_engajamento(pool, uid, "email_webhook_sent")
+        await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_WEBHOOK_SENT)
         await repo.atualizar_campos(redis, message_id, {"status_atual": "ENVIADO_PROVEDOR"})
         return {"acao": "atualizado", "message_id": message_id, "code": code}
 
     if code == "DELIVERED":
-        await tocar_engajamento(pool, uid, "email_entregue_caixa")
+        await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_ENTREGUE_CAIXA)
         await repo.atualizar_campos(redis, message_id, {"status_atual": "ENTREGUE_CAIXA"})
         return {"acao": "atualizado", "message_id": message_id, "code": code}
 
@@ -90,7 +85,7 @@ async def processar_webhook_status_email(
                     "Hard bounce sem telefone_sms_fallback; SMS não gerado. external_id=%s",
                     ext,
                 )
-                await tocar_engajamento(pool, uid, "email_bounce_hard_sem_sms")
+                await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_BOUNCE_HARD_SEM_SMS)
                 await repo.remover(redis, message_id)
                 return {
                     "acao": "bounce_sem_telefone",
@@ -111,7 +106,7 @@ async def processar_webhook_status_email(
                 origem="bounce_email",
                 usuario_id=uid_sms if uid_sms else None,
             )
-            await tocar_engajamento(pool, uid, "email_bounce_hard_sms_fila")
+            await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_BOUNCE_HARD_SMS_FILA)
             await repo.remover(redis, message_id)
             return {
                 "acao": "bounce_sms_enfileirado" if inseriu else "bounce_sms_duplicado",
@@ -120,8 +115,7 @@ async def processar_webhook_status_email(
                 "message_id": message_id,
             }
 
-        # caixa cheia / temporário / desconhecido → mantém na fila e reagenda sweep
-        await tocar_engajamento(pool, uid, f"email_falha_recuperavel_{cls.value}")
+        await tocar_engajamento(pool, uid, engajamento_falha_recuperavel_email(cls))
         await repo.atualizar_campos(
             redis,
             message_id,

@@ -20,7 +20,6 @@ _log = logging.getLogger(__name__)
 
 
 def _segredos_iguais_seguro(a: str, b: str) -> bool:
-    """Comparação em tempo aproximadamente constante (digest fixo)."""
     da = hashlib.sha256(a.encode("utf-8")).digest()
     db = hashlib.sha256(b.encode("utf-8")).digest()
     return hmac.compare_digest(da, db)

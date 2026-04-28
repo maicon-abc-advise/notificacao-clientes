@@ -1,11 +1,9 @@
 from typing import Protocol, runtime_checkable
-
 from app.mensageria.api.dto.modelos import (
     PedidoEmailProvedor,
     PedidoSmsProvedor,
     ResultadoEnvioMensagem,
 )
-
 
 @runtime_checkable
 class ProvedorCanalEmail(Protocol):
@@ -15,7 +13,6 @@ class ProvedorCanalEmail(Protocol):
 @runtime_checkable
 class ProvedorCanalSms(Protocol):
     def enviar_sms(self, pedido: PedidoSmsProvedor) -> ResultadoEnvioMensagem: ...
-
 
 @runtime_checkable
 class PortaEnvioMensagem(Protocol):

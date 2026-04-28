@@ -1,17 +1,13 @@
-"""Varredura: e-mails pendentes no Redis viram SMS **pendentes** no Redis (não Postgres)."""
-
 from __future__ import annotations
-
 import logging
 import time
 import uuid
-
 import asyncpg
 from redis.asyncio import Redis
-
 from app.config.config import Configuracao
 from app.reenvio.repositorios.redis_email_pendente import KEY_SWEEP, RepositorioEmailPendenteRedis
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
+from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
 from app.reenvio.servicos.engajamento_usuario import parse_usuario_id, tocar_engajamento
 from app.reenvio.servicos.processar_status_email import TEMPLATE_SMS_EMAIL_INVALIDO, _contexto_sms_de_hash
 
@@ -65,7 +61,7 @@ async def executar_sweep_emails_pendentes(
         )
         if ok:
             inseridos += 1
-            await tocar_engajamento(pool, parse_usuario_id(uid_s), "email_sweep_lembrete_sms")
+            await tocar_engajamento(pool, parse_usuario_id(uid_s), EngajamentoEstado.EMAIL_SWEEP_LEMBRETE_SMS)
         else:
             ignorados += 1
 

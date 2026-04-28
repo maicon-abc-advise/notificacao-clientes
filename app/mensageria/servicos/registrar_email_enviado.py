@@ -1,12 +1,5 @@
-"""Após envio de e-mail com sucesso: grava ``emails_enviados`` (Postgres).
-
-A rota de envio vive em ``mensageria``; a persistência do registo fica aqui também.
-"""
-
 from __future__ import annotations
-
 import logging
-
 import asyncpg
 
 from app.mensageria.api.dto.modelos import CanalMensagem, PedidoEnvioEmail, ResultadoEnvioMensagem

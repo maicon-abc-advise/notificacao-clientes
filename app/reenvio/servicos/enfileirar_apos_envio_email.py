@@ -1,14 +1,6 @@
-"""Após envio bem-sucedido de e-mail, registra o pedido na fila Redis de pendentes.
-
-Sem ``id_externo`` não enfileiramos: o fluxo de correlação com webhooks e SMS
-depende desse identificador único de negócio.
-"""
-
 from __future__ import annotations
-
 import logging
 import time
-
 from app.config.config import obter_configuracao
 from app.mensageria.api.dto.modelos import PedidoEnvioEmail, ResultadoEnvioMensagem
 from app.reenvio.redis_app import obter_cliente_redis

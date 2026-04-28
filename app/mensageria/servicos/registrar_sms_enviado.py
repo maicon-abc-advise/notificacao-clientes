@@ -4,15 +4,13 @@ A rota de envio vive em ``mensageria``; a persistência do registo de envio fica
 """
 
 from __future__ import annotations
-
 import logging
-
 import asyncpg
 from redis.asyncio import Redis
-
 from app.mensageria.api.dto.modelos import CanalMensagem, PedidoEnvioSms, ResultadoEnvioMensagem
 from app.mensageria.repositorios.postgres_sms_enviados import inserir_ou_atualizar_apos_envio_api
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
+from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
 from app.reenvio.servicos.engajamento_usuario import tocar_engajamento
 
 _log = logging.getLogger(__name__)
@@ -46,4 +44,4 @@ async def registrar_sms_enviado_apos_sucesso(
         id_mensagem_zenvia=msg_id,
         usuario_id=pedido.usuario_id,
     )
-    await tocar_engajamento(pool, pedido.usuario_id, "sms_enviado_api")
+    await tocar_engajamento(pool, pedido.usuario_id, EngajamentoEstado.SMS_ENVIADO_API)

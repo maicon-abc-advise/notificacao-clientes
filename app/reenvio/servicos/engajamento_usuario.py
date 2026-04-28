@@ -1,7 +1,6 @@
 """Atualização de ``engajamento_usuarios`` em qualquer evento de e-mail ou SMS (API ou webhook).
 
-O campo ``engajamento_estado`` guarda um rótulo curto do último evento (ex.: ``email_lido``,
-``sms_entregue``). Ajuste os textos conforme o produto; ``engajamento_atualizado_em`` é sempre atualizado.
+Valores de estado: ``EngajamentoEstado``; ``engajamento_atualizado_em`` é sempre atualizado.
 """
 
 from __future__ import annotations
@@ -10,6 +9,8 @@ import logging
 import uuid
 
 import asyncpg
+
+from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
 
 _log = logging.getLogger(__name__)
 
@@ -26,12 +27,12 @@ def parse_usuario_id(val: str | None) -> uuid.UUID | None:
 async def tocar_engajamento(
     pool: asyncpg.Pool,
     usuario_id: uuid.UUID | None,
-    estado: str,
+    estado: EngajamentoEstado,
 ) -> None:
     """Upsert em ``engajamento_usuarios``; ignora se ``usuario_id`` for nulo."""
     if usuario_id is None:
         return
-    est = (estado or "ativo")[:64]
+    est = estado.value[:64]
     await pool.execute(
         """
         INSERT INTO public.engajamento_usuarios (

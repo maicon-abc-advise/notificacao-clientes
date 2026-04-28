@@ -1,11 +1,6 @@
-"""Gate das rotas de teste de pipeline: exige ``TESTE_PIPELINE_HABILITADO=true``."""
-
 from __future__ import annotations
-
 from typing import Annotated
-
 from fastapi import Depends, HTTPException, status
-
 from app.config.config import Configuracao, obter_configuracao
 
 

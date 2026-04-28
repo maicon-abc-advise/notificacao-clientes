@@ -1,16 +1,11 @@
-"""Webhook **SMS**: atualiza ``sms_enviados`` (Postgres). Reprocessar volta a enfileirar no Redis."""
-
 from __future__ import annotations
-
 import json
 import logging
 import uuid
 from datetime import datetime, timedelta, timezone
 from typing import Any
-
 import asyncpg
 from redis.asyncio import Redis
-
 from app.config.config import Configuracao
 from app.reenvio.api.dto.webhook_zenvia import WebhookMessageStatusZenvia
 from app.mensageria.repositorios.postgres_sms_enviados import (
@@ -21,10 +16,10 @@ from app.reenvio.repositorios.postgres_webhook_eventos import registrar_evento_s
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.classificar_cause_email import classificar_falha_sms_numero
 from app.reenvio.servicos.cliente_stub import registrar_telefone_invalido_stub
+from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
 from app.reenvio.servicos.engajamento_usuario import tocar_engajamento
 
 _log = logging.getLogger(__name__)
-
 
 def _contexto_de_row(row: asyncpg.Record) -> dict[str, str]:
     ctx = row["contexto"]
@@ -36,7 +31,6 @@ def _contexto_de_row(row: asyncpg.Record) -> dict[str, str]:
     if not isinstance(ctx, dict):
         return {}
     return {str(k): str(v) for k, v in ctx.items() if v is not None}
-
 
 async def processar_webhook_status_sms(
     pool: asyncpg.Pool,
@@ -75,7 +69,7 @@ async def processar_webhook_status_sms(
             status_ultimo="enviado",
             motivo=motivo,
         )
-        await tocar_engajamento(pool, uid, "sms_entregue")
+        await tocar_engajamento(pool, uid, EngajamentoEstado.SMS_ENTREGUE)
         return {"acao": "sms_enviado", "id": str(id_interno), "code": code}
 
     if code == "SENT":
@@ -85,7 +79,7 @@ async def processar_webhook_status_sms(
             status_ultimo="processando",
             motivo=motivo,
         )
-        await tocar_engajamento(pool, uid, "sms_webhook_sent")
+        await tocar_engajamento(pool, uid, EngajamentoEstado.SMS_WEBHOOK_SENT)
         return {"acao": "sms_encaminhado_provedor", "id": str(id_interno)}
 
     if code in ("NOT_DELIVERED", "REJECTED"):
@@ -97,7 +91,7 @@ async def processar_webhook_status_sms(
                 status_ultimo="falha_definitiva",
                 motivo=motivo,
             )
-            await tocar_engajamento(pool, uid, "sms_falha_numero")
+            await tocar_engajamento(pool, uid, EngajamentoEstado.SMS_FALHA_NUMERO)
             return {"acao": "sms_falha_definitiva_numero", "id": str(id_interno)}
 
         max_t = cfg.reenvio_sms_reprocessar_max
@@ -109,7 +103,7 @@ async def processar_webhook_status_sms(
                 motivo=f"limite reprocessar ({max_t}): {motivo or ''}"[:2000],
                 tentativas=tentativas,
             )
-            await tocar_engajamento(pool, uid, "sms_falha_limite")
+            await tocar_engajamento(pool, uid, EngajamentoEstado.SMS_FALHA_LIMITE)
             return {"acao": "sms_falha_limite", "id": str(id_interno)}
 
         proxima = datetime.now(timezone.utc) + timedelta(minutes=30)
@@ -138,7 +132,7 @@ async def processar_webhook_status_sms(
                 "Reprocessar: já existia pendente Redis para external_id=%s",
                 row["external_id"],
             )
-        await tocar_engajamento(pool, uid, "sms_reprocessar_fila")
+        await tocar_engajamento(pool, uid, EngajamentoEstado.SMS_REPROCESSAR_FILA)
         return {"acao": "sms_reprocessar", "id": str(id_interno), "tentativas": tentativas + 1}
 
     _log.warning("Código SMS não tratado: %s", code)
