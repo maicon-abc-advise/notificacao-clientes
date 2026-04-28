@@ -1,11 +1,4 @@
-"""Fila Redis: SMS ainda **não** enviados (o consumidor apaga após disparo).
-
-Chaves (namespace ``sms-pendente``):
-- ``sms-pendente:{external_id}`` — hash com payload para ``POST /v1/mensagens/sms``.
-- ``sms-pendente:por_tempo`` — sorted set (score = epoch) para listar por ordem.
-"""
 from __future__ import annotations
-
 import json
 import logging
 import time
@@ -16,43 +9,41 @@ from redis.asyncio import Redis
 
 from app.orquestracao.excecoes import ConsultaJaNotificadaError
 from app.reenvio.repositorios.redis_consulta_notificacao import (
-    fase_pendente_sms,
+    fase_pendente_email,
     liberar_trava_forcado,
     liberar_trava_se_fase,
-    redefinir_para_pendente_sms_pos_bounce,
-    tentar_travar_pendente_sms,
+    tentar_travar_pendente_email,
 )
 
 _log = logging.getLogger(__name__)
 
-KEY_INDEX = "sms-pendente:por_tempo"
+KEY_INDEX = "emails-pendentes:por_tempo"
 
 
 def chave_hash(external_id: str) -> str:
-    return f"sms-pendente:{external_id}"
+    return f"emails-pendentes:{external_id}"
 
 
-class RepositorioSmsPendenteRedis:
+class RepositorioEmailsPendenteRedis:
     async def criar(
         self,
         redis: Redis,
         *,
         external_id: str,
-        telefone: str,
+        destinatario: str,
         tipo_template: str,
         contexto: dict[str, str],
         remetente: str | None,
+        id_externo: str | None,
+        telefone_sms_fallback: str | None,
+        usuario_id: str | None,
         origem: str,
-        usuario_id: str | None = None,
         consulta_id: uuid.UUID | None = None,
-        sobrescrever_trava_de_email_esperando: bool = False,
     ) -> bool:
         key = chave_hash(external_id)
         reservou_trava = False
-        if sobrescrever_trava_de_email_esperando:
-            await redefinir_para_pendente_sms_pos_bounce(redis, consulta_id, external_id)
-        elif consulta_id is not None:
-            if not await tentar_travar_pendente_sms(redis, consulta_id, external_id):
+        if consulta_id is not None:
+            if not await tentar_travar_pendente_email(redis, consulta_id, external_id):
                 raise ConsultaJaNotificadaError(str(consulta_id))
             reservou_trava = True
         try:
@@ -63,12 +54,14 @@ class RepositorioSmsPendenteRedis:
             agora = int(time.time())
             mapping: dict[str, str] = {
                 "external_id": external_id,
-                "telefone": telefone,
+                "destinatario": destinatario,
                 "tipo_template": tipo_template,
                 "contexto_json": json.dumps(contexto, ensure_ascii=False),
                 "remetente": remetente or "",
-                "origem": origem,
+                "id_externo_pedido": id_externo or "",
+                "telefone_sms_fallback": telefone_sms_fallback or "",
                 "usuario_id": usuario_id or "",
+                "origem": origem,
                 "consulta_id": str(consulta_id) if consulta_id is not None else "",
                 "criado_em": str(agora),
             }
@@ -80,7 +73,7 @@ class RepositorioSmsPendenteRedis:
             if reservou_trava:
                 await liberar_trava_forcado(redis, consulta_id)
             raise
-        _log.info("SMS na fila Redis (sms-pendente): external_id=%s origem=%s", external_id, origem)
+        _log.info("E-mail na fila Redis (emails-pendentes): external_id=%s origem=%s", external_id, origem)
         return True
 
     async def remover(self, redis: Redis, external_id: str) -> None:
@@ -97,10 +90,9 @@ class RepositorioSmsPendenteRedis:
         pipe.delete(key)
         pipe.zrem(KEY_INDEX, external_id)
         await pipe.execute()
-        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_sms(external_id))
+        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_email(external_id))
 
     async def listar_pendentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
-        """Lista hashes de SMS pendentes (por ordem de entrada no índice)."""
         ids = await redis.zrange(KEY_INDEX, 0, limite - 1)
         saida: list[dict[str, Any]] = []
         for ext in ids:
@@ -112,12 +104,14 @@ class RepositorioSmsPendenteRedis:
             saida.append(
                 {
                     "external_id": raw.get("external_id", ext),
-                    "telefone": raw.get("telefone", ""),
+                    "destinatario": raw.get("destinatario", ""),
                     "tipo_template": raw.get("tipo_template", ""),
                     "contexto": ctx if isinstance(ctx, dict) else {},
                     "remetente": raw.get("remetente") or None,
-                    "origem": raw.get("origem", ""),
+                    "id_externo": raw.get("id_externo_pedido") or None,
+                    "telefone_sms_fallback": raw.get("telefone_sms_fallback") or None,
                     "usuario_id": raw.get("usuario_id") or None,
+                    "origem": raw.get("origem", ""),
                     "consulta_id": raw.get("consulta_id") or None,
                     "criado_em": raw.get("criado_em"),
                 },

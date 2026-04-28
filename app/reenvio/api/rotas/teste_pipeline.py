@@ -137,7 +137,7 @@ async def post_simular_email_enviado(
     return {
         "message_id_zenvia_falso": msg_id,
         "id_externo": corpo.id_externo,
-        "redis_chave_hash": f"email:pendente:{msg_id}",
+        "redis_chave_hash": f"emails-esperando-confirmacao:{msg_id}",
         "emails_enviados": "upsert por external_id",
         "usuario_id": str(corpo.usuario_id) if corpo.usuario_id else None,
     }
@@ -206,7 +206,7 @@ class SimularSmsCorpo(BaseModel):
 @router.post(
     "/simular-sms-enviado",
     status_code=status.HTTP_200_OK,
-    summary="Sem Zenvia: remove sms:pendente:* se existir e grava sms_enviados",
+    summary="Sem Zenvia: remove sms-pendente:* se existir e grava sms_enviados",
 )
 async def post_simular_sms_enviado(
     corpo: SimularSmsCorpo,
@@ -237,7 +237,7 @@ async def post_simular_sms_enviado(
 
 
 class CenarioBounceSmsCorpo(BaseModel):
-    """Email falso + bounce hard com cause que dispara SMS pendente no Redis."""
+    """Email falso + bounce hard com cause que dispara SMS na fila sms-pendente (Redis)."""
 
     destinatario: str = Field(default="teste@exemplo.com", min_length=3)
     id_externo: str = Field(default="teste-pipeline-negocio", max_length=64)
@@ -303,5 +303,5 @@ async def post_cenario_bounce_para_sms(
         "id_externo_email": corpo.id_externo,
         "id_evento_webhook": evt,
         "webhook_resultado": webhook_out,
-        "dica": "Veja sms:pendente:* no Redis ou GET /v1/interno/sms-pendentes se bounce_sms_enfileirado.",
+        "dica": "Veja sms-pendente:* no Redis ou GET /v1/interno/sms-pendentes se bounce_sms_enfileirado.",
     }

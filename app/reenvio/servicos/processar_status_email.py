@@ -9,7 +9,10 @@ from redis.asyncio import Redis
 from app.config.config import Configuracao
 from app.reenvio.api.dto.webhook_zenvia import WebhookMessageStatusZenvia
 from app.reenvio.repositorios.postgres_webhook_eventos import registrar_evento_se_novo
-from app.reenvio.repositorios.redis_email_pendente import RepositorioEmailPendenteRedis
+from app.reenvio.repositorios.redis_emails_esperando_confirmacao import (
+    RepositorioEmailsEsperandoConfirmacaoRedis,
+)
+from app.reenvio.repositorios.redis_consulta_notificacao import parse_consulta_id_hash
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.classificar_cause_email import (
     ResultadoClassificacaoEmail,
@@ -44,7 +47,7 @@ async def processar_webhook_status_email(
     if not novo:
         return {"acao": "duplicado", "id_evento": payload.id}
 
-    repo = RepositorioEmailPendenteRedis()
+    repo = RepositorioEmailsEsperandoConfirmacaoRedis()
     message_id = payload.messageId
     code = payload.messageStatus.code
     cause = payload.messageStatus.cause
@@ -53,10 +56,10 @@ async def processar_webhook_status_email(
     dados = await repo.obter(redis, message_id)
     if not dados:
         _log.info(
-            "Webhook e-mail sem hash Redis (message_id=%s). Pode ser envio antigo ou teste.",
+            "Webhook e-mail sem registo Redis emails-esperando-confirmacao (message_id=%s). Pode ser envio antigo ou teste.",
             message_id,
         )
-        return {"acao": "sem_pendente_redis", "message_id": message_id, "code": code}
+        return {"acao": "sem_esperando_confirmacao_redis", "message_id": message_id, "code": code}
 
     uid = parse_usuario_id(dados.get("usuario_id"))
 
@@ -96,6 +99,7 @@ async def processar_webhook_status_email(
             sms_ext = f"{ext}:bounce_email:{uuid.uuid4().hex[:12]}"
             sms_redis = RepositorioSmsPendenteRedis()
             uid_sms = dados.get("usuario_id") or None
+            cid = parse_consulta_id_hash(dados.get("consulta_id"))
             inseriu = await sms_redis.criar(
                 redis,
                 external_id=sms_ext,
@@ -105,6 +109,8 @@ async def processar_webhook_status_email(
                 remetente=(dados.get("remetente") or None) or None,
                 origem="bounce_email",
                 usuario_id=uid_sms if uid_sms else None,
+                consulta_id=cid,
+                sobrescrever_trava_de_email_esperando=True,
             )
             await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_BOUNCE_HARD_SMS_FILA)
             await repo.remover(redis, message_id)
@@ -121,7 +127,7 @@ async def processar_webhook_status_email(
             message_id,
             {"status_atual": "AGUARDANDO_REENVIO", "ultimo_cause": (cause or "")[:500]},
         )
-        novo_sweep = int(time.time()) + cfg.sweep_email_pendente_dias * 86400
+        novo_sweep = int(time.time()) + cfg.sweep_emails_esperando_confirmacao_dias * 86400
         await repo.reagendar_sweep(redis, message_id, novo_sweep)
         return {
             "acao": "reagendado_fila",

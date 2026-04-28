@@ -13,6 +13,7 @@ from app.mensageria.repositorios.postgres_sms_enviados import (
     buscar_por_id_mensagem_zenvia,
 )
 from app.reenvio.repositorios.postgres_webhook_eventos import registrar_evento_se_novo
+from app.reenvio.repositorios.redis_consulta_notificacao import parse_consulta_id_hash
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.classificar_cause_email import classificar_falha_sms_numero
 from app.reenvio.servicos.cliente_stub import registrar_telefone_invalido_stub
@@ -117,6 +118,7 @@ async def processar_webhook_status_sms(
         )
         rredis = RepositorioSmsPendenteRedis()
         ctx = _contexto_de_row(row)
+        cid = parse_consulta_id_hash(ctx.get("id_consulta"))
         criou = await rredis.criar(
             redis,
             external_id=row["external_id"],
@@ -126,6 +128,7 @@ async def processar_webhook_status_sms(
             remetente=row["remetente"],
             origem="webhook_reprocessar",
             usuario_id=str(uid) if uid else None,
+            consulta_id=cid,
         )
         if not criou:
             _log.warning(

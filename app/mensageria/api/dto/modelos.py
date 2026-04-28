@@ -35,6 +35,10 @@ class PedidoEnvioEmail(BaseModel):
         default=None,
         description="Opcional: atualiza engajamento_usuarios em eventos de e-mail (API + webhooks).",
     )
+    consulta_id: UUID | None = Field(
+        default=None,
+        description="Opcional: trava deduplicação na orquestração (recebe-consulta); repassado às filas Redis.",
+    )
 
 class PedidoEnvioSms(BaseModel):
     destinatario: str = Field(
@@ -61,6 +65,10 @@ class PedidoEnvioSms(BaseModel):
     usuario_id: UUID | None = Field(
         default=None,
         description="Opcional: liga o envio a engajamento_usuarios e webhooks de estado.",
+    )
+    consulta_id: UUID | None = Field(
+        default=None,
+        description="Opcional: trava deduplicação na orquestração; repassado à fila Redis.",
     )
 
 class PedidoEmailProvedor(BaseModel):

@@ -112,7 +112,7 @@ app/
 | `app.mensageria.servicos` | Abstração de “enviar mensagem” (porta + fábrica) sem lógica HTTP do Zenvia. |
 | `app.mensageria.repositorios` | `emails_enviados` e `sms_enviados` (Postgres) após envio pela API. |
 | `app.templates` | Tabela `templates_notificacao` no Postgres, porta `PortaTemplates`, `RepositorioTemplatesPostgres`. |
-| `app.reenvio` | Webhooks, filas Redis, rotas internas (sweep, SMS pendentes), `app.reenvio.aplicar_schema`. |
+| `app.reenvio` | Webhooks, Redis (`emails-esperando-confirmacao`, `sms-pendente`), rotas internas (sweep, listagem SMS), `app.reenvio.aplicar_schema`. |
 | `app.orquestracao.*` | Reservado. |
 
 A pasta **`analise-inicial/`** pode conter notas de análise (não faz parte do arranque da API).
@@ -124,7 +124,9 @@ A pasta **`analise-inicial/`** pode conter notas de análise (não faz parte do 
 Na **raiz deste projeto** existe `docker-compose.postgres.yml` com:
 
 - **Postgres** na porta **5433** (templates + tabelas de reenvio no mesmo `DATABASE_URL`);
-- **Redis** na porta **6379** (filas de e-mail e SMS pendentes).
+- **Redis** na porta **6379** (e-mails esperando confirmação + fila `sms-pendente`).
+
+Chaves Redis usadas pelo reenvio: **`emails-esperando-confirmacao:*`** (pós-envio de e-mail, webhooks e sweep) e **`sms-pendente:*`** (fila de SMS antes do disparo). Dados antigos em `email:pendente:*` / `sms:pendente:*` **não** são migrados automaticamente.
 
 Credenciais alinhadas ao **`.env.example`** (`REDIS_URL=redis://localhost:6379/0`).
 
@@ -175,10 +177,10 @@ TESTE_PIPELINE_HABILITADO=true
 | Método | Caminho (prefixo `/v1/interno/teste-pipeline`) | Resumo |
 |--------|--------------------------------------------------|--------|
 | `POST` | `/engajamento` | Garante uma linha em `engajamento_usuarios` (UUID opcional no body). |
-| `POST` | `/simular-email-enviado` | Pós-envio simulado: Redis `email:pendente:*` + `emails_enviados` (+ engajamento opcional), com `messageId` falso. |
+| `POST` | `/simular-email-enviado` | Pós-envio simulado: Redis `emails-esperando-confirmacao:*` + `emails_enviados` (+ engajamento opcional), com `messageId` falso. |
 | `POST` | `/disparar-webhook-email` | Monta um `MESSAGE_STATUS` e usa a mesma lógica que `POST /v1/webhooks/zenvia/email`. |
-| `POST` | `/simular-sms-enviado` | Remove `sms:pendente:*` se existir e grava `sms_enviados` com id Zenvia falso. |
-| `POST` | `/cenario-email-bounce-gera-sms-redis` | E-mail falso + webhook de bounce “duro” → SMS pendente no Redis. |
+| `POST` | `/simular-sms-enviado` | Remove `sms-pendente:*` se existir e grava `sms_enviados` com id Zenvia falso. |
+| `POST` | `/cenario-email-bounce-gera-sms-redis` | E-mail falso + webhook de bounce “duro” → entrada na fila `sms-pendente` (Redis). |
 
 No **Swagger** (`/docs`, grupo **teste-pipeline**) vês os corpos e testas no browser.
 

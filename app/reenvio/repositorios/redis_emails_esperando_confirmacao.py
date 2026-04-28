@@ -1,19 +1,39 @@
+"""Redis: e-mails já enviados ao provedor, aguardando eventos (webhook) e sweep.
+
+Chaves (namespace ``emails-esperando-confirmacao``):
+- ``emails-esperando-confirmacao:{message_id}`` — hash com metadados do envio.
+- ``emails-esperando-confirmacao:ext:{external_id}`` — message_id para lookup reverso.
+- ``emails-esperando-confirmacao:sweep`` — sorted set (score = epoch elegível ao sweep).
+"""
 from __future__ import annotations
 import json
 import logging
 import time
+import uuid
 from typing import Any
+
 from redis.asyncio import Redis
+
+from app.reenvio.repositorios.redis_consulta_notificacao import (
+    fase_esperando_email,
+    liberar_trava_se_fase,
+    promover_para_esperando_email,
+)
+
 _log = logging.getLogger(__name__)
-KEY_SWEEP = "email:pendente:sweep"
+
+KEY_SWEEP = "emails-esperando-confirmacao:sweep"
+
 
 def chave_hash(message_id: str) -> str:
-    return f"email:pendente:{message_id}"
+    return f"emails-esperando-confirmacao:{message_id}"
+
 
 def chave_external(external_id: str) -> str:
-    return f"email:pendente:ext:{external_id}"
+    return f"emails-esperando-confirmacao:ext:{external_id}"
 
-class RepositorioEmailPendenteRedis:
+
+class RepositorioEmailsEsperandoConfirmacaoRedis:
     async def criar_apos_envio(
         self,
         redis: Redis,
@@ -27,6 +47,7 @@ class RepositorioEmailPendenteRedis:
         telefone_sms_fallback: str | None,
         sweep_score_ts: int,
         usuario_id: str | None = None,
+        consulta_id: uuid.UUID | None = None,
     ) -> None:
         agora = str(int(time.time()))
         mapping: dict[str, str] = {
@@ -38,6 +59,7 @@ class RepositorioEmailPendenteRedis:
             "remetente": remetente or "",
             "telefone_sms_fallback": telefone_sms_fallback or "",
             "usuario_id": usuario_id or "",
+            "consulta_id": str(consulta_id) if consulta_id is not None else "",
             "status_atual": "AGUARDANDO_ABERTURA",
             "criado_em": agora,
             "atualizado_em": agora,
@@ -47,8 +69,9 @@ class RepositorioEmailPendenteRedis:
         pipe.set(chave_external(external_id), message_id)
         pipe.zadd(KEY_SWEEP, {message_id: float(sweep_score_ts)})
         await pipe.execute()
+        await promover_para_esperando_email(redis, consulta_id, message_id)
         _log.info(
-            "E-mail enfileirado em Redis (pendente confirmação): message_id=%s external_id=%s",
+            "E-mail registado em Redis (esperando confirmação): message_id=%s external_id=%s",
             message_id,
             external_id,
         )
@@ -64,13 +87,21 @@ class RepositorioEmailPendenteRedis:
     async def remover(self, redis: Redis, message_id: str) -> None:
         data = await redis.hgetall(chave_hash(message_id))
         ext = data.get("external_id") if data else None
+        cid_raw = (data.get("consulta_id") or "").strip() if data else ""
+        consulta_uuid: uuid.UUID | None = None
+        if cid_raw:
+            try:
+                consulta_uuid = uuid.UUID(cid_raw)
+            except ValueError:
+                consulta_uuid = None
         pipe = redis.pipeline(transaction=True)
         pipe.delete(chave_hash(message_id))
         pipe.zrem(KEY_SWEEP, message_id)
         if ext:
             pipe.delete(chave_external(ext))
         await pipe.execute()
-        _log.info("E-mail removido da fila Redis: message_id=%s", message_id)
+        await liberar_trava_se_fase(redis, consulta_uuid, fase_esperando_email(message_id))
+        _log.info("E-mail removido do Redis (esperando confirmação): message_id=%s", message_id)
 
     async def reagendar_sweep(self, redis: Redis, message_id: str, novo_score_ts: int) -> None:
         await redis.zadd(KEY_SWEEP, {message_id: float(novo_score_ts)})

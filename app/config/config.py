@@ -1,6 +1,6 @@
 from functools import lru_cache
 from typing import Any
-from pydantic import Field, field_validator
+from pydantic import AliasChoices, Field, field_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
 from app.config.provedor_mensagens import ProvedorMensagem
 
@@ -18,8 +18,22 @@ class Configuracao(BaseSettings):
 
     # webhooks Zenvia (reenvio): se vazio, rotas de webhook não exigem X-Webhook-Secret (só para dev local).
     zenvia_webhook_secret: str | None = Field(default=None, validation_alias="ZENVIA_WEBHOOK_SECRET")
-    sweep_email_pendente_dias: int = Field(default=2, ge=1, le=365, validation_alias="SWEEP_EMAIL_PENDENTE_DIAS")
+    sweep_emails_esperando_confirmacao_dias: int = Field(
+        default=2,
+        ge=1,
+        le=365,
+        validation_alias=AliasChoices(
+            "SWEEP_EMAILS_ESPERANDO_CONFIRMACAO_DIAS",
+            "SWEEP_EMAIL_PENDENTE_DIAS",
+        ),
+    )
     reenvio_sms_reprocessar_max: int = Field(default=10, ge=0, le=1000, validation_alias="REENVIO_SMS_REPROCESSAR_MAX")
+
+    use_bigdatacorp_mock: bool = Field(
+        default=True,
+        validation_alias="USE_BIGDATACORP_MOCK",
+        description="Se true, enriquecimento usa AdaptadorBigDataCorpMock; se false, adaptador API (ainda não implementado).",
+    )
 
     # Rotas /v1/interno/teste-pipeline/* — só ativas se true (não usar em produção pública).
     teste_pipeline_habilitado: bool = Field(
@@ -39,11 +53,15 @@ class Configuracao(BaseSettings):
         validation_alias="MENSAGENS_PROVEDOR_SMS",
     )
 
-    @field_validator("teste_pipeline_habilitado", mode="before")
+    @field_validator("teste_pipeline_habilitado", "use_bigdatacorp_mock", mode="before")
     @classmethod
-    def _bool_teste_pipeline(cls, v: Any) -> Any:
+    def _bool_flags(cls, v: Any) -> Any:
         if isinstance(v, str):
-            return v.strip().lower() in ("1", "true", "yes", "on")
+            s = v.strip().lower()
+            if s in ("1", "true", "yes", "on"):
+                return True
+            if s in ("0", "false", "no", "off", ""):
+                return False
         return v
 
     @field_validator("zenvia_webhook_secret", mode="before")

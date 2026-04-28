@@ -1,7 +1,7 @@
 """Webhook manual/teste para **status de e-mail** (MESSAGE_STATUS, channel email).
 
 Validação estrita do JSON + ``X-Webhook-Secret`` quando ``ZENVIA_WEBHOOK_SECRET``
-está definido. Atualiza Redis e pode enfileirar SMS pendente no **Redis**.
+está definido. Atualiza Redis (``emails-esperando-confirmacao``) e pode enfileirar na fila **sms-pendente** no Redis.
 """
 
 from typing import Annotated
