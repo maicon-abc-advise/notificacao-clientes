@@ -18,6 +18,15 @@ class RecebeConsultaCorpo(BaseModel):
     )
     nome_fantasia: str | None = Field(default=None, max_length=256)
 
+    @field_validator("email_fornecedor", "telefone_fornecedor", mode="before")
+    @classmethod
+    def _vazio_ou_omissao_para_none(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str) and not v.strip():
+            return None
+        return v
+
     @field_validator("cnpj_basico", "cnpj_ordem", "cnpj_dv")
     @classmethod
     def _so_digitos(cls, v: str) -> str:
@@ -32,6 +41,6 @@ class RespostaRecebeConsulta(BaseModel):
     acao: str = Field(description="email_enfileirado | sms_enfileirado | nada")
     id_consulta: UUID
     canal: str | None = None
-    external_id: str | None = None
+    id_externo: str | None = None
     tipo_template: str | None = None
     motivo: str = ""

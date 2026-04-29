@@ -21,7 +21,10 @@ def obter_porta_enriquecimento_contato(
 ) -> PortaEnriquecimentoContato:
     if config.use_bigdatacorp_mock:
         return AdaptadorBigDataCorpMock()
-    return AdaptadorBigDataCorpApi()
+    return AdaptadorBigDataCorpApi(
+        api_base_url=config.bigdatacorp_api_base_url,
+        access_token=config.bigdatacorp_access_token,
+    )
 
 PoolOrquestracao = Annotated[asyncpg.Pool, Depends(_pool)]
 RedisOrquestracao = Annotated[Redis, Depends(_redis)]

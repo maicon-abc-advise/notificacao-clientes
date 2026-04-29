@@ -7,7 +7,6 @@ import enum
 
 class ResultadoClassificacaoEmail(enum.StrEnum):
     """Decisão para e-mails NOT_DELIVERED / REJECTED."""
-
     HARD_BOUNCE = "hard_bounce"  # endereço inválido → SMS imediato
     MAILBOX_FULL = "mailbox_full"  # caixa cheia → volta à fila Redis
     TEMPORARY = "temporary"  # transitório → volta à fila

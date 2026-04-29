@@ -11,8 +11,8 @@ from app.reenvio.repositorios.redis_emails_esperando_confirmacao import (
 )
 from app.reenvio.repositorios.redis_consulta_notificacao import parse_consulta_id_hash
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
-from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
-from app.reenvio.servicos.engajamento_usuario import parse_usuario_id, tocar_engajamento
+from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado
+from app.reenvio.servicos.engajamento_usuario import parse_usuario_id, tocar_engajamento_email
 from app.reenvio.servicos.processar_status_email import TEMPLATE_SMS_EMAIL_INVALIDO, _contexto_sms_de_hash
 
 _log = logging.getLogger(__name__)
@@ -37,11 +37,11 @@ async def executar_sweep_emails_pendentes(
             continue
 
         tel = (campos.get("telefone_sms_fallback") or "").strip()
-        ext = campos.get("external_id") or ""
+        ext = (campos.get("id_externo") or campos.get("external_id") or "").strip()
 
         if not tel:
             _log.warning(
-                "Sweep: e-mail esperando confirmação sem telefone_sms_fallback; ignorado. message_id=%s external_id=%s",
+                "Sweep: e-mail esperando confirmação sem telefone_sms_fallback; ignorado. message_id=%s id_externo=%s",
                 message_id,
                 ext,
             )
@@ -56,7 +56,7 @@ async def executar_sweep_emails_pendentes(
         cid = parse_consulta_id_hash(campos.get("consulta_id"))
         ok = await repo_s.criar(
             redis,
-            external_id=sms_ext,
+            id_externo=sms_ext,
             telefone=tel,
             tipo_template=TEMPLATE_SMS_EMAIL_INVALIDO,
             contexto=ctx,
@@ -68,11 +68,13 @@ async def executar_sweep_emails_pendentes(
         )
         if ok:
             inseridos += 1
-            await tocar_engajamento(pool, parse_usuario_id(uid_s), EngajamentoEstado.EMAIL_SWEEP_LEMBRETE_SMS)
+            await tocar_engajamento_email(
+                pool, parse_usuario_id(uid_s), EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS
+            )
+            await repo_e.remover(redis, message_id)
         else:
             ignorados += 1
-
-        novo_sweep = agora + cfg.sweep_emails_esperando_confirmacao_dias * 86400
-        await repo_e.reagendar_sweep(redis, message_id, novo_sweep)
+            novo_sweep = agora + cfg.sweep_emails_esperando_confirmacao_dias * 86400
+            await repo_e.reagendar_sweep(redis, message_id, novo_sweep)
 
     return {"inseridos": inseridos, "ignorados": ignorados, "candidatos": len(ids)}

@@ -20,14 +20,14 @@ async def registrar_email_enviado_apos_sucesso(
     msg_id = resultado.id_provedor
     if not msg_id or msg_id.startswith("(sem"):
         _log.warning(
-            "E-mail sem id Zenvia; não gravado em emails_enviados. external_id=%s",
+            "E-mail sem id Zenvia; não gravado em emails_enviados. id_externo=%s",
             pedido.id_externo,
         )
         return
 
     await inserir_ou_atualizar_apos_envio_api(
         pool,
-        external_id=pedido.id_externo,
+        id_externo=pedido.id_externo,
         email_destinatario=pedido.destinatario,
         tipo_template=pedido.tipo_template.value,
         contexto=dict(pedido.contexto),

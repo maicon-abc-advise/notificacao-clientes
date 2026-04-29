@@ -47,20 +47,6 @@ async def post_sweep_emails_esperando_confirmacao(
     return await _executar_sweep_emails_esperando_confirmacao(pool, redis, config)
 
 
-@router.post(
-    "/sweep-emails-pendentes",
-    status_code=status.HTTP_200_OK,
-    summary="[Legado] Mesmo comportamento que /sweep-emails-esperando-confirmacao",
-    deprecated=True,
-)
-async def post_sweep_emails_pendentes(
-    pool: Annotated[asyncpg.Pool, Depends(_pool)],
-    redis: Annotated[Redis, Depends(_redis)],
-    config: Annotated[Configuracao, Depends(obter_configuracao)],
-) -> dict:
-    return await _executar_sweep_emails_esperando_confirmacao(pool, redis, config)
-
-
 @router.get(
     "/sms-pendentes",
     status_code=status.HTTP_200_OK,

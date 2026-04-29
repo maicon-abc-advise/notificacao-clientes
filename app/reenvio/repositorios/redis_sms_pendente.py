@@ -1,7 +1,7 @@
 """Fila Redis: SMS ainda **não** enviados (o consumidor apaga após disparo).
 
 Chaves (namespace ``sms-pendente``):
-- ``sms-pendente:{external_id}`` — hash com payload para ``POST /v1/mensagens/sms``.
+- ``sms-pendente:{id_externo}`` — hash com payload para ``POST /v1/mensagens/sms``.
 - ``sms-pendente:por_tempo`` — sorted set (score = epoch) para listar por ordem.
 """
 from __future__ import annotations
@@ -28,8 +28,8 @@ _log = logging.getLogger(__name__)
 KEY_INDEX = "sms-pendente:por_tempo"
 
 
-def chave_hash(external_id: str) -> str:
-    return f"sms-pendente:{external_id}"
+def chave_hash(id_externo: str) -> str:
+    return f"sms-pendente:{id_externo}"
 
 
 class RepositorioSmsPendenteRedis:
@@ -37,7 +37,7 @@ class RepositorioSmsPendenteRedis:
         self,
         redis: Redis,
         *,
-        external_id: str,
+        id_externo: str,
         telefone: str,
         tipo_template: str,
         contexto: dict[str, str],
@@ -47,12 +47,12 @@ class RepositorioSmsPendenteRedis:
         consulta_id: uuid.UUID | None = None,
         sobrescrever_trava_de_email_esperando: bool = False,
     ) -> bool:
-        key = chave_hash(external_id)
+        key = chave_hash(id_externo)
         reservou_trava = False
         if sobrescrever_trava_de_email_esperando:
-            await redefinir_para_pendente_sms_pos_bounce(redis, consulta_id, external_id)
+            await redefinir_para_pendente_sms_pos_bounce(redis, consulta_id, id_externo)
         elif consulta_id is not None:
-            if not await tentar_travar_pendente_sms(redis, consulta_id, external_id):
+            if not await tentar_travar_pendente_sms(redis, consulta_id, id_externo):
                 raise ConsultaJaNotificadaError(str(consulta_id))
             reservou_trava = True
         try:
@@ -62,7 +62,7 @@ class RepositorioSmsPendenteRedis:
                 return False
             agora = int(time.time())
             mapping: dict[str, str] = {
-                "external_id": external_id,
+                "id_externo": id_externo,
                 "telefone": telefone,
                 "tipo_template": tipo_template,
                 "contexto_json": json.dumps(contexto, ensure_ascii=False),
@@ -74,17 +74,17 @@ class RepositorioSmsPendenteRedis:
             }
             pipe = redis.pipeline(transaction=True)
             pipe.hset(key, mapping=mapping)
-            pipe.zadd(KEY_INDEX, {external_id: float(agora)})
+            pipe.zadd(KEY_INDEX, {id_externo: float(agora)})
             await pipe.execute()
         except Exception:
             if reservou_trava:
                 await liberar_trava_forcado(redis, consulta_id)
             raise
-        _log.info("SMS na fila Redis (sms-pendente): external_id=%s origem=%s", external_id, origem)
+        _log.info("SMS na fila Redis (sms-pendente): id_externo=%s origem=%s", id_externo, origem)
         return True
 
-    async def remover(self, redis: Redis, external_id: str) -> None:
-        key = chave_hash(external_id)
+    async def remover(self, redis: Redis, id_externo: str) -> None:
+        key = chave_hash(id_externo)
         raw = await redis.hgetall(key)
         cid_raw = (raw.get("consulta_id") or "").strip() if raw else ""
         consulta_uuid: uuid.UUID | None = None
@@ -95,9 +95,9 @@ class RepositorioSmsPendenteRedis:
                 consulta_uuid = None
         pipe = redis.pipeline(transaction=True)
         pipe.delete(key)
-        pipe.zrem(KEY_INDEX, external_id)
+        pipe.zrem(KEY_INDEX, id_externo)
         await pipe.execute()
-        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_sms(external_id))
+        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_sms(id_externo))
 
     async def listar_pendentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
         """Lista hashes de SMS pendentes (por ordem de entrada no índice)."""
@@ -111,7 +111,7 @@ class RepositorioSmsPendenteRedis:
             ctx = json.loads(raw.get("contexto_json") or "{}")
             saida.append(
                 {
-                    "external_id": raw.get("external_id", ext),
+                    "id_externo": raw.get("id_externo") or raw.get("external_id", ext),
                     "telefone": raw.get("telefone", ""),
                     "tipo_template": raw.get("tipo_template", ""),
                     "contexto": ctx if isinstance(ctx, dict) else {},

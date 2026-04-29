@@ -18,8 +18,15 @@ from app.reenvio.servicos.classificar_cause_email import (
     ResultadoClassificacaoEmail,
     classificar_falha_email,
 )
-from app.reenvio.servicos.engajamento_estado import EngajamentoEstado, engajamento_falha_recuperavel_email
-from app.reenvio.servicos.engajamento_usuario import parse_usuario_id, tocar_engajamento
+from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, engajamento_falha_recuperavel_email
+from app.reenvio.servicos.engajamento_usuario import (
+    definir_recebe_email,
+    parse_usuario_id,
+    tocar_engajamento_email,
+)
+from app.mensageria.repositorios.postgres_emails_enviados import (
+    atualizar_status_por_id_mensagem_zenvia,
+)
 
 _log = logging.getLogger(__name__)
 
@@ -64,17 +71,26 @@ async def processar_webhook_status_email(
     uid = parse_usuario_id(dados.get("usuario_id"))
 
     if code == "READ":
-        await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_LIDO)
+        await atualizar_status_por_id_mensagem_zenvia(
+            pool, id_mensagem_zenvia=message_id, status_ultimo="enviado"
+        )
+        await tocar_engajamento_email(pool, uid, EngajamentoEmailEstado.EMAIL_LIDO)
         await repo.remover(redis, message_id)
         return {"acao": "removido_fila", "message_id": message_id, "code": code}
 
     if code == "SENT":
-        await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_WEBHOOK_SENT)
+        await atualizar_status_por_id_mensagem_zenvia(
+            pool, id_mensagem_zenvia=message_id, status_ultimo="processando"
+        )
+        await tocar_engajamento_email(pool, uid, EngajamentoEmailEstado.EMAIL_WEBHOOK_SENT)
         await repo.atualizar_campos(redis, message_id, {"status_atual": "ENVIADO_PROVEDOR"})
         return {"acao": "atualizado", "message_id": message_id, "code": code}
 
     if code == "DELIVERED":
-        await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_ENTREGUE_CAIXA)
+        await atualizar_status_por_id_mensagem_zenvia(
+            pool, id_mensagem_zenvia=message_id, status_ultimo="enviado"
+        )
+        await tocar_engajamento_email(pool, uid, EngajamentoEmailEstado.EMAIL_ENTREGUE_CAIXA)
         await repo.atualizar_campos(redis, message_id, {"status_atual": "ENTREGUE_CAIXA"})
         return {"acao": "atualizado", "message_id": message_id, "code": code}
 
@@ -82,17 +98,21 @@ async def processar_webhook_status_email(
         cls = classificar_falha_email(cause=cause, description=description)
         if cls == ResultadoClassificacaoEmail.HARD_BOUNCE:
             tel = (dados.get("telefone_sms_fallback") or "").strip()
-            ext = dados.get("external_id") or ""
+            ext = (dados.get("id_externo") or dados.get("external_id") or "").strip()
             if not tel:
                 _log.error(
-                    "Hard bounce sem telefone_sms_fallback; SMS não gerado. external_id=%s",
+                    "Hard bounce sem telefone_sms_fallback; SMS não gerado. id_externo=%s",
                     ext,
                 )
-                await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_BOUNCE_HARD_SEM_SMS)
+                await atualizar_status_por_id_mensagem_zenvia(
+                    pool, id_mensagem_zenvia=message_id, status_ultimo="falha_definitiva"
+                )
+                await tocar_engajamento_email(pool, uid, EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SEM_SMS)
+                await definir_recebe_email(pool, uid, False)
                 await repo.remover(redis, message_id)
                 return {
                     "acao": "bounce_sem_telefone",
-                    "external_id": ext,
+                    "id_externo": ext,
                     "message_id": message_id,
                 }
             ctx = _contexto_sms_de_hash(dados)
@@ -102,7 +122,7 @@ async def processar_webhook_status_email(
             cid = parse_consulta_id_hash(dados.get("consulta_id"))
             inseriu = await sms_redis.criar(
                 redis,
-                external_id=sms_ext,
+                id_externo=sms_ext,
                 telefone=tel,
                 tipo_template=TEMPLATE_SMS_EMAIL_INVALIDO,
                 contexto=ctx,
@@ -112,16 +132,23 @@ async def processar_webhook_status_email(
                 consulta_id=cid,
                 sobrescrever_trava_de_email_esperando=True,
             )
-            await tocar_engajamento(pool, uid, EngajamentoEstado.EMAIL_BOUNCE_HARD_SMS_FILA)
+            await atualizar_status_por_id_mensagem_zenvia(
+                pool, id_mensagem_zenvia=message_id, status_ultimo="falha_definitiva"
+            )
+            await tocar_engajamento_email(pool, uid, EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SMS_FILA)
+            await definir_recebe_email(pool, uid, False)
             await repo.remover(redis, message_id)
             return {
                 "acao": "bounce_sms_enfileirado" if inseriu else "bounce_sms_duplicado",
-                "external_id_sms": sms_ext,
+                "id_externo_sms": sms_ext,
                 "inseriu": inseriu,
                 "message_id": message_id,
             }
 
-        await tocar_engajamento(pool, uid, engajamento_falha_recuperavel_email(cls))
+        await atualizar_status_por_id_mensagem_zenvia(
+            pool, id_mensagem_zenvia=message_id, status_ultimo="reprocessar"
+        )
+        await tocar_engajamento_email(pool, uid, engajamento_falha_recuperavel_email(cls))
         await repo.atualizar_campos(
             redis,
             message_id,

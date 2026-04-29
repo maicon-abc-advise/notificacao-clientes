@@ -3,5 +3,5 @@
 - E-mails após envio (webhooks / sweep): Redis ``emails-esperando-confirmacao:*``.
 - Fila SMS **a enviar**: Redis ``sms-pendente:*``.
 - Registos **sms_enviados** e **emails_enviados**: criados/atualizados em **mensageria** após envio; webhooks SMS atualizam ``sms_enviados``.
-- ``engajamento_usuarios``: atualizado em eventos-chave de SMS (quando há ``usuario_id``).
+- ``engajamento_usuarios``: ``engajamento_email`` e ``engajamento_sms`` (último estado por canal) quando há ``usuario_id``.
 """

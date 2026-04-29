@@ -17,5 +17,5 @@ class VerificarCreditosCorpo(BaseModel):
 class RespostaVerificarCreditos(BaseModel):
     acao: str = Field(description="email_enfileirado | nada")
     tipo_template: str | None = None
-    external_id: str | None = None
+    id_externo: str | None = None
     motivo: str = ""

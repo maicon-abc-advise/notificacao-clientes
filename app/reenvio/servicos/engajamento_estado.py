@@ -2,8 +2,8 @@ from __future__ import annotations
 import enum
 from app.reenvio.servicos.classificar_cause_email import ResultadoClassificacaoEmail
 
-class EngajamentoEstado(enum.StrEnum):
 
+class EngajamentoEmailEstado(enum.StrEnum):
     ATIVO = "ativo"
     EMAIL_ENVIADO_API = "email_enviado_api"
     EMAIL_LIDO = "email_lido"
@@ -15,6 +15,9 @@ class EngajamentoEstado(enum.StrEnum):
     EMAIL_FALHA_RECUPERAVEL_TEMPORARY = "email_falha_recuperavel_temporary"
     EMAIL_FALHA_RECUPERAVEL_UNKNOWN = "email_falha_recuperavel_unknown"
     EMAIL_SWEEP_LEMBRETE_SMS = "email_sweep_lembrete_sms"
+
+class EngajamentoSmsEstado(enum.StrEnum):
+    ATIVO = "ativo"
     SMS_ENVIADO_API = "sms_enviado_api"
     SMS_ENTREGUE = "sms_entregue"
     SMS_WEBHOOK_SENT = "sms_webhook_sent"
@@ -22,11 +25,11 @@ class EngajamentoEstado(enum.StrEnum):
     SMS_FALHA_LIMITE = "sms_falha_limite"
     SMS_REPROCESSAR_FILA = "sms_reprocessar_fila"
 
-def engajamento_falha_recuperavel_email(cls: ResultadoClassificacaoEmail) -> EngajamentoEstado:
-    m: dict[ResultadoClassificacaoEmail, EngajamentoEstado] = {
-        ResultadoClassificacaoEmail.MAILBOX_FULL: EngajamentoEstado.EMAIL_FALHA_RECUPERAVEL_MAILBOX_FULL,
-        ResultadoClassificacaoEmail.TEMPORARY: EngajamentoEstado.EMAIL_FALHA_RECUPERAVEL_TEMPORARY,
-        ResultadoClassificacaoEmail.UNKNOWN: EngajamentoEstado.EMAIL_FALHA_RECUPERAVEL_UNKNOWN,
+def engajamento_falha_recuperavel_email(cls: ResultadoClassificacaoEmail) -> EngajamentoEmailEstado:
+    m: dict[ResultadoClassificacaoEmail, EngajamentoEmailEstado] = {
+        ResultadoClassificacaoEmail.MAILBOX_FULL: EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_MAILBOX_FULL,
+        ResultadoClassificacaoEmail.TEMPORARY: EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_TEMPORARY,
+        ResultadoClassificacaoEmail.UNKNOWN: EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_UNKNOWN,
     }
     try:
         return m[cls]

@@ -62,15 +62,15 @@ async def executar_verificar_creditos(
             nome_fantasia=corpo.nome_fantasia,
             link_creditos=corpo.link_area_creditos,
         )
-        ok = await enfileirar_email_pendente(redis, pedido, external_id=ext, origem=_ORIGEM)
+        ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
         if ok:
             await registrar_lembrete_creditos_semanal(pool, corpo.usuario_id)
-        _log.info("[orquestracao] verificar-creditos fim: enfileirado=%s external_id=%s", ok, ext)
+        _log.info("[orquestracao] verificar-creditos fim: enfileirado=%s id_externo=%s", ok, ext)
         return RespostaVerificarCreditos(
             acao="email_enfileirado" if ok else "nada",
             tipo_template=CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS.value if ok else None,
-            external_id=ext if ok else None,
-            motivo="" if ok else "fila e-mail ocupada para external_id",
+            id_externo=ext if ok else None,
+            motivo="" if ok else "fila e-mail ocupada para id_externo",
         )
 
     if 0 < corpo.creditos_restantes <= corpo.limiar_creditos_no_fim:
@@ -82,15 +82,15 @@ async def executar_verificar_creditos(
             nome_fantasia=corpo.nome_fantasia,
             link_creditos=corpo.link_area_creditos,
         )
-        ok = await enfileirar_email_pendente(redis, pedido, external_id=ext, origem=_ORIGEM)
+        ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
         if ok:
             await registrar_lembrete_creditos_semanal(pool, corpo.usuario_id)
-        _log.info("[orquestracao] verificar-creditos fim: enfileirado=%s external_id=%s", ok, ext)
+        _log.info("[orquestracao] verificar-creditos fim: enfileirado=%s id_externo=%s", ok, ext)
         return RespostaVerificarCreditos(
             acao="email_enfileirado" if ok else "nada",
             tipo_template=CodigoTipoTemplate.CREDITOS_NO_FIM.value if ok else None,
-            external_id=ext if ok else None,
-            motivo="" if ok else "fila e-mail ocupada para external_id",
+            id_externo=ext if ok else None,
+            motivo="" if ok else "fila e-mail ocupada para id_externo",
         )
 
     _log.info("[orquestracao] verificar-creditos fim: acima do limiar, nada a enviar")

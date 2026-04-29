@@ -101,7 +101,7 @@ app/
 |--------|--------|
 | `app.mensageria.api.dto` + `app.mensageria.api.rotas` | Contrato JSON e rotas (FastAPI). |
 | `app.mensageria.api.externo.zenvia` | Chamada HTTP à API v2 da Zenvia. |
-| `app.config` | `Configuracao` a partir do `.env`, `Depends` compartilhado, leitura de `API_KEY` e ficheiro `provedor_mensagens` (qual conector de e-mail/SMS usar). |
+| `app.config` | `Configuracao` a partir do `.env` (pares `*_TEST`/`*_PROD` + `AMBIENTE`), `Depends` compartilhado e provedores de e-mail/SMS. |
 | `app.mensageria.excecoes` | `ErroEnvioZenvia`, `FalhaConfiguracaoProvedor` e similares. |
 | `app.mensageria.servicos` | Abstração de “enviar mensagem” (porta + fábrica) sem lógica HTTP do Zenvia. |
 | `app.mensageria.repositorios` | `emails_enviados` e `sms_enviados` (Postgres) após envio pela API. |
@@ -117,12 +117,12 @@ A pasta **`analise-inicial/`** pode conter notas de análise (não faz parte do 
 
 Na **raiz deste projeto** existe `docker-compose.postgres.yml` com:
 
-- **Postgres** na porta **5433** (templates + tabelas de reenvio no mesmo `DATABASE_URL`);
+- **Postgres** na porta **5433** (templates + tabelas de reenvio: use `DATABASE_URL_TEST` / `DATABASE_URL` no `.env` conforme **`.env.example`**);
 - **Redis** na porta **6379** (e-mails esperando confirmação + fila `sms-pendente`).
 
 Chaves Redis usadas pelo reenvio: **`emails-esperando-confirmacao:*`** (pós-envio de e-mail, webhooks e sweep) e **`sms-pendente:*`** (fila de SMS antes do disparo). Dados antigos em `email:pendente:*` / `sms:pendente:*` **não** são migrados automaticamente.
 
-Credenciais alinhadas ao **`.env.example`** (`REDIS_URL=redis://localhost:6379/0`).
+Credenciais alinhadas ao **`.env.example`** (`REDIS_URL_TEST` / `REDIS_URL_PROD`, mocks globais, Zenvia só `*_PROD` ou sem sufixo).
 
 **Subir só o banco:**
 
@@ -137,7 +137,7 @@ docker compose -f docker-compose.postgres.yml up -d
 docker compose -f docker-compose.postgres.yml down
 ```
 
-**Popular tabelas (só desenvolvimento / teste)** — não faz parte do pacote publicado da API; em produção o schema vem de migrações ou do pipeline de implantação. Na raiz do repositório, com Postgres acessível e `DATABASE_URL` no ambiente ou no `.env`:
+**Popular tabelas (só desenvolvimento / teste)** — não faz parte do pacote publicado da API; em produção o schema vem de migrações ou do pipeline de implantação. Na raiz do repositório, com Postgres acessível e variáveis de base no `.env` (a app resolve `DATABASE_URL_*` conforme `AMBIENTE`):
 
 ```powershell
 cd caminho\para\notificacao-clientes
@@ -145,6 +145,8 @@ cd caminho\para\notificacao-clientes
 ```
 
 Isso aplica em sequência DDL + seed de templates, DDL de reenvio e DDL de orquestração. SQL e dados em `popula-tabelas/popula_tabelas/`. Para conferir templates: `SELECT id, tipo, email IS NULL AS sem_email, length(sms) FROM public.templates_notificacao;`.
+
+**Bases que já tinham `engajamento_usuarios.engajamento_estado` (coluna única):** aplique uma vez o script `popula-tabelas/popula_tabelas/sql/migrate_engajamento_dois_canais.sql` no Postgres antes de subir esta versão da API (ele cria `engajamento_email` / `engajamento_sms`, copia dados e remove a coluna antiga). Instalações novas só com `reenvio.sql` atual já nascem com as duas colunas.
 
 Para aplicar só um bloco (ex.: só templates), use as funções em `popula_tabelas.aplicar` a partir desse diretório (mesmo `PYTHONPATH` que `run.py`).
 
@@ -154,27 +156,23 @@ Para aplicar só um bloco (ex.: só templates), use as funções em `popula_tabe
 
 Rotas para **simular** envio de e-mail/SMS e webhooks **sem** chamar a API da Zenvia (útil para exercitar Redis + Postgres em desenvolvimento).
 
-**Ativar no `.env`:**
+**Ativar:** com **`AMBIENTE=local`** as rotas ficam disponíveis (não há variável `TESTE_PIPELINE_HABILITADO`). Com **`AMBIENTE=producao`** não são expostas.
 
-```env
-TESTE_PIPELINE_HABILITADO=true
-```
+**Autenticação:** igual às outras rotas internas — **`Authorization: Bearer <API_KEY>`** ou **`X-Api-Key`**.
 
-(Em produção pública mantém **`false`** ou omite.)
-
-**Autenticação:** igual às outras rotas internas — **`Authorization: Bearer <API_KEY>`** ou **`X-Api-Key`** (valor de **`API_KEY`** no `.env`).
+**Mocks:** `USE_ZENVIA_MOCK` e `USE_BIGDATACORP_MOCK` são únicos (não há pares por ambiente). Credenciais Zenvia reais: `ZENVIA_*_PROD` ou fallback sem sufixo; Big Data Corp: `BIGDATACORP_API_BASE_URL` e `BIGDATACORP_ACCESS_TOKEN` quando o mock estiver desligado (ver **`.env.example`**).
 
 | Método | Caminho (prefixo `/v1/interno/teste-pipeline`) | Resumo |
 |--------|--------------------------------------------------|--------|
 | `POST` | `/engajamento` | Garante uma linha em `engajamento_usuarios` (UUID opcional no body). |
 | `POST` | `/simular-email-enviado` | Pós-envio simulado: Redis `emails-esperando-confirmacao:*` + `emails_enviados` (+ engajamento opcional), com `messageId` falso. |
-| `POST` | `/disparar-webhook-email` | Monta um `MESSAGE_STATUS` e usa a mesma lógica que `POST /v1/webhooks/zenvia/email`. |
+| `POST` | `/disparar-webhook-email` | Monta um `MESSAGE_STATUS` e usa a mesma lógica que `POST /v1/webhooks/notificacao/email`. |
 | `POST` | `/simular-sms-enviado` | Remove `sms-pendente:*` se existir e grava `sms_enviados` com id Zenvia falso. |
 | `POST` | `/cenario-email-bounce-gera-sms-redis` | E-mail falso + webhook de bounce “duro” → entrada na fila `sms-pendente` (Redis). |
 
 No **Swagger** (`/docs`, grupo **teste-pipeline**) vês os corpos e testas no browser.
 
-**Webhooks reais Zenvia** (fora deste modo): `POST /v1/webhooks/zenvia/email` e `POST /v1/webhooks/zenvia/sms`. Com **`ZENVIA_WEBHOOK_SECRET`** definido, inclui **`X-Webhook-Secret`** no pedido. Esquema do corpo: modelo **WebhookMessageStatusZenvia** no OpenAPI.
+**Webhooks de status** (fora deste modo; o corpo segue o contrato do provedor): `POST /v1/webhooks/notificacao/email` e `POST /v1/webhooks/notificacao/sms`. Com **`ZENVIA_WEBHOOK_SECRET`** definido, inclui **`X-Webhook-Secret`** no pedido. Esquema do corpo: modelo **WebhookMessageStatusZenvia** no OpenAPI.
 
 **Documentação complementar** (fluxos em diagrama): `../analise-inicial/README-REENVIO.md` se o clone incluir a pasta `analise-inicial/`.
 

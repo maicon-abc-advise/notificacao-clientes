@@ -6,6 +6,7 @@ from fastapi.testclient import TestClient
 
 from app.config.dependencias_templates import obter_porta_templates
 from app.main import app
+from app.mensageria.api.rotas import envio_mensagens
 from app.mensageria.api.dto.modelos import (
     CanalMensagem,
     PedidoEmailProvedor,
@@ -124,6 +125,90 @@ def test_post_email_200_com_override() -> None:
     assert r.json()["id_provedor"] == "fake-1"
 
 
+def test_post_email_idempotente_nao_chama_provedor() -> None:
+    class PortaNaoDeveChamar:
+        def enviar_email(self, pedido: PedidoEmailProvedor) -> ResultadoEnvioMensagem:
+            raise AssertionError("envio não deve repetir quando id_externo já existe")
+
+        def enviar_sms(self, pedido: PedidoSmsProvedor) -> ResultadoEnvioMensagem:
+            raise NotImplementedError
+
+    class _PoolFake:
+        async def fetchrow(self, *_a, **_kw):
+            return {"id_mensagem_zenvia": "z-já-gravado"}
+
+    async def _pool_dep():
+        return _PoolFake()
+
+    async def _fake_dep() -> object:
+        return await _templates_fixos()
+
+    app.dependency_overrides[obter_porta_envio_mensagem] = lambda: PortaNaoDeveChamar()
+    app.dependency_overrides[obter_porta_templates] = _fake_dep
+    app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep
+    try:
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/mensagens/email",
+                headers={"Authorization": "Bearer test-api-key-unit"},
+                json={
+                    "destinatario": "a@b.com",
+                    "tipo_template": "APARECEU_BUSCA",
+                    "contexto": {},
+                    "id_externo": "idem-1",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id_provedor"] == "z-já-gravado"
+    assert body["resposta_parcial"].get("idempotente") is True
+
+
+def test_post_sms_idempotente_nao_chama_provedor() -> None:
+    class PortaNaoDeveChamar:
+        def enviar_email(self, pedido: PedidoEmailProvedor) -> ResultadoEnvioMensagem:
+            raise NotImplementedError
+
+        def enviar_sms(self, pedido: PedidoSmsProvedor) -> ResultadoEnvioMensagem:
+            raise AssertionError("envio SMS não deve repetir quando id_externo já existe")
+
+    class _PoolFake:
+        async def fetchrow(self, *_a, **_kw):
+            return {"id_mensagem_zenvia": "s-já-gravado"}
+
+    async def _pool_dep():
+        return _PoolFake()
+
+    async def _fake_dep() -> object:
+        return await _templates_fixos()
+
+    app.dependency_overrides[obter_porta_envio_mensagem] = lambda: PortaNaoDeveChamar()
+    app.dependency_overrides[obter_porta_templates] = _fake_dep
+    app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep
+    try:
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/mensagens/sms",
+                headers={"Authorization": "Bearer test-api-key-unit"},
+                json={
+                    "destinatario": "5511987654321",
+                    "tipo_template": "APARECEU_BUSCA",
+                    "contexto": {},
+                    "id_externo": "idem-sms-1",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r.status_code == 200
+    body = r.json()
+    assert body["id_provedor"] == "s-já-gravado"
+    assert body["resposta_parcial"].get("idempotente") is True
+
+
 def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
     from app.config.config import obter_configuracao
@@ -132,6 +217,7 @@ def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> No
         return await _templates_fixos()
 
     monkeypatch.setenv("ZENVIA_API_TOKEN", "")
+    monkeypatch.setenv("ZENVIA_API_TOKEN_PROD", "")
     obter_configuracao.cache_clear()
     obter_parametros_zenvia.cache_clear()
     app.dependency_overrides[obter_porta_templates] = _fake_dep

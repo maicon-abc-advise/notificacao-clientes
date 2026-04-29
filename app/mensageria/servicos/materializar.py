@@ -26,7 +26,7 @@ async def materializar_email(
         destinatario=pedido.destinatario,
         assunto=assunto,
         corpo_html=corpo,
-        remetente=pedido.remetente,
+        remetente=None,
         id_externo=pedido.id_externo,
     )
 
@@ -43,6 +43,6 @@ async def materializar_sms(
     return PedidoSmsProvedor(
         destinatario=pedido.destinatario,
         texto=texto,
-        remetente=pedido.remetente,
+        remetente=None,
         id_externo=pedido.id_externo,
     )

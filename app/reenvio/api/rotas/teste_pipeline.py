@@ -1,6 +1,6 @@
 """Cenários de teste locais: simular envio e-mail/SMS **sem** Zenvia e exercitar Redis + Postgres.
 
-Só responde se ``TESTE_PIPELINE_HABILITADO=true`` e com a mesma autenticação interna das outras rotas.
+Só responde com ``AMBIENTE=local`` (em ``producao`` as rotas não são expostas).
 """
 
 from __future__ import annotations
@@ -26,8 +26,8 @@ from app.reenvio.api.dependencias_teste_pipeline import exigir_teste_pipeline_ha
 from app.reenvio.api.dto.webhook_zenvia import WebhookMessageStatusZenvia
 from app.reenvio.redis_app import obter_cliente_redis
 from app.reenvio.servicos.enfileirar_apos_envio_email import enfileirar_email_enviado_apos_sucesso
-from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
-from app.reenvio.servicos.engajamento_usuario import tocar_engajamento
+from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, EngajamentoSmsEstado
+from app.reenvio.servicos.engajamento_usuario import tocar_engajamento_email
 from app.reenvio.servicos.processar_status_email import processar_webhook_status_email
 from app.mensageria.servicos.registrar_email_enviado import registrar_email_enviado_apos_sucesso
 from app.mensageria.servicos.registrar_sms_enviado import registrar_sms_enviado_apos_sucesso
@@ -57,7 +57,8 @@ class EngajamentoSeedCorpo(BaseModel):
         default=None,
         description="Se omitido, gera um UUID novo.",
     )
-    estado: EngajamentoEstado = Field(default=EngajamentoEstado.ATIVO)
+    engajamento_email: EngajamentoEmailEstado = Field(default=EngajamentoEmailEstado.ATIVO)
+    engajamento_sms: EngajamentoSmsEstado = Field(default=EngajamentoSmsEstado.ATIVO)
 
 
 @router.post(
@@ -72,16 +73,27 @@ async def post_seed_engajamento(
     uid = corpo.usuario_id or uuid.uuid4()
     await pool.execute(
         """
-        INSERT INTO public.engajamento_usuarios (usuario_id, engajamento_estado, engajamento_atualizado_em)
-        VALUES ($1, $2, now())
+        INSERT INTO public.engajamento_usuarios (
+            usuario_id, engajamento_email, engajamento_sms,
+            engajamento_email_atualizado_em, engajamento_sms_atualizado_em, engajamento_atualizado_em
+        )
+        VALUES ($1, $2, $3, now(), now(), now())
         ON CONFLICT (usuario_id) DO UPDATE SET
-            engajamento_estado = EXCLUDED.engajamento_estado,
+            engajamento_email = EXCLUDED.engajamento_email,
+            engajamento_sms = EXCLUDED.engajamento_sms,
+            engajamento_email_atualizado_em = now(),
+            engajamento_sms_atualizado_em = now(),
             engajamento_atualizado_em = now()
         """,
         uid,
-        corpo.estado.value[:64],
+        corpo.engajamento_email.value[:64],
+        corpo.engajamento_sms.value[:64],
     )
-    return {"usuario_id": str(uid), "engajamento_estado": corpo.estado.value}
+    return {
+        "usuario_id": str(uid),
+        "engajamento_email": corpo.engajamento_email.value,
+        "engajamento_sms": corpo.engajamento_sms.value,
+    }
 
 
 class SimularEmailCorpo(BaseModel):
@@ -102,7 +114,7 @@ class SimularEmailCorpo(BaseModel):
     )
     tocar_engajamento_api: bool = Field(
         default=True,
-        description="Se true, chama tocar_engajamento após o registo (como a API real).",
+        description="Se true, chama tocar_engajamento_email após o registo (como a API real).",
     )
 
 
@@ -133,12 +145,12 @@ async def post_simular_email_enviado(
     await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
     await registrar_email_enviado_apos_sucesso(pool, pedido, resultado)
     if corpo.tocar_engajamento_api:
-        await tocar_engajamento(pool, corpo.usuario_id, EngajamentoEstado.EMAIL_ENVIADO_API)
+        await tocar_engajamento_email(pool, corpo.usuario_id, EngajamentoEmailEstado.EMAIL_ENVIADO_API)
     return {
         "message_id_zenvia_falso": msg_id,
         "id_externo": corpo.id_externo,
         "redis_chave_hash": f"emails-esperando-confirmacao:{msg_id}",
-        "emails_enviados": "upsert por external_id",
+        "emails_enviados": "upsert por id_externo",
         "usuario_id": str(corpo.usuario_id) if corpo.usuario_id else None,
     }
 
@@ -191,7 +203,7 @@ async def post_disparar_webhook_email(
 
 
 class SimularSmsCorpo(BaseModel):
-    external_id: str = Field(..., min_length=1, max_length=64)
+    id_externo: str = Field(..., min_length=1, max_length=64)
     destinatario: str = Field(..., min_length=5, max_length=20)
     tipo_template: CodigoTipoTemplate = CodigoTipoTemplate.CONSULTADO_SEM_EMAIL
     contexto: dict[str, str] = Field(default_factory=dict)
@@ -219,7 +231,7 @@ async def post_simular_sms_enviado(
         tipo_template=corpo.tipo_template,
         contexto=corpo.contexto,
         remetente=corpo.remetente,
-        id_externo=corpo.external_id,
+        id_externo=corpo.id_externo,
         usuario_id=corpo.usuario_id,
     )
     resultado = ResultadoEnvioMensagem(
@@ -230,7 +242,7 @@ async def post_simular_sms_enviado(
     await registrar_sms_enviado_apos_sucesso(pool, redis, pedido, resultado)
     return {
         "id_mensagem_zenvia_falso": zid,
-        "external_id": corpo.external_id,
+        "id_externo": corpo.id_externo,
         "sms_enviados": "upsert",
         "usuario_id": str(corpo.usuario_id) if corpo.usuario_id else None,
     }
@@ -277,7 +289,7 @@ async def post_cenario_bounce_para_sms(
     )
     await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
     await registrar_email_enviado_apos_sucesso(pool, pedido, resultado)
-    await tocar_engajamento(pool, corpo.usuario_id, EngajamentoEstado.EMAIL_ENVIADO_API)
+    await tocar_engajamento_email(pool, corpo.usuario_id, EngajamentoEmailEstado.EMAIL_ENVIADO_API)
 
     evt = f"test-evt-bounce-{uuid.uuid4().hex}"
     payload = WebhookMessageStatusZenvia.model_validate(

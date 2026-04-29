@@ -36,7 +36,7 @@ async def enfileirar_email_enviado_apos_sucesso(
         await repo.criar_apos_envio(
             redis,
             message_id=msg_id,
-            external_id=pedido.id_externo,
+            id_externo=pedido.id_externo,
             email_destinatario=pedido.destinatario,
             tipo_template=pedido.tipo_template.value,
             contexto=dict(pedido.contexto),

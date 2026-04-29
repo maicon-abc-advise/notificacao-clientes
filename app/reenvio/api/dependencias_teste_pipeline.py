@@ -10,5 +10,5 @@ async def exigir_teste_pipeline_habilitado(
     if not config.teste_pipeline_habilitado:
         raise HTTPException(
             status_code=status.HTTP_403_FORBIDDEN,
-            detail="Defina TESTE_PIPELINE_HABILITADO=true no .env para usar estes endpoints.",
+            detail="Rotas de teste só existem com AMBIENTE=local (inferido automaticamente).",
         )

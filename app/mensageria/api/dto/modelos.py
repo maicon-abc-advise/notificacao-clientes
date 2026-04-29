@@ -23,9 +23,13 @@ class PedidoEnvioEmail(BaseModel):
         default=None,
         min_length=1,
         max_length=64,
-        description="ID do remetente (from); se omitido, usa ZENVIA_EMAIL_FROM no servidor.",
+        description="Ignorado no envio: o remetente vem só de ZENVIA_EMAIL_FROM / configuração do servidor.",
     )
-    id_externo: str | None = Field(default=None, max_length=64, description="Mapeia para externalId se informado.")
+    id_externo: str | None = Field(
+        default=None,
+        max_length=64,
+        description="Correlação do envio; na API Zenvia é enviado como externalId.",
+    )
     telefone_sms_fallback: str | None = Field(
         default=None,
         max_length=20,
@@ -59,7 +63,7 @@ class PedidoEnvioSms(BaseModel):
         default=None,
         min_length=1,
         max_length=64,
-        description="ID do remetente; se omitido, usa ZENVIA_SMS_FROM no servidor.",
+        description="Ignorado no envio: o remetente vem só de ZENVIA_SMS_FROM / configuração do servidor.",
     )
     id_externo: str | None = Field(default=None, max_length=64)
     usuario_id: UUID | None = Field(

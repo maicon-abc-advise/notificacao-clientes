@@ -1,8 +1,14 @@
 -- Tabelas atuais de reenvio (fila SMS está no Redis). Não removemos tabelas antigas aqui.
+-- Bases já criadas com coluna ``external_id``: renomear para ``id_externo`` antes de alinhar o código.
+--   ALTER TABLE public.emails_enviados RENAME COLUMN external_id TO id_externo;
+--   ALTER TABLE public.sms_enviados RENAME COLUMN external_id TO id_externo;
 
 CREATE TABLE IF NOT EXISTS public.engajamento_usuarios (
     usuario_id uuid PRIMARY KEY,
-    engajamento_estado text NOT NULL DEFAULT 'ativo',
+    engajamento_email text NOT NULL DEFAULT 'ativo',
+    engajamento_sms text NOT NULL DEFAULT 'ativo',
+    engajamento_email_atualizado_em timestamptz,
+    engajamento_sms_atualizado_em timestamptz,
     engajamento_atualizado_em timestamptz NOT NULL DEFAULT now(),
     ultimo_lembrete_limite_semanal_em timestamptz,
     recebe_email boolean NOT NULL DEFAULT true,
@@ -12,7 +18,7 @@ CREATE TABLE IF NOT EXISTS public.engajamento_usuarios (
 
 CREATE TABLE IF NOT EXISTS public.sms_enviados (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    external_id text NOT NULL UNIQUE,
+    id_externo text NOT NULL UNIQUE,
     id_mensagem_zenvia text UNIQUE,
     telefone text NOT NULL,
     tipo_template text NOT NULL,
@@ -40,7 +46,7 @@ CREATE INDEX IF NOT EXISTS idx_sms_enviados_usuario
 
 CREATE TABLE IF NOT EXISTS public.emails_enviados (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
-    external_id text NOT NULL UNIQUE,
+    id_externo text NOT NULL UNIQUE,
     id_mensagem_zenvia text UNIQUE,
     email_destinatario text NOT NULL,
     tipo_template text NOT NULL,

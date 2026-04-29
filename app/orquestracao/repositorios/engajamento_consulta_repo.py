@@ -6,12 +6,13 @@ from datetime import datetime
 
 import asyncpg
 
-from app.reenvio.servicos.engajamento_estado import EngajamentoEstado
+from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, EngajamentoSmsEstado
 
 
 @dataclass(frozen=True, slots=True)
 class SnapshotEngajamentoOrquestracao:
-    engajamento_estado: str
+    engajamento_email: str
+    engajamento_sms: str
     recebe_email: bool
     ultimo_lembrete_limite_semanal_em: datetime | None
 
@@ -22,22 +23,29 @@ async def carregar_para_usuario(
 ) -> SnapshotEngajamentoOrquestracao:
     if usuario_id is None:
         return SnapshotEngajamentoOrquestracao(
-            EngajamentoEstado.ATIVO.value,
+            EngajamentoEmailEstado.ATIVO.value,
+            EngajamentoSmsEstado.ATIVO.value,
             True,
             None,
         )
     row = await pool.fetchrow(
         """
-        SELECT engajamento_estado, recebe_email, ultimo_lembrete_limite_semanal_em
+        SELECT engajamento_email, engajamento_sms, recebe_email, ultimo_lembrete_limite_semanal_em
         FROM public.engajamento_usuarios
         WHERE usuario_id = $1
         """,
         usuario_id,
     )
     if row is None:
-        return SnapshotEngajamentoOrquestracao(EngajamentoEstado.ATIVO.value, True, None)
+        return SnapshotEngajamentoOrquestracao(
+            EngajamentoEmailEstado.ATIVO.value,
+            EngajamentoSmsEstado.ATIVO.value,
+            True,
+            None,
+        )
     return SnapshotEngajamentoOrquestracao(
-        row["engajamento_estado"],
+        row["engajamento_email"],
+        row["engajamento_sms"],
         row["recebe_email"],
         row["ultimo_lembrete_limite_semanal_em"],
     )

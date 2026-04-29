@@ -93,9 +93,10 @@ async def executar_receber_consulta(
     uid = corpo.usuario_id or row_f["usuario_id"]
     snap = await carregar_para_usuario(pool, uid)
     _log.info(
-        "[orquestracao] engajamento usuario_id=%s estado=%s recebe_email=%s",
+        "[orquestracao] engajamento usuario_id=%s email=%s sms=%s recebe_email=%s",
         uid,
-        snap.engajamento_estado,
+        snap.engajamento_email,
+        snap.engajamento_sms,
         snap.recebe_email,
     )
 
@@ -103,7 +104,8 @@ async def executar_receber_consulta(
         email_efetivo=email_e,
         telefone_efetivo=tel_e,
         recebe_email=snap.recebe_email,
-        engajamento_estado=snap.engajamento_estado,
+        engajamento_email=snap.engajamento_email,
+        engajamento_sms=snap.engajamento_sms,
     )
     _log.info(
         "[orquestracao] decisao canal=%s template=%s motivo=%s",
@@ -129,9 +131,9 @@ async def executar_receber_consulta(
             id_externo=ext,
             telefone_sms_fallback=tel_e,
         )
-        ok = await enfileirar_email_pendente(redis, pedido, external_id=ext, origem=_ORIGEM)
+        ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
         _log.info(
-            "[orquestracao] fim: email enfileirado=%s external_id=%s dest=%s",
+            "[orquestracao] fim: email enfileirado=%s id_externo=%s dest=%s",
             ok,
             ext,
             email_e,
@@ -140,9 +142,9 @@ async def executar_receber_consulta(
             acao="email_enfileirado" if ok else "nada",
             id_consulta=corpo.id_consulta,
             canal="email",
-            external_id=ext if ok else None,
+            id_externo=ext if ok else None,
             tipo_template=decisao.tipo_template.value,
-            motivo=decisao.motivo if ok else "fila e-mail já continha external_id",
+            motivo=decisao.motivo if ok else "fila e-mail já continha id_externo",
         )
 
     pedido_s = montar_pedido_sms_consultado_sem_email(
@@ -151,9 +153,9 @@ async def executar_receber_consulta(
         usuario_id=uid,
         id_externo=ext,
     )
-    ok = await enfileirar_sms_pendente(redis, pedido_s, external_id=ext, origem=_ORIGEM)
+    ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)
     _log.info(
-        "[orquestracao] fim: sms enfileirado=%s external_id=%s dest=%s",
+        "[orquestracao] fim: sms enfileirado=%s id_externo=%s dest=%s",
         ok,
         ext,
         tel_e,
@@ -162,7 +164,7 @@ async def executar_receber_consulta(
         acao="sms_enfileirado" if ok else "nada",
         id_consulta=corpo.id_consulta,
         canal="sms",
-        external_id=ext if ok else None,
+        id_externo=ext if ok else None,
         tipo_template=decisao.tipo_template.value,
-        motivo=decisao.motivo if ok else "fila SMS já continha external_id",
+        motivo=decisao.motivo if ok else "fila SMS já continha id_externo",
     )

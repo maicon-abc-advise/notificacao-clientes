@@ -10,10 +10,23 @@ from typing import Any
 import asyncpg
 
 
+async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.Record | None:
+    return await pool.fetchrow(
+        """
+        SELECT id_externo, id_mensagem_zenvia, telefone, tipo_template, contexto,
+               remetente, usuario_id, status_ultimo
+        FROM public.sms_enviados
+        WHERE id_externo = $1
+        LIMIT 1
+        """,
+        id_externo,
+    )
+
+
 async def inserir_ou_atualizar_apos_envio_api(
     pool: asyncpg.Pool,
     *,
-    external_id: str,
+    id_externo: str,
     telefone: str,
     tipo_template: str,
     contexto: dict[str, Any],
@@ -25,11 +38,11 @@ async def inserir_ou_atualizar_apos_envio_api(
     await pool.execute(
         """
         INSERT INTO public.sms_enviados (
-            external_id, telefone, tipo_template, contexto, remetente,
+            id_externo, telefone, tipo_template, contexto, remetente,
             id_mensagem_zenvia, usuario_id, status_ultimo
         )
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, 'processando')
-        ON CONFLICT (external_id) DO UPDATE SET
+        ON CONFLICT (id_externo) DO UPDATE SET
             id_mensagem_zenvia = EXCLUDED.id_mensagem_zenvia,
             telefone = EXCLUDED.telefone,
             tipo_template = EXCLUDED.tipo_template,
@@ -39,7 +52,7 @@ async def inserir_ou_atualizar_apos_envio_api(
             status_ultimo = 'processando',
             atualizado_em = now()
         """,
-        external_id,
+        id_externo,
         telefone,
         tipo_template,
         json.dumps(contexto),
@@ -54,7 +67,7 @@ async def buscar_por_id_mensagem_zenvia(
 ) -> asyncpg.Record | None:
     return await pool.fetchrow(
         """
-        SELECT id, external_id, id_mensagem_zenvia, telefone, tipo_template, contexto,
+        SELECT id, id_externo, id_mensagem_zenvia, telefone, tipo_template, contexto,
                remetente, usuario_id, status_ultimo, motivo_ultimo_evento,
                tentativas_reprocessar, proxima_tentativa_em
         FROM public.sms_enviados

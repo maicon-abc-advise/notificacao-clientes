@@ -2,7 +2,8 @@
 
 Chaves (namespace ``emails-esperando-confirmacao``):
 - ``emails-esperando-confirmacao:{message_id}`` — hash com metadados do envio.
-- ``emails-esperando-confirmacao:ext:{external_id}`` — message_id para lookup reverso.
+- ``emails-esperando-confirmacao:id_externo:{id_externo}`` — message_id para lookup reverso
+  (prefixo ``:ext:`` era legado; removido ao apagar entradas antigas).
 - ``emails-esperando-confirmacao:sweep`` — sorted set (score = epoch elegível ao sweep).
 """
 from __future__ import annotations
@@ -10,8 +11,6 @@ import json
 import logging
 import time
 import uuid
-from typing import Any
-
 from redis.asyncio import Redis
 
 from app.reenvio.repositorios.redis_consulta_notificacao import (
@@ -29,8 +28,13 @@ def chave_hash(message_id: str) -> str:
     return f"emails-esperando-confirmacao:{message_id}"
 
 
-def chave_external(external_id: str) -> str:
-    return f"emails-esperando-confirmacao:ext:{external_id}"
+def chave_lookup_id_externo(id_externo: str) -> str:
+    return f"emails-esperando-confirmacao:id_externo:{id_externo}"
+
+
+def chave_lookup_id_externo_legado(id_externo: str) -> str:
+    """Chave criada por versões anteriores (:ext:)."""
+    return f"emails-esperando-confirmacao:ext:{id_externo}"
 
 
 class RepositorioEmailsEsperandoConfirmacaoRedis:
@@ -39,7 +43,7 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
         redis: Redis,
         *,
         message_id: str,
-        external_id: str,
+        id_externo: str,
         email_destinatario: str,
         tipo_template: str,
         contexto: dict[str, str],
@@ -51,7 +55,7 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
     ) -> None:
         agora = str(int(time.time()))
         mapping: dict[str, str] = {
-            "external_id": external_id,
+            "id_externo": id_externo,
             "email_destinatario": email_destinatario,
             "message_id_zenvia": message_id,
             "tipo_template": tipo_template,
@@ -66,14 +70,14 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
         }
         pipe = redis.pipeline(transaction=True)
         pipe.hset(chave_hash(message_id), mapping=mapping)
-        pipe.set(chave_external(external_id), message_id)
+        pipe.set(chave_lookup_id_externo(id_externo), message_id)
         pipe.zadd(KEY_SWEEP, {message_id: float(sweep_score_ts)})
         await pipe.execute()
         await promover_para_esperando_email(redis, consulta_id, message_id)
         _log.info(
-            "E-mail registado em Redis (esperando confirmação): message_id=%s external_id=%s",
+            "E-mail registado em Redis (esperando confirmação): message_id=%s id_externo=%s",
             message_id,
-            external_id,
+            id_externo,
         )
 
     async def obter(self, redis: Redis, message_id: str) -> dict[str, str] | None:
@@ -86,7 +90,7 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
 
     async def remover(self, redis: Redis, message_id: str) -> None:
         data = await redis.hgetall(chave_hash(message_id))
-        ext = data.get("external_id") if data else None
+        ext = (data.get("id_externo") or data.get("external_id") or "").strip() if data else ""
         cid_raw = (data.get("consulta_id") or "").strip() if data else ""
         consulta_uuid: uuid.UUID | None = None
         if cid_raw:
@@ -98,7 +102,8 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
         pipe.delete(chave_hash(message_id))
         pipe.zrem(KEY_SWEEP, message_id)
         if ext:
-            pipe.delete(chave_external(ext))
+            pipe.delete(chave_lookup_id_externo(ext))
+            pipe.delete(chave_lookup_id_externo_legado(ext))
         await pipe.execute()
         await liberar_trava_se_fase(redis, consulta_uuid, fase_esperando_email(message_id))
         _log.info("E-mail removido do Redis (esperando confirmação): message_id=%s", message_id)

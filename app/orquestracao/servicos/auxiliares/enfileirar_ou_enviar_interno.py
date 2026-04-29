@@ -10,21 +10,20 @@ async def enfileirar_email_pendente(
     redis: Redis,
     pedido: PedidoEnvioEmail,
     *,
-    external_id: str,
+    id_externo: str,
     origem: str,
 ) -> bool:
     repo = RepositorioEmailsPendenteRedis()
     return await repo.criar(
         redis,
-        external_id=external_id,
+        id_externo=id_externo,
         destinatario=pedido.destinatario,
         tipo_template=pedido.tipo_template.value,
         contexto=dict(pedido.contexto),
         remetente=pedido.remetente,
-        id_externo=pedido.id_externo,
-        telefone_sms_fallback=pedido.telefone_sms_fallback,
         usuario_id=str(pedido.usuario_id) if pedido.usuario_id else None,
         origem=origem,
+        telefone_sms_fallback=pedido.telefone_sms_fallback,
         consulta_id=pedido.consulta_id,
     )
 
@@ -33,13 +32,13 @@ async def enfileirar_sms_pendente(
     redis: Redis,
     pedido: PedidoEnvioSms,
     *,
-    external_id: str,
+    id_externo: str,
     origem: str,
 ) -> bool:
     repo = RepositorioSmsPendenteRedis()
     return await repo.criar(
         redis,
-        external_id=external_id,
+        id_externo=id_externo,
         telefone=pedido.destinatario,
         tipo_template=pedido.tipo_template.value,
         contexto=dict(pedido.contexto),

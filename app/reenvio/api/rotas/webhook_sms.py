@@ -10,8 +10,8 @@ from app.reenvio.servicos.processar_status_sms import processar_webhook_status_s
 from app.templates.conexao import obter_pool
 
 router = APIRouter(
-    prefix="/v1/webhooks/zenvia",
-    tags=["webhooks-zenvia-sms"],
+    prefix="/v1/webhooks/notificacao",
+    tags=["notificações — webhook"],
     dependencies=[Depends(verificar_segredo_webhook_zenvia)],
 )
 

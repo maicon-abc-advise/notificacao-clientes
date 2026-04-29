@@ -20,8 +20,8 @@ _log = logging.getLogger(__name__)
 KEY_INDEX = "emails-pendentes:por_tempo"
 
 
-def chave_hash(external_id: str) -> str:
-    return f"emails-pendentes:{external_id}"
+def chave_hash(id_externo: str) -> str:
+    return f"emails-pendentes:{id_externo}"
 
 
 class RepositorioEmailsPendenteRedis:
@@ -29,21 +29,20 @@ class RepositorioEmailsPendenteRedis:
         self,
         redis: Redis,
         *,
-        external_id: str,
+        id_externo: str,
         destinatario: str,
         tipo_template: str,
         contexto: dict[str, str],
         remetente: str | None,
-        id_externo: str | None,
-        telefone_sms_fallback: str | None,
         usuario_id: str | None,
         origem: str,
+        telefone_sms_fallback: str | None,
         consulta_id: uuid.UUID | None = None,
     ) -> bool:
-        key = chave_hash(external_id)
+        key = chave_hash(id_externo)
         reservou_trava = False
         if consulta_id is not None:
-            if not await tentar_travar_pendente_email(redis, consulta_id, external_id):
+            if not await tentar_travar_pendente_email(redis, consulta_id, id_externo):
                 raise ConsultaJaNotificadaError(str(consulta_id))
             reservou_trava = True
         try:
@@ -53,12 +52,11 @@ class RepositorioEmailsPendenteRedis:
                 return False
             agora = int(time.time())
             mapping: dict[str, str] = {
-                "external_id": external_id,
+                "id_externo": id_externo,
                 "destinatario": destinatario,
                 "tipo_template": tipo_template,
                 "contexto_json": json.dumps(contexto, ensure_ascii=False),
                 "remetente": remetente or "",
-                "id_externo_pedido": id_externo or "",
                 "telefone_sms_fallback": telefone_sms_fallback or "",
                 "usuario_id": usuario_id or "",
                 "origem": origem,
@@ -67,17 +65,17 @@ class RepositorioEmailsPendenteRedis:
             }
             pipe = redis.pipeline(transaction=True)
             pipe.hset(key, mapping=mapping)
-            pipe.zadd(KEY_INDEX, {external_id: float(agora)})
+            pipe.zadd(KEY_INDEX, {id_externo: float(agora)})
             await pipe.execute()
         except Exception:
             if reservou_trava:
                 await liberar_trava_forcado(redis, consulta_id)
             raise
-        _log.info("E-mail na fila Redis (emails-pendentes): external_id=%s origem=%s", external_id, origem)
+        _log.info("E-mail na fila Redis (emails-pendentes): id_externo=%s origem=%s", id_externo, origem)
         return True
 
-    async def remover(self, redis: Redis, external_id: str) -> None:
-        key = chave_hash(external_id)
+    async def remover(self, redis: Redis, id_externo: str) -> None:
+        key = chave_hash(id_externo)
         raw = await redis.hgetall(key)
         cid_raw = (raw.get("consulta_id") or "").strip() if raw else ""
         consulta_uuid: uuid.UUID | None = None
@@ -88,9 +86,9 @@ class RepositorioEmailsPendenteRedis:
                 consulta_uuid = None
         pipe = redis.pipeline(transaction=True)
         pipe.delete(key)
-        pipe.zrem(KEY_INDEX, external_id)
+        pipe.zrem(KEY_INDEX, id_externo)
         await pipe.execute()
-        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_email(external_id))
+        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_email(id_externo))
 
     async def listar_pendentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
         ids = await redis.zrange(KEY_INDEX, 0, limite - 1)
@@ -101,14 +99,14 @@ class RepositorioEmailsPendenteRedis:
                 await redis.zrem(KEY_INDEX, ext)
                 continue
             ctx = json.loads(raw.get("contexto_json") or "{}")
+            id_val = raw.get("id_externo") or raw.get("external_id", ext)
             saida.append(
                 {
-                    "external_id": raw.get("external_id", ext),
+                    "id_externo": id_val,
                     "destinatario": raw.get("destinatario", ""),
                     "tipo_template": raw.get("tipo_template", ""),
                     "contexto": ctx if isinstance(ctx, dict) else {},
                     "remetente": raw.get("remetente") or None,
-                    "id_externo": raw.get("id_externo_pedido") or None,
                     "telefone_sms_fallback": raw.get("telefone_sms_fallback") or None,
                     "usuario_id": raw.get("usuario_id") or None,
                     "origem": raw.get("origem", ""),

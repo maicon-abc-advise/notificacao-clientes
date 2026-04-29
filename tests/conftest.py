@@ -4,12 +4,14 @@ import os
 import pytest
 
 os.environ.setdefault("API_KEY", "test-api-key-unit")
-os.environ.setdefault("REDIS_URL", "redis://localhost:6379/0")
+os.environ.setdefault("AMBIENTE", "local")
+os.environ.setdefault("USE_ZENVIA_MOCK", "false")
+os.environ.setdefault("USE_BIGDATACORP_MOCK", "true")
+os.environ.setdefault("REDIS_URL_TEST", "redis://localhost:6379/0")
 os.environ.setdefault(
-    "DATABASE_URL",
+    "DATABASE_URL_TEST",
     "postgresql://notificacao:notificacao_dev@127.0.0.1:5433/notificacao",
 )
-# Token fictício: rotas de envio; credenciais ficam no conector (ZENVIA_API_TOKEN).
 os.environ.setdefault("ZENVIA_API_TOKEN", "test-zenvia-token-somente-para-testes")
 os.environ.setdefault("MENSAGENS_PROVEDOR_EMAIL", "zenvia")
 os.environ.setdefault("MENSAGENS_PROVEDOR_SMS", "zenvia")

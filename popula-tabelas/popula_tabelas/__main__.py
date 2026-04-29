@@ -3,7 +3,6 @@
 from __future__ import annotations
 
 import asyncio
-import os
 import sys
 
 from app.config.config import obter_configuracao
@@ -12,9 +11,7 @@ from popula_tabelas.aplicar import aplicar_tudo
 
 
 async def _async_main() -> None:
-    url = os.environ.get("DATABASE_URL")
-    if not url:
-        url = obter_configuracao().database_url
+    url = obter_configuracao().database_url
     await aplicar_tudo(url)
     print("popula-tabelas: concluído (templates + reenvio + orquestração).", file=sys.stderr)
 

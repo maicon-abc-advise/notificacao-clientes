@@ -12,32 +12,32 @@ def chave_trava_consulta(consulta_id: uuid.UUID) -> str:
     return f"{PREFIXO}:{consulta_id}"
 
 
-def fase_pendente_email(external_id: str) -> str:
-    return f"pendente-email:{external_id}"
+def fase_pendente_email(id_externo: str) -> str:
+    return f"pendente-email:{id_externo}"
 
 
 def fase_esperando_email(message_id: str) -> str:
     return f"esperando-email:{message_id}"
 
 
-def fase_pendente_sms(external_id: str) -> str:
-    return f"pendente-sms:{external_id}"
+def fase_pendente_sms(id_externo: str) -> str:
+    return f"pendente-sms:{id_externo}"
 
 
 async def consulta_tem_trava_ativa(redis: Redis, consulta_id: uuid.UUID) -> bool:
     return bool(await redis.exists(chave_trava_consulta(consulta_id)))
 
 
-async def tentar_travar_pendente_email(redis: Redis, consulta_id: uuid.UUID, external_id: str) -> bool:
+async def tentar_travar_pendente_email(redis: Redis, consulta_id: uuid.UUID, id_externo: str) -> bool:
     """True se esta instância ganhou a trava (SET NX)."""
     return bool(
-        await redis.set(chave_trava_consulta(consulta_id), fase_pendente_email(external_id), nx=True),
+        await redis.set(chave_trava_consulta(consulta_id), fase_pendente_email(id_externo), nx=True),
     )
 
 
-async def tentar_travar_pendente_sms(redis: Redis, consulta_id: uuid.UUID, external_id: str) -> bool:
+async def tentar_travar_pendente_sms(redis: Redis, consulta_id: uuid.UUID, id_externo: str) -> bool:
     return bool(
-        await redis.set(chave_trava_consulta(consulta_id), fase_pendente_sms(external_id), nx=True),
+        await redis.set(chave_trava_consulta(consulta_id), fase_pendente_sms(id_externo), nx=True),
     )
 
 
@@ -47,11 +47,11 @@ async def promover_para_esperando_email(redis: Redis, consulta_id: uuid.UUID | N
     await redis.set(chave_trava_consulta(consulta_id), fase_esperando_email(message_id))
 
 
-async def redefinir_para_pendente_sms_pos_bounce(redis: Redis, consulta_id: uuid.UUID | None, external_id: str) -> None:
+async def redefinir_para_pendente_sms_pos_bounce(redis: Redis, consulta_id: uuid.UUID | None, id_externo: str) -> None:
     """Sobrescreve a trava (e-mail esperando → SMS pendente após bounce / sweep)."""
     if consulta_id is None:
         return
-    await redis.set(chave_trava_consulta(consulta_id), fase_pendente_sms(external_id))
+    await redis.set(chave_trava_consulta(consulta_id), fase_pendente_sms(id_externo))
 
 
 async def liberar_trava_se_fase(redis: Redis, consulta_id: uuid.UUID | None, fase_esperada: str) -> None:

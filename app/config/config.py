@@ -1,23 +1,71 @@
 from functools import lru_cache
-from typing import Any
-from pydantic import AliasChoices, Field, field_validator
+from typing import Any, Self
+
+from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
+
+from app.config.ambiente import Ambiente
 from app.config.provedor_mensagens import ProvedorMensagem
 
 
+def _strip(v: str | None) -> str:
+    return (v or "").strip()
+
+
 class Configuracao(BaseSettings):
+    """Infra por ambiente (Redis/Postgres *_TEST / *_PROD); mock e pipeline derivados de flags globais + ``AMBIENTE``."""
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
-    api_key: str = Field(validation_alias="API_KEY")
-    redis_url: str = Field(validation_alias="REDIS_URL")
-    database_url: str = Field(
+    ambiente: Ambiente = Field(
+        default=Ambiente.LOCAL,
+        validation_alias="AMBIENTE",
+        description="local | producao (também dev, prod, produção).",
+    )
+
+    use_bigdatacorp_mock: bool = Field(
+        default=True,
+        validation_alias="USE_BIGDATACORP_MOCK",
+        description="true = AdaptadorBigDataCorpMock; false = cliente API (credenciais abaixo).",
+    )
+    use_zenvia_mock: bool = Field(
+        default=True,
+        validation_alias="USE_ZENVIA_MOCK",
+        description="true = envio simulado sem chamar a API Zenvia.",
+    )
+
+    bigdatacorp_api_base_url: str | None = Field(
+        default=None,
+        validation_alias="BIGDATACORP_API_BASE_URL",
+        description="Base da API (ex.: plataforma Big Data Corp); usado quando USE_BIGDATACORP_MOCK=false.",
+    )
+    bigdatacorp_access_token: str | None = Field(
+        default=None,
+        validation_alias="BIGDATACORP_ACCESS_TOKEN",
+        description="AccessToken / API key; cabeçalho típico na integração BDC.",
+    )
+
+    # --- Redis / Postgres (pares por ambiente de dados) ---
+    redis_url_test: str | None = Field(default=None, validation_alias="REDIS_URL_TEST")
+    redis_url_prod: str | None = Field(default=None, validation_alias="REDIS_URL_PROD")
+    redis_url_fallback: str | None = Field(default=None, validation_alias="REDIS_URL")
+    redis_url: str = ""
+
+    database_url_test: str | None = Field(default=None, validation_alias="DATABASE_URL_TEST")
+    database_url_prod: str | None = Field(default=None, validation_alias="DATABASE_URL_PROD")
+    database_url_fallback: str | None = Field(
         default="postgresql://notificacao:notificacao_dev@127.0.0.1:5433/notificacao",
         validation_alias="DATABASE_URL",
     )
+    database_url: str = ""
+
+    api_key: str = Field(validation_alias="API_KEY")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
-    # webhooks Zenvia (reenvio): se vazio, rotas de webhook não exigem X-Webhook-Secret (só para dev local).
-    zenvia_webhook_secret: str | None = Field(default=None, validation_alias="ZENVIA_WEBHOOK_SECRET")
+    zenvia_webhook_secret_prod: str | None = Field(default=None, validation_alias="ZENVIA_WEBHOOK_SECRET_PROD")
+    zenvia_webhook_secret_fallback: str | None = Field(default=None, validation_alias="ZENVIA_WEBHOOK_SECRET")
+    zenvia_webhook_secret: str | None = None
+
     sweep_emails_esperando_confirmacao_dias: int = Field(
         default=2,
         ge=1,
@@ -29,31 +77,36 @@ class Configuracao(BaseSettings):
     )
     reenvio_sms_reprocessar_max: int = Field(default=10, ge=0, le=1000, validation_alias="REENVIO_SMS_REPROCESSAR_MAX")
 
-    use_bigdatacorp_mock: bool = Field(
-        default=True,
-        validation_alias="USE_BIGDATACORP_MOCK",
-        description="Se true, enriquecimento usa AdaptadorBigDataCorpMock; se false, adaptador API (ainda não implementado).",
-    )
-
-    # Rotas /v1/interno/teste-pipeline/* — só ativas se true (não usar em produção pública).
-    teste_pipeline_habilitado: bool = Field(
-        default=False,
-        validation_alias="TESTE_PIPELINE_HABILITADO",
-    )
-
-    # provedor de email
     mensagens_provedor_email: ProvedorMensagem = Field(
         default=ProvedorMensagem.ZENVIA,
         validation_alias="MENSAGENS_PROVEDOR_EMAIL",
     )
-
-    # provedor de sms
     mensagens_provedor_sms: ProvedorMensagem = Field(
         default=ProvedorMensagem.ZENVIA,
         validation_alias="MENSAGENS_PROVEDOR_SMS",
     )
 
-    @field_validator("teste_pipeline_habilitado", "use_bigdatacorp_mock", mode="before")
+    # Inferido: rotas /v1/interno/teste-pipeline/* só em AMBIENTE=local
+    teste_pipeline_habilitado: bool = False
+
+    @field_validator("ambiente", mode="before")
+    @classmethod
+    def _normalizar_ambiente(cls, v: Any) -> Any:
+        if isinstance(v, Ambiente):
+            return v
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("local", "dev", "development"):
+                return Ambiente.LOCAL
+            if s in ("producao", "prod", "production", "produção"):
+                return Ambiente.PRODUCAO
+        return v
+
+    @field_validator(
+        "use_bigdatacorp_mock",
+        "use_zenvia_mock",
+        mode="before",
+    )
     @classmethod
     def _bool_flags(cls, v: Any) -> Any:
         if isinstance(v, str):
@@ -64,9 +117,16 @@ class Configuracao(BaseSettings):
                 return False
         return v
 
-    @field_validator("zenvia_webhook_secret", mode="before")
+    @field_validator("zenvia_webhook_secret_fallback", "zenvia_webhook_secret_prod", mode="before")
     @classmethod
     def _webhook_secret_vazio_none(cls, v: Any) -> Any:
+        if v == "" or v is None:
+            return None
+        return v
+
+    @field_validator("bigdatacorp_api_base_url", "bigdatacorp_access_token", mode="before")
+    @classmethod
+    def _bdc_opcional_vazio_none(cls, v: Any) -> Any:
         if v == "" or v is None:
             return None
         return v
@@ -77,6 +137,35 @@ class Configuracao(BaseSettings):
         if isinstance(v, str):
             return v.strip().lower()
         return v
+
+    @model_validator(mode="after")
+    def _aplicar_redis_postgres_e_pipeline(self) -> Self:
+        local = self.ambiente == Ambiente.LOCAL
+
+        r_test, r_prod, r_fb = _strip(self.redis_url_test), _strip(self.redis_url_prod), _strip(self.redis_url_fallback)
+        pick_redis = (r_test if local else r_prod) or r_fb
+        if not pick_redis:
+            raise ValueError(
+                "Defina REDIS_URL_TEST (AMBIENTE=local) ou REDIS_URL_PROD (AMBIENTE=producao), "
+                "ou REDIS_URL como retorno.",
+            )
+        object.__setattr__(self, "redis_url", pick_redis)
+
+        d_test, d_prod = _strip(self.database_url_test), _strip(self.database_url_prod)
+        d_fb = _strip(self.database_url_fallback)
+        pick_db = (d_test if local else d_prod) or d_fb
+        if not pick_db:
+            raise ValueError(
+                "Defina DATABASE_URL_TEST ou DATABASE_URL_PROD conforme AMBIENTE, ou DATABASE_URL como retorno.",
+            )
+        object.__setattr__(self, "database_url", pick_db)
+
+        wh = _strip(self.zenvia_webhook_secret_prod) or self.zenvia_webhook_secret_fallback
+        object.__setattr__(self, "zenvia_webhook_secret", wh)
+
+        object.__setattr__(self, "teste_pipeline_habilitado", self.ambiente == Ambiente.LOCAL)
+
+        return self
 
 
 @lru_cache

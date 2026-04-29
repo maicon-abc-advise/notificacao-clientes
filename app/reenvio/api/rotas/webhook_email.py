@@ -17,8 +17,8 @@ from app.reenvio.servicos.processar_status_email import processar_webhook_status
 from app.templates.conexao import obter_pool
 
 router = APIRouter(
-    prefix="/v1/webhooks/zenvia",
-    tags=["webhooks-zenvia-email"],
+    prefix="/v1/webhooks/notificacao",
+    tags=["notificações — webhook"],
     dependencies=[Depends(verificar_segredo_webhook_zenvia)],
 )
 
