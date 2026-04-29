@@ -54,7 +54,7 @@ async def _sem_tabela_postgres(_request: Request, _exc: asyncpg.exceptions.Undef
         content={
             "detail": (
                 "Postgres sem tabela necessária. Na pasta do projeto, com DATABASE_URL correto no ambiente, "
-                "execute: python -m app.reenvio.aplicar_schema"
+                "aplique o schema Postgres no ambiente de implantação (migrações / pipeline)."
             ),
         },
     )

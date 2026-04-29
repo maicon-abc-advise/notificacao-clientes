@@ -1,6 +1,6 @@
 """Testes sem Postgres: contrato dos dados de seed."""
 
-from app.templates.dados_seed import linhas_seed
+from popula_tabelas.dados_seed import linhas_seed
 from app.templates.modelo import CodigoTipoTemplate
 
 

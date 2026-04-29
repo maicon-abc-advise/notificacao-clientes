@@ -1,4 +1,4 @@
--- Consultas e fornecedores (orquestração). Aplicar com: python -m app.orquestracao.aplicar_schema
+-- Consultas e fornecedores (orquestração). Aplicar com: python popula-tabelas/run.py (ou popula_tabelas)
 
 CREATE TABLE IF NOT EXISTS public.consultas (
     id uuid PRIMARY KEY,

@@ -17,6 +17,7 @@ O código de negócio do envio está agrupado em **`app.mensageria`**. **`app.re
 ```
 .
 ├── app/                    # Pacote da aplicação
+├── popula-tabelas/         # DDL + seed de dev/teste (um comando; ver secção 2)
 ├── tests/                  # Testes (pytest)
 ├── alembic/                # Só com .gitkeep hoje; reservado a migrações
 ├── .env.example
@@ -42,14 +43,9 @@ app/
 │   └── provedor_mensagens.py
 ├── templates/
 │   ├── __init__.py
-│   ├── banco.py          # aplicar schema.sql + seed (asyncpg)
-│   ├── dados_seed.py     # HTML/SMS literais
 │   ├── modelo.py         # TemplateNotificacao, CodigoTipoTemplate
-│   ├── popular.py        # python -m app.templates.popular
 │   ├── porta.py          # PortaTemplates (Protocol)
-│   ├── repositorio_postgres.py
-│   └── sql/
-│       └── schema.sql    # CREATE TABLE (sem Alembic)
+│   └── repositorio_postgres.py
 ├── mensageria/
 │   ├── __init__.py
 │   ├── repositorios/
@@ -89,7 +85,6 @@ app/
 │   └── servicos/__init__.py
 └── reenvio/
     ├── __init__.py
-    ├── aplicar_schema.py   # python -m app.reenvio.aplicar_schema
     ├── redis_app.py
     ├── api/
     │   ├── dependencias_webhook.py
@@ -97,8 +92,7 @@ app/
     │   └── rotas/          # webhooks, interno, teste-pipeline
     ├── excecoes/
     ├── repositorios/       # Redis (filas) + Postgres (idempotência de webhooks)
-    ├── servicos/
-    └── sql/schema.sql      # emails_enviados, sms_enviados, engajamento_usuarios, webhook_eventos_processados
+    └── servicos/
 ```
 
 ### O que é cada bloco (resumido)
@@ -112,7 +106,7 @@ app/
 | `app.mensageria.servicos` | Abstração de “enviar mensagem” (porta + fábrica) sem lógica HTTP do Zenvia. |
 | `app.mensageria.repositorios` | `emails_enviados` e `sms_enviados` (Postgres) após envio pela API. |
 | `app.templates` | Tabela `templates_notificacao` no Postgres, porta `PortaTemplates`, `RepositorioTemplatesPostgres`. |
-| `app.reenvio` | Webhooks, Redis (`emails-esperando-confirmacao`, `sms-pendente`), rotas internas (sweep, listagem SMS), `app.reenvio.aplicar_schema`. |
+| `app.reenvio` | Webhooks, Redis (`emails-esperando-confirmacao`, `sms-pendente`), rotas internas (sweep, listagem SMS). |
 | `app.orquestracao.*` | Reservado. |
 
 A pasta **`analise-inicial/`** pode conter notas de análise (não faz parte do arranque da API).
@@ -143,20 +137,16 @@ docker compose -f docker-compose.postgres.yml up -d
 docker compose -f docker-compose.postgres.yml down
 ```
 
-**Popular tabela e dados** (com o Postgres acessível e `DATABASE_URL` no ambiente ou no `.env`):
+**Popular tabelas (só desenvolvimento / teste)** — não faz parte do pacote publicado da API; em produção o schema vem de migrações ou do pipeline de implantação. Na raiz do repositório, com Postgres acessível e `DATABASE_URL` no ambiente ou no `.env`:
 
 ```powershell
 cd caminho\para\notificacao-clientes
-.\.venv\Scripts\python -m app.templates.popular
+.\.venv\Scripts\python popula-tabelas\run.py
 ```
 
-O comando aplica `app/templates/sql/schema.sql` e insere/atualiza as quatro linhas (`ON CONFLICT (tipo) DO UPDATE`). Para conferir: `SELECT id, tipo, email IS NULL AS sem_email, length(sms) FROM public.templates_notificacao;`.
+Isso aplica em sequência DDL + seed de templates, DDL de reenvio e DDL de orquestração. SQL e dados em `popula-tabelas/popula_tabelas/`. Para conferir templates: `SELECT id, tipo, email IS NULL AS sem_email, length(sms) FROM public.templates_notificacao;`.
 
-**Tabelas de reenvio** (entre outras: `emails_enviados`, `sms_enviados`, `engajamento_usuarios`, `webhook_eventos_processados`):
-
-```powershell
-.\.venv\Scripts\python -m app.reenvio.aplicar_schema
-```
+Para aplicar só um bloco (ex.: só templates), use as funções em `popula_tabelas.aplicar` a partir desse diretório (mesmo `PYTHONPATH` que `run.py`).
 
 ---
 

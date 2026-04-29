@@ -28,6 +28,6 @@ dev = [
 packages = ["app"]
 
 [tool.pytest.ini_options]
-pythonpath = ["."]
+pythonpath = [".", "popula-tabelas"]
 testpaths = ["tests"]
 python_files = ["test_*.py", "teste_*.py"]

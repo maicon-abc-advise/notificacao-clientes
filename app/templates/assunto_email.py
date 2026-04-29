@@ -1,5 +1,3 @@
-"""Assunto da linha do e-mail (provedor), inferido do código do template."""
-
 from app.templates.modelo import CodigoTipoTemplate
 
 _MAPA: dict[CodigoTipoTemplate, str] = {
@@ -7,7 +5,6 @@ _MAPA: dict[CodigoTipoTemplate, str] = {
     CodigoTipoTemplate.CREDITOS_NO_FIM: "Seus créditos mensais estão no fim",
     CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS: "Lembre-se! Seus créditos mensais acabaram",
 }
-
 
 def assunto_email_para_tipo(tipo: CodigoTipoTemplate) -> str:
     assunto = _MAPA.get(tipo)
