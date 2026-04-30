@@ -1,4 +1,4 @@
-"""Persistência de ``public.emails_enviados`` — ligada ao envio na API de mensageria."""
+"""Persistência de emails_enviados — ligada ao envio na API de mensageria."""
 
 from __future__ import annotations
 
@@ -8,13 +8,18 @@ from typing import Any
 
 import asyncpg
 
+from app.config.postgres_identificadores import obter_identificadores_postgres
+
 
 async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.Record | None:
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
+    cf = p.col_fornecedor_id
     return await pool.fetchrow(
-        """
+        f"""
         SELECT id_externo, id_mensagem_zenvia, email_destinatario, tipo_template, contexto,
-               remetente, telefone_sms_fallback, fornecedor_id, status_ultimo
-        FROM public.emails_enviados
+               remetente, telefone_sms_fallback, {cf}, status_ultimo
+        FROM {te}
         WHERE id_externo = $1
         LIMIT 1
         """,
@@ -26,9 +31,11 @@ async def atualizar_status_por_id_mensagem_zenvia(
     pool: asyncpg.Pool, *, id_mensagem_zenvia: str, status_ultimo: str
 ) -> None:
     """Atualiza ``status_ultimo`` (webhook / pós-envio). Silencioso se não houver linha."""
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
     await pool.execute(
-        """
-        UPDATE public.emails_enviados
+        f"""
+        UPDATE {te}
         SET status_ultimo = $2, atualizado_em = now()
         WHERE id_mensagem_zenvia = $1
         """,
@@ -50,11 +57,14 @@ async def inserir_ou_atualizar_apos_envio_api(
     fornecedor_id: uuid.UUID | None,
 ) -> None:
     """Chamado após ``POST /v1/mensagens/email`` com sucesso."""
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
+    cf = p.col_fornecedor_id
     await pool.execute(
-        """
-        INSERT INTO public.emails_enviados (
+        f"""
+        INSERT INTO {te} (
             id_externo, email_destinatario, tipo_template, contexto, remetente,
-            telefone_sms_fallback, id_mensagem_zenvia, fornecedor_id, status_ultimo
+            telefone_sms_fallback, id_mensagem_zenvia, {cf}, status_ultimo
         )
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, 'processando')
         ON CONFLICT (id_externo) DO UPDATE SET
@@ -65,9 +75,9 @@ async def inserir_ou_atualizar_apos_envio_api(
             remetente = EXCLUDED.remetente,
             telefone_sms_fallback = COALESCE(
                 EXCLUDED.telefone_sms_fallback,
-                public.emails_enviados.telefone_sms_fallback
+                {te}.telefone_sms_fallback
             ),
-            fornecedor_id = COALESCE(EXCLUDED.fornecedor_id, public.emails_enviados.fornecedor_id),
+            {cf} = COALESCE(EXCLUDED.{cf}, {te}.{cf}),
             status_ultimo = 'processando',
             atualizado_em = now()
         """,

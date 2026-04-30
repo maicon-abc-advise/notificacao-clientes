@@ -59,6 +59,17 @@ class Configuracao(BaseSettings):
     )
     database_url: str = ""
 
+    postgres_schema: str = Field(
+        default="public",
+        validation_alias="POSTGRES_SCHEMA",
+        description="Schema Postgres das tabelas da API (ex.: public, busca_fornecedor).",
+    )
+    postgres_tabela_suffix: str = Field(
+        default="",
+        validation_alias="POSTGRES_TABELA_SUFFIX",
+        description="Sufixo só em consultas e fornecedores; coluna FK vira fornecedor_id + sufixo (ex.: _teste).",
+    )
+
     api_key: str = Field(validation_alias="API_KEY")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
@@ -138,6 +149,25 @@ class Configuracao(BaseSettings):
     def _bdc_opcional_vazio_none(cls, v: Any) -> Any:
         if v == "" or v is None:
             return None
+        return v
+
+    @field_validator("postgres_schema", mode="before")
+    @classmethod
+    def _postgres_schema_strip(cls, v: Any) -> Any:
+        if v is None:
+            return "public"
+        if isinstance(v, str):
+            s = v.strip()
+            return s if s else "public"
+        return v
+
+    @field_validator("postgres_tabela_suffix", mode="before")
+    @classmethod
+    def _postgres_suffix_strip(cls, v: Any) -> Any:
+        if v is None:
+            return ""
+        if isinstance(v, str):
+            return v.strip()
         return v
 
     @field_validator("mensagens_provedor_email", "mensagens_provedor_sms", mode="before")

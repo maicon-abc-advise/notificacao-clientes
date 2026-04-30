@@ -7,6 +7,7 @@ import uuid
 
 import asyncpg
 
+from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, EngajamentoSmsEstado
 
 _log = logging.getLogger(__name__)
@@ -30,13 +31,16 @@ async def tocar_engajamento_email(
     if fornecedor_id is None:
         return
     est = estado.value
+    p = obter_identificadores_postgres()
+    te = p.qual("engajamento_fornecedores")
+    cf = p.col_fornecedor_id
     await pool.execute(
-        """
-        INSERT INTO public.engajamento_fornecedores (
-            fornecedor_id, engajamento_email, engajamento_email_atualizado_em, engajamento_atualizado_em
+        f"""
+        INSERT INTO {te} (
+            {cf}, engajamento_email, engajamento_email_atualizado_em, engajamento_atualizado_em
         )
         VALUES ($1, $2, now(), now())
-        ON CONFLICT (fornecedor_id) DO UPDATE SET
+        ON CONFLICT ({cf}) DO UPDATE SET
             engajamento_email = EXCLUDED.engajamento_email,
             engajamento_email_atualizado_em = now(),
             engajamento_atualizado_em = now()
@@ -56,13 +60,16 @@ async def tocar_engajamento_sms(
     if fornecedor_id is None:
         return
     est = estado.value
+    p = obter_identificadores_postgres()
+    te = p.qual("engajamento_fornecedores")
+    cf = p.col_fornecedor_id
     await pool.execute(
-        """
-        INSERT INTO public.engajamento_fornecedores (
-            fornecedor_id, engajamento_sms, engajamento_sms_atualizado_em, engajamento_atualizado_em
+        f"""
+        INSERT INTO {te} (
+            {cf}, engajamento_sms, engajamento_sms_atualizado_em, engajamento_atualizado_em
         )
         VALUES ($1, $2, now(), now())
-        ON CONFLICT (fornecedor_id) DO UPDATE SET
+        ON CONFLICT ({cf}) DO UPDATE SET
             engajamento_sms = EXCLUDED.engajamento_sms,
             engajamento_sms_atualizado_em = now(),
             engajamento_atualizado_em = now()
@@ -81,13 +88,16 @@ async def definir_recebe_email(
     """Atualiza ``recebe_email``; ignora se ``fornecedor_id`` for nulo."""
     if fornecedor_id is None:
         return
+    p = obter_identificadores_postgres()
+    te = p.qual("engajamento_fornecedores")
+    cf = p.col_fornecedor_id
     await pool.execute(
-        """
-        INSERT INTO public.engajamento_fornecedores (
-            fornecedor_id, recebe_email, engajamento_atualizado_em
+        f"""
+        INSERT INTO {te} (
+            {cf}, recebe_email, engajamento_atualizado_em
         )
         VALUES ($1, $2, now())
-        ON CONFLICT (fornecedor_id) DO UPDATE SET
+        ON CONFLICT ({cf}) DO UPDATE SET
             recebe_email = EXCLUDED.recebe_email,
             engajamento_atualizado_em = now()
         """,

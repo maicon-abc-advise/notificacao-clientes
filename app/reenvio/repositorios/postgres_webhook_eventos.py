@@ -1,10 +1,15 @@
 import asyncpg
 from asyncpg.exceptions import UniqueViolationError
 
+from app.config.postgres_identificadores import obter_identificadores_postgres
+
+
 async def registrar_evento_se_novo(pool: asyncpg.Pool, id_evento: str) -> bool:
+    p = obter_identificadores_postgres()
+    tw = p.qual("webhook_eventos_processados")
     try:
         await pool.execute(
-            "INSERT INTO public.webhook_eventos_processados (id_evento) VALUES ($1)",
+            f"INSERT INTO {tw} (id_evento) VALUES ($1)",
             id_evento,
         )
     except UniqueViolationError:

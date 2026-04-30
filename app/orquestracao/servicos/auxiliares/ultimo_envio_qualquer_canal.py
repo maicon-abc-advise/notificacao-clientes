@@ -5,6 +5,8 @@ from datetime import datetime
 
 import asyncpg
 
+from app.config.postgres_identificadores import obter_identificadores_postgres
+
 
 async def obter_ultimo_envio_em(
     pool: asyncpg.Pool,
@@ -12,12 +14,16 @@ async def obter_ultimo_envio_em(
 ) -> datetime | None:
     if fornecedor_id is None:
         return None
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
+    ts = p.qual("sms_enviados")
+    cf = p.col_fornecedor_id
     max_email = await pool.fetchval(
-        "SELECT MAX(criado_em) FROM public.emails_enviados WHERE fornecedor_id = $1",
+        f"SELECT MAX(criado_em) FROM {te} WHERE {cf} = $1",
         fornecedor_id,
     )
     max_sms = await pool.fetchval(
-        "SELECT MAX(criado_em) FROM public.sms_enviados WHERE fornecedor_id = $1",
+        f"SELECT MAX(criado_em) FROM {ts} WHERE {cf} = $1",
         fornecedor_id,
     )
     candidatos = [t for t in (max_email, max_sms) if t is not None]

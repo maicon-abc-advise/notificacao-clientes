@@ -4,6 +4,8 @@ import uuid
 
 import asyncpg
 
+from app.config.postgres_identificadores import obter_identificadores_postgres
+
 
 async def obter_ou_criar_e_incrementar_aparicao(
     pool: asyncpg.Pool,
@@ -14,18 +16,21 @@ async def obter_ou_criar_e_incrementar_aparicao(
     telefone: str | None,
 ) -> asyncpg.Record:
     """Garante linha em `fornecedores`, incrementa `aparicoes_busca` e preenche contato quando vier no payload."""
+    p = obter_identificadores_postgres()
+    t = p.qual("fornecedores")
+    cf = p.col_fornecedor_id
     row = await pool.fetchrow(
-        """
-        INSERT INTO public.fornecedores (cnpj, nome, email, telefone, aparicoes_busca, creditos)
+        f"""
+        INSERT INTO {t} (cnpj, nome, email, telefone, aparicoes_busca, creditos)
         VALUES ($1, $2, $3, $4, 1, 0)
         ON CONFLICT (cnpj) DO UPDATE SET
-            nome = COALESCE(EXCLUDED.nome, public.fornecedores.nome),
-            email = COALESCE(NULLIF(EXCLUDED.email, ''), public.fornecedores.email),
-            telefone = COALESCE(NULLIF(EXCLUDED.telefone, ''), public.fornecedores.telefone),
-            aparicoes_busca = public.fornecedores.aparicoes_busca + 1,
+            nome = COALESCE(EXCLUDED.nome, {t}.nome),
+            email = COALESCE(NULLIF(EXCLUDED.email, ''), {t}.email),
+            telefone = COALESCE(NULLIF(EXCLUDED.telefone, ''), {t}.telefone),
+            aparicoes_busca = {t}.aparicoes_busca + 1,
             updated_at = now()
         RETURNING
-            fornecedor_id,
+            {cf},
             cnpj,
             nome,
             email,
@@ -48,15 +53,18 @@ async def listar_fornecedores_alerta_creditos(
     limiar: int,
 ) -> list[asyncpg.Record]:
     """Fornecedores ativos com e-mail ou telefone, créditos zerados ou até o limiar (inclusive)."""
+    p = obter_identificadores_postgres()
+    t = p.qual("fornecedores")
+    cf = p.col_fornecedor_id
     return await pool.fetch(
-        """
+        f"""
         SELECT
-            fornecedor_id,
+            {cf},
             nome,
             email,
             telefone,
             creditos
-        FROM public.fornecedores
+        FROM {t}
         WHERE ativo = true
           AND (
               NULLIF(trim(email), '') IS NOT NULL
@@ -66,7 +74,7 @@ async def listar_fornecedores_alerta_creditos(
               creditos = 0
               OR (creditos > 0 AND creditos <= $1)
           )
-        ORDER BY fornecedor_id
+        ORDER BY {cf}
         """,
         limiar,
     )
@@ -79,13 +87,16 @@ async def atualizar_contato_apos_enriquecimento(
     email: str | None,
     telefone: str | None,
 ) -> None:
+    p = obter_identificadores_postgres()
+    t = p.qual("fornecedores")
+    cf = p.col_fornecedor_id
     await pool.execute(
-        """
-        UPDATE public.fornecedores SET
+        f"""
+        UPDATE {t} SET
             email = COALESCE(NULLIF($2, ''), email),
             telefone = COALESCE(NULLIF($3, ''), telefone),
             updated_at = now()
-        WHERE fornecedor_id = $1
+        WHERE {cf} = $1
         """,
         fornecedor_id,
         email or "",

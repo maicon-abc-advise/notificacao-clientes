@@ -8,6 +8,7 @@ import asyncpg
 from redis.asyncio import Redis
 
 from app.config.config import Configuracao
+from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.orquestracao.api.dto.verificar_creditos_dto import RespostaVerificarCreditos
 from app.orquestracao.repositorios.engajamento_consulta_repo import (
     carregar_para_fornecedor,
@@ -51,8 +52,9 @@ async def executar_verificar_creditos(
         len(rows),
     )
 
+    _cf = obter_identificadores_postgres().col_fornecedor_id
     for row in rows:
-        fid: uuid.UUID = row["fornecedor_id"]
+        fid: uuid.UUID = row[_cf]
         creditos_restantes: int = row["creditos"]
         email = (row["email"] or "").strip()
         telefone = (row["telefone"] or "").strip()

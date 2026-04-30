@@ -21,6 +21,7 @@ from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
     montar_pedido_sms_consultado_sem_email,
 )
 from app.orquestracao.servicos.auxiliares.porta_enriquecimento_contato import PortaEnriquecimentoContato
+from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.orquestracao.excecoes import ConsultaJaNotificadaError
 from app.reenvio.repositorios.redis_consulta_notificacao import consulta_tem_trava_ativa
 
@@ -54,9 +55,10 @@ async def executar_receber_consulta(
         email=str(corpo.email_fornecedor) if corpo.email_fornecedor else None,
         telefone=corpo.telefone_fornecedor,
     )
+    _cf = obter_identificadores_postgres().col_fornecedor_id
     _log.info(
         "[orquestracao] fornecedor fornecedor_id=%s email=%s telefone=%s aparicoes=%s ativo=%s",
-        row_f["fornecedor_id"],
+        row_f[_cf],
         row_f["email"],
         row_f["telefone"],
         row_f["aparicoes_busca"],
@@ -71,7 +73,7 @@ async def executar_receber_consulta(
             motivo="fornecedor inativo",
         )
 
-    fid: uuid.UUID = row_f["fornecedor_id"]
+    fid: uuid.UUID = row_f[_cf]
     email_f = row_f["email"]
     tel_f = row_f["telefone"]
     email_e, tel_e = await enriquecer_se_necessario(

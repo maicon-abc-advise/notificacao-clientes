@@ -7,6 +7,7 @@ from typing import Any
 import asyncpg
 from redis.asyncio import Redis
 from app.config.config import Configuracao
+from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.reenvio.api.dto.webhook_zenvia import WebhookMessageStatusZenvia
 from app.mensageria.repositorios.postgres_sms_enviados import (
     atualizar_status_por_id_interno,
@@ -56,7 +57,8 @@ async def processar_webhook_status_sms(
 
     id_interno = row["id"]
     telefone = row["telefone"]
-    fid: uuid.UUID | None = row["fornecedor_id"]
+    _cf = obter_identificadores_postgres().col_fornecedor_id
+    fid: uuid.UUID | None = row[_cf]
     tentativas = int(row["tentativas_reprocessar"] or 0)
     code = payload.messageStatus.code
     cause = payload.messageStatus.cause
