@@ -1,4 +1,5 @@
 from typing import Annotated
+from uuid import UUID
 
 import asyncpg
 from fastapi import APIRouter, Depends, HTTPException, status
@@ -14,6 +15,7 @@ from app.mensageria.api.dto.modelos import (
     ResultadoEnvioMensagem,
 )
 from app.mensageria.repositorios.postgres_emails_enviados import buscar_por_id_externo as buscar_email_por_id_externo
+from app.mensageria.repositorios.postgres_fornecedores import fornecedor_id_existe
 from app.mensageria.repositorios.postgres_sms_enviados import buscar_por_id_externo as buscar_sms_por_id_externo
 from app.mensageria.excecoes.erro import ErroEnvioZenvia
 from app.mensageria.servicos.materializar import materializar_email, materializar_sms
@@ -46,6 +48,16 @@ def _id_provedor_valido_para_idempotencia(id_z: str | None) -> bool:
     return bool(s) and not s.startswith("(sem")
 
 
+async def _garantir_fornecedor_cadastrado(pool: asyncpg.Pool, fornecedor_id: UUID | None) -> None:
+    if fornecedor_id is None:
+        return
+    if not await fornecedor_id_existe(pool, fornecedor_id):
+        raise HTTPException(
+            status_code=status.HTTP_404_NOT_FOUND,
+            detail="fornecedor não encontrado",
+        )
+
+
 @router.post("/email", response_model=ResultadoEnvioMensagem, status_code=status.HTTP_200_OK)
 async def post_enviar_email(
     pedido: PedidoEnvioEmail,
@@ -63,6 +75,7 @@ async def post_enviar_email(
                     canal=CanalMensagem.EMAIL,
                     resposta_parcial={"idempotente": True},
                 )
+        await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id)
         materializado = await materializar_email(pedido, templates)
         resultado = porta.enviar_email(materializado)
         await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
@@ -96,6 +109,7 @@ async def post_enviar_sms(
                     canal=CanalMensagem.SMS,
                     resposta_parcial={"idempotente": True},
                 )
+        await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id)
         materializado = await materializar_sms(pedido, templates)
         resultado = porta.enviar_sms(materializado)
         await registrar_sms_enviado_apos_sucesso(pool, redis, pedido, resultado)

@@ -1,5 +1,7 @@
 """Envio: autenticação interna e porta (Zenvia mockada via httpx)."""
 
+import uuid
+
 import httpx
 import pytest
 from fastapi.testclient import TestClient
@@ -88,6 +90,54 @@ async def _templates_fixos() -> object:
             return []
 
     return _T()
+
+
+def test_post_email_404_quando_fornecedor_id_inexistente() -> None:
+    async def _fake_dep() -> object:
+        return await _templates_fixos()
+
+    app.dependency_overrides[obter_porta_templates] = _fake_dep
+    try:
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/mensagens/email",
+                headers={"Authorization": "Bearer test-api-key-unit"},
+                json={
+                    "destinatario": "a@b.com",
+                    "tipo_template": "APARECEU_BUSCA",
+                    "contexto": {},
+                    "fornecedor_id": str(uuid.uuid4()),
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "fornecedor não encontrado"
+
+
+def test_post_sms_404_quando_fornecedor_id_inexistente() -> None:
+    async def _fake_dep() -> object:
+        return await _templates_fixos()
+
+    app.dependency_overrides[obter_porta_templates] = _fake_dep
+    try:
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/mensagens/sms",
+                headers={"Authorization": "Bearer test-api-key-unit"},
+                json={
+                    "destinatario": "5511987654321",
+                    "tipo_template": "APARECEU_BUSCA",
+                    "contexto": {},
+                    "fornecedor_id": str(uuid.uuid4()),
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r.status_code == 404
+    assert r.json()["detail"] == "fornecedor não encontrado"
 
 
 def test_post_email_200_com_override() -> None:

@@ -2,7 +2,6 @@ from __future__ import annotations
 import enum
 from app.reenvio.servicos.classificar_cause_email import ResultadoClassificacaoEmail
 
-
 class EngajamentoEmailEstado(enum.StrEnum):
     ATIVO = "ativo"
     EMAIL_ENVIADO_API = "email_enviado_api"
