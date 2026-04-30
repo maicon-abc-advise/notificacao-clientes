@@ -38,3 +38,15 @@ def test_sem_contato() -> None:
         engajamento_sms=EngajamentoSmsEstado.ATIVO.value,
     )
     assert d.canal == "nenhum"
+
+
+def test_email_formato_invalido_vai_para_sms() -> None:
+    d = decidir_canal_e_cadencia(
+        email_efetivo="nao-e-um-email",
+        telefone_efetivo="5511999999999",
+        recebe_email=True,
+        engajamento_email=EngajamentoEmailEstado.ATIVO.value,
+        engajamento_sms=EngajamentoSmsEstado.ATIVO.value,
+    )
+    assert d.canal == "sms"
+    assert d.tipo_template == CodigoTipoTemplate.CONSULTADO_SEM_EMAIL

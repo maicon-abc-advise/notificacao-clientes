@@ -35,9 +35,9 @@ class PedidoEnvioEmail(BaseModel):
         max_length=20,
         description="E.164 do SMS se o e-mail falhar (bounce) ou para o sweep; necessário para enfileirar SMS.",
     )
-    usuario_id: UUID | None = Field(
+    fornecedor_id: UUID | None = Field(
         default=None,
-        description="Opcional: atualiza engajamento_usuarios em eventos de e-mail (API + webhooks).",
+        description="Opcional: atualiza engajamento_fornecedores em eventos de e-mail (API + webhooks).",
     )
     consulta_id: UUID | None = Field(
         default=None,
@@ -66,9 +66,9 @@ class PedidoEnvioSms(BaseModel):
         description="Ignorado no envio: o remetente vem só de ZENVIA_SMS_FROM / configuração do servidor.",
     )
     id_externo: str | None = Field(default=None, max_length=64)
-    usuario_id: UUID | None = Field(
+    fornecedor_id: UUID | None = Field(
         default=None,
-        description="Opcional: liga o envio a engajamento_usuarios e webhooks de estado.",
+        description="Opcional: liga o envio a engajamento_fornecedores e webhooks de estado.",
     )
     consulta_id: UUID | None = Field(
         default=None,

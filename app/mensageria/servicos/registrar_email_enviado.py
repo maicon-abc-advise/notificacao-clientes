@@ -34,5 +34,5 @@ async def registrar_email_enviado_apos_sucesso(
         remetente=pedido.remetente,
         telefone_sms_fallback=pedido.telefone_sms_fallback,
         id_mensagem_zenvia=msg_id,
-        usuario_id=pedido.usuario_id,
+        fornecedor_id=pedido.fornecedor_id,
     )

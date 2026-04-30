@@ -27,6 +27,35 @@ def _sms_problematico(engajamento_sms: str) -> bool:
     )
 
 
+def _email_formato_plausivel(email: str) -> bool:
+    e = email.strip()
+    if "@" not in e or e.startswith("@") or e.endswith("@"):
+        return False
+    local, sep, domain = e.partition("@")
+    if sep != "@" or not local or not domain or "." not in domain:
+        return False
+    return True
+
+
+def email_usavel_para_notificacao(
+    email: str | None,
+    *,
+    recebe_email: bool,
+    engajamento_email: str,
+) -> bool:
+    """E-mail não vazio, formato mínimo plausível, opt-in e sem bounce hard."""
+    e = (email or "").strip()
+    if not e or not recebe_email or _bounce_hard_email(engajamento_email):
+        return False
+    return _email_formato_plausivel(e)
+
+
+def telefone_usavel_para_sms(telefone: str | None, engajamento_sms: str) -> bool:
+    """Telefone não vazio e SMS não bloqueado por falha definitiva."""
+    t = (telefone or "").strip()
+    return bool(t) and not _sms_problematico(engajamento_sms)
+
+
 def decidir_canal_e_cadencia(
     *,
     email_efetivo: str | None,
@@ -39,14 +68,16 @@ def decidir_canal_e_cadencia(
     if not telefone_efetivo and not email_efetivo:
         return DecisaoCanal("nenhum", None, "sem e-mail e sem telefone após enriquecimento")
 
-    email_ok = bool(email_efetivo) and recebe_email and not _bounce_hard_email(engajamento_email)
+    email_ok = email_usavel_para_notificacao(
+        email_efetivo, recebe_email=recebe_email, engajamento_email=engajamento_email
+    )
 
     if email_ok:
         return DecisaoCanal("email", CodigoTipoTemplate.APARECEU_BUSCA, "e-mail disponível e permitido")
 
     if telefone_efetivo and not _sms_problematico(engajamento_sms):
         if bool(email_efetivo) and not recebe_email:
-            motivo_sms = "SMS: existe e-mail mas recebe_email=false em engajamento_usuarios (opt-out)"
+            motivo_sms = "SMS: existe e-mail mas recebe_email=false em engajamento_fornecedores (opt-out)"
         elif bool(email_efetivo) and _bounce_hard_email(engajamento_email):
             motivo_sms = "SMS: bounce hard de e-mail — não reenviar por e-mail"
         elif not email_efetivo:

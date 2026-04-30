@@ -17,24 +17,17 @@ class SnapshotEngajamentoOrquestracao:
     ultimo_lembrete_limite_semanal_em: datetime | None
 
 
-async def carregar_para_usuario(
+async def carregar_para_fornecedor(
     pool: asyncpg.Pool,
-    usuario_id: uuid.UUID | None,
+    fornecedor_id: uuid.UUID,
 ) -> SnapshotEngajamentoOrquestracao:
-    if usuario_id is None:
-        return SnapshotEngajamentoOrquestracao(
-            EngajamentoEmailEstado.ATIVO.value,
-            EngajamentoSmsEstado.ATIVO.value,
-            True,
-            None,
-        )
     row = await pool.fetchrow(
         """
         SELECT engajamento_email, engajamento_sms, recebe_email, ultimo_lembrete_limite_semanal_em
-        FROM public.engajamento_usuarios
-        WHERE usuario_id = $1
+        FROM public.engajamento_fornecedores
+        WHERE fornecedor_id = $1
         """,
-        usuario_id,
+        fornecedor_id,
     )
     if row is None:
         return SnapshotEngajamentoOrquestracao(
@@ -51,13 +44,13 @@ async def carregar_para_usuario(
     )
 
 
-async def registrar_lembrete_creditos_semanal(pool: asyncpg.Pool, usuario_id: uuid.UUID) -> None:
+async def registrar_lembrete_creditos_semanal(pool: asyncpg.Pool, fornecedor_id: uuid.UUID) -> None:
     await pool.execute(
         """
-        INSERT INTO public.engajamento_usuarios (usuario_id, ultimo_lembrete_limite_semanal_em)
+        INSERT INTO public.engajamento_fornecedores (fornecedor_id, ultimo_lembrete_limite_semanal_em)
         VALUES ($1, now())
-        ON CONFLICT (usuario_id) DO UPDATE SET
+        ON CONFLICT (fornecedor_id) DO UPDATE SET
             ultimo_lembrete_limite_semanal_em = now()
         """,
-        usuario_id,
+        fornecedor_id,
     )

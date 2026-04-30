@@ -10,6 +10,23 @@ from popula_tabelas.dados_seed import linhas_seed
 
 _DIR_SQL = Path(__file__).resolve().parent / "sql"
 
+# Migrações só com DDL idempotente (preserva linhas existentes). Ordem importa.
+_MIGRACOES_ORQUESTRACAO_INCREMENTAIS: tuple[str, ...] = (
+    "orquestracao_fornecedores_creditos.sql",
+    "migracao_engajamento_fornecedor_id.sql",
+)
+
+
+async def aplicar_migracoes_orquestracao_incrementais(dsn: str) -> None:
+    """Apenas ALTER/ADD seguros em orquestração — não recria tabelas nem roda seed."""
+    conn = await asyncpg.connect(dsn)
+    try:
+        for nome in _MIGRACOES_ORQUESTRACAO_INCREMENTAIS:
+            sql = (_DIR_SQL / nome).read_text(encoding="utf-8")
+            await conn.execute(sql)
+    finally:
+        await conn.close()
+
 
 async def aplicar_schema_templates(dsn: str) -> None:
     schema = (_DIR_SQL / "templates_notificacao.sql").read_text(encoding="utf-8")
@@ -52,10 +69,14 @@ async def aplicar_schema_reenvio(dsn: str) -> None:
 
 
 async def aplicar_schema_orquestracao(dsn: str) -> None:
-    sql = (_DIR_SQL / "orquestracao_consultas_fornecedores.sql").read_text(encoding="utf-8")
+    principal = (_DIR_SQL / "orquestracao_consultas_fornecedores.sql").read_text(encoding="utf-8")
+    creditos = (_DIR_SQL / "orquestracao_fornecedores_creditos.sql").read_text(encoding="utf-8")
+    migracao = (_DIR_SQL / "migracao_engajamento_fornecedor_id.sql").read_text(encoding="utf-8")
     conn = await asyncpg.connect(dsn)
     try:
-        await conn.execute(sql)
+        await conn.execute(principal)
+        await conn.execute(creditos)
+        await conn.execute(migracao)
     finally:
         await conn.close()
 

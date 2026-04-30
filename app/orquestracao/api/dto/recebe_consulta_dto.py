@@ -12,10 +12,6 @@ class RecebeConsultaCorpo(BaseModel):
     email_fornecedor: EmailStr | None = None
     telefone_fornecedor: str | None = None
     motivo: str | None = Field(default=None, max_length=512)
-    usuario_id: UUID | None = Field(
-        default=None,
-        description="Liga a public.engajamento_usuarios.usuario_id quando existir.",
-    )
     nome_fantasia: str | None = Field(default=None, max_length=256)
 
     @field_validator("email_fornecedor", "telefone_fornecedor", mode="before")
@@ -36,6 +32,7 @@ class RecebeConsultaCorpo(BaseModel):
 
     def cnpj_14(self) -> str:
         return f"{self.cnpj_basico}{self.cnpj_ordem}{self.cnpj_dv}"
+
 
 class RespostaRecebeConsulta(BaseModel):
     acao: str = Field(description="email_enfileirado | sms_enfileirado | nada")

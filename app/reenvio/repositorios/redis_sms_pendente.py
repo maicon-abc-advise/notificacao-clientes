@@ -43,7 +43,7 @@ class RepositorioSmsPendenteRedis:
         contexto: dict[str, str],
         remetente: str | None,
         origem: str,
-        usuario_id: str | None = None,
+        fornecedor_id: str | None = None,
         consulta_id: uuid.UUID | None = None,
         sobrescrever_trava_de_email_esperando: bool = False,
     ) -> bool:
@@ -68,7 +68,7 @@ class RepositorioSmsPendenteRedis:
                 "contexto_json": json.dumps(contexto, ensure_ascii=False),
                 "remetente": remetente or "",
                 "origem": origem,
-                "usuario_id": usuario_id or "",
+                "fornecedor_id": fornecedor_id or "",
                 "consulta_id": str(consulta_id) if consulta_id is not None else "",
                 "criado_em": str(agora),
             }
@@ -117,7 +117,7 @@ class RepositorioSmsPendenteRedis:
                     "contexto": ctx if isinstance(ctx, dict) else {},
                     "remetente": raw.get("remetente") or None,
                     "origem": raw.get("origem", ""),
-                    "usuario_id": raw.get("usuario_id") or None,
+                    "fornecedor_id": raw.get("fornecedor_id") or raw.get("usuario_id") or None,
                     "consulta_id": raw.get("consulta_id") or None,
                     "criado_em": raw.get("criado_em"),
                 },

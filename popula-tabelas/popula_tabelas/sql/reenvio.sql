@@ -2,19 +2,7 @@
 -- Bases já criadas com coluna ``external_id``: renomear para ``id_externo`` antes de alinhar o código.
 --   ALTER TABLE public.emails_enviados RENAME COLUMN external_id TO id_externo;
 --   ALTER TABLE public.sms_enviados RENAME COLUMN external_id TO id_externo;
-
-CREATE TABLE IF NOT EXISTS public.engajamento_usuarios (
-    usuario_id uuid PRIMARY KEY,
-    engajamento_email text NOT NULL DEFAULT 'ativo',
-    engajamento_sms text NOT NULL DEFAULT 'ativo',
-    engajamento_email_atualizado_em timestamptz,
-    engajamento_sms_atualizado_em timestamptz,
-    engajamento_atualizado_em timestamptz NOT NULL DEFAULT now(),
-    ultimo_lembrete_limite_semanal_em timestamptz,
-    recebe_email boolean NOT NULL DEFAULT true,
-    aparicoes_mes int NOT NULL DEFAULT 0,
-    aparicoes_mes_referencia varchar(7) NOT NULL DEFAULT ''
-);
+-- Engajamento por fornecedor: ver ``orquestracao_consultas_fornecedores.sql`` (``engajamento_fornecedores``).
 
 CREATE TABLE IF NOT EXISTS public.sms_enviados (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -24,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.sms_enviados (
     tipo_template text NOT NULL,
     contexto jsonb NOT NULL DEFAULT '{}'::jsonb,
     remetente text,
-    usuario_id uuid,
+    fornecedor_id uuid,
     status_ultimo text NOT NULL DEFAULT 'processando',
     motivo_ultimo_evento text,
     tentativas_reprocessar int NOT NULL DEFAULT 0,
@@ -40,9 +28,9 @@ CREATE INDEX IF NOT EXISTS idx_sms_enviados_id_mensagem
     ON public.sms_enviados (id_mensagem_zenvia)
     WHERE id_mensagem_zenvia IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_sms_enviados_usuario
-    ON public.sms_enviados (usuario_id)
-    WHERE usuario_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_sms_enviados_fornecedor
+    ON public.sms_enviados (fornecedor_id)
+    WHERE fornecedor_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.emails_enviados (
     id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
@@ -53,7 +41,7 @@ CREATE TABLE IF NOT EXISTS public.emails_enviados (
     contexto jsonb NOT NULL DEFAULT '{}'::jsonb,
     remetente text,
     telefone_sms_fallback text,
-    usuario_id uuid,
+    fornecedor_id uuid,
     status_ultimo text NOT NULL DEFAULT 'processando',
     motivo_ultimo_evento text,
     tentativas_reprocessar int NOT NULL DEFAULT 0,
@@ -69,9 +57,9 @@ CREATE INDEX IF NOT EXISTS idx_emails_enviados_id_mensagem
     ON public.emails_enviados (id_mensagem_zenvia)
     WHERE id_mensagem_zenvia IS NOT NULL;
 
-CREATE INDEX IF NOT EXISTS idx_emails_enviados_usuario
-    ON public.emails_enviados (usuario_id)
-    WHERE usuario_id IS NOT NULL;
+CREATE INDEX IF NOT EXISTS idx_emails_enviados_fornecedor
+    ON public.emails_enviados (fornecedor_id)
+    WHERE fornecedor_id IS NOT NULL;
 
 CREATE TABLE IF NOT EXISTS public.webhook_eventos_processados (
     id_evento text PRIMARY KEY,

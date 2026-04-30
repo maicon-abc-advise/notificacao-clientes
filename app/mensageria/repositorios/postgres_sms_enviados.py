@@ -14,7 +14,7 @@ async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.
     return await pool.fetchrow(
         """
         SELECT id_externo, id_mensagem_zenvia, telefone, tipo_template, contexto,
-               remetente, usuario_id, status_ultimo
+               remetente, fornecedor_id, status_ultimo
         FROM public.sms_enviados
         WHERE id_externo = $1
         LIMIT 1
@@ -32,14 +32,14 @@ async def inserir_ou_atualizar_apos_envio_api(
     contexto: dict[str, Any],
     remetente: str | None,
     id_mensagem_zenvia: str,
-    usuario_id: uuid.UUID | None,
+    fornecedor_id: uuid.UUID | None,
 ) -> None:
     """Chamado após ``POST /v1/mensagens/sms`` com sucesso (fila Redis já removida)."""
     await pool.execute(
         """
         INSERT INTO public.sms_enviados (
             id_externo, telefone, tipo_template, contexto, remetente,
-            id_mensagem_zenvia, usuario_id, status_ultimo
+            id_mensagem_zenvia, fornecedor_id, status_ultimo
         )
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, 'processando')
         ON CONFLICT (id_externo) DO UPDATE SET
@@ -48,7 +48,7 @@ async def inserir_ou_atualizar_apos_envio_api(
             tipo_template = EXCLUDED.tipo_template,
             contexto = EXCLUDED.contexto,
             remetente = EXCLUDED.remetente,
-            usuario_id = COALESCE(EXCLUDED.usuario_id, public.sms_enviados.usuario_id),
+            fornecedor_id = COALESCE(EXCLUDED.fornecedor_id, public.sms_enviados.fornecedor_id),
             status_ultimo = 'processando',
             atualizado_em = now()
         """,
@@ -58,7 +58,7 @@ async def inserir_ou_atualizar_apos_envio_api(
         json.dumps(contexto),
         remetente,
         id_mensagem_zenvia,
-        usuario_id,
+        fornecedor_id,
     )
 
 
@@ -68,7 +68,7 @@ async def buscar_por_id_mensagem_zenvia(
     return await pool.fetchrow(
         """
         SELECT id, id_externo, id_mensagem_zenvia, telefone, tipo_template, contexto,
-               remetente, usuario_id, status_ultimo, motivo_ultimo_evento,
+               remetente, fornecedor_id, status_ultimo, motivo_ultimo_evento,
                tentativas_reprocessar, proxima_tentativa_em
         FROM public.sms_enviados
         WHERE id_mensagem_zenvia = $1

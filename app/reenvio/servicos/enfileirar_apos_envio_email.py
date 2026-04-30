@@ -43,7 +43,7 @@ async def enfileirar_email_enviado_apos_sucesso(
             remetente=pedido.remetente,
             telefone_sms_fallback=pedido.telefone_sms_fallback,
             sweep_score_ts=sweep_ts,
-            usuario_id=str(pedido.usuario_id) if pedido.usuario_id else None,
+            fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
             consulta_id=pedido.consulta_id,
         )
     except Exception:

@@ -11,7 +11,7 @@ from app.mensageria.api.dto.modelos import CanalMensagem, PedidoEnvioSms, Result
 from app.mensageria.repositorios.postgres_sms_enviados import inserir_ou_atualizar_apos_envio_api
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.engajamento_estado import EngajamentoSmsEstado
-from app.reenvio.servicos.engajamento_usuario import tocar_engajamento_sms
+from app.reenvio.servicos.engajamento_fornecedor import tocar_engajamento_sms
 
 _log = logging.getLogger(__name__)
 
@@ -42,6 +42,6 @@ async def registrar_sms_enviado_apos_sucesso(
         contexto=dict(pedido.contexto),
         remetente=pedido.remetente,
         id_mensagem_zenvia=msg_id,
-        usuario_id=pedido.usuario_id,
+        fornecedor_id=pedido.fornecedor_id,
     )
-    await tocar_engajamento_sms(pool, pedido.usuario_id, EngajamentoSmsEstado.SMS_ENVIADO_API)
+    await tocar_engajamento_sms(pool, pedido.fornecedor_id, EngajamentoSmsEstado.SMS_ENVIADO_API)

@@ -13,7 +13,7 @@ async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.
     return await pool.fetchrow(
         """
         SELECT id_externo, id_mensagem_zenvia, email_destinatario, tipo_template, contexto,
-               remetente, telefone_sms_fallback, usuario_id, status_ultimo
+               remetente, telefone_sms_fallback, fornecedor_id, status_ultimo
         FROM public.emails_enviados
         WHERE id_externo = $1
         LIMIT 1
@@ -47,14 +47,14 @@ async def inserir_ou_atualizar_apos_envio_api(
     remetente: str | None,
     telefone_sms_fallback: str | None,
     id_mensagem_zenvia: str,
-    usuario_id: uuid.UUID | None,
+    fornecedor_id: uuid.UUID | None,
 ) -> None:
     """Chamado após ``POST /v1/mensagens/email`` com sucesso."""
     await pool.execute(
         """
         INSERT INTO public.emails_enviados (
             id_externo, email_destinatario, tipo_template, contexto, remetente,
-            telefone_sms_fallback, id_mensagem_zenvia, usuario_id, status_ultimo
+            telefone_sms_fallback, id_mensagem_zenvia, fornecedor_id, status_ultimo
         )
         VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, 'processando')
         ON CONFLICT (id_externo) DO UPDATE SET
@@ -67,7 +67,7 @@ async def inserir_ou_atualizar_apos_envio_api(
                 EXCLUDED.telefone_sms_fallback,
                 public.emails_enviados.telefone_sms_fallback
             ),
-            usuario_id = COALESCE(EXCLUDED.usuario_id, public.emails_enviados.usuario_id),
+            fornecedor_id = COALESCE(EXCLUDED.fornecedor_id, public.emails_enviados.fornecedor_id),
             status_ultimo = 'processando',
             atualizado_em = now()
         """,
@@ -78,5 +78,5 @@ async def inserir_ou_atualizar_apos_envio_api(
         remetente,
         telefone_sms_fallback,
         id_mensagem_zenvia,
-        usuario_id,
+        fornecedor_id,
     )

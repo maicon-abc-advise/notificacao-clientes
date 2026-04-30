@@ -21,7 +21,7 @@ from app.mensageria.servicos.porta import PortaEnvioMensagem
 from app.reenvio.redis_app import obter_cliente_redis
 from app.reenvio.servicos.enfileirar_apos_envio_email import enfileirar_email_enviado_apos_sucesso
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado
-from app.reenvio.servicos.engajamento_usuario import tocar_engajamento_email
+from app.reenvio.servicos.engajamento_fornecedor import tocar_engajamento_email
 from app.mensageria.servicos.registrar_email_enviado import registrar_email_enviado_apos_sucesso
 from app.mensageria.servicos.registrar_sms_enviado import registrar_sms_enviado_apos_sucesso
 from app.templates.conexao import obter_pool
@@ -67,7 +67,7 @@ async def post_enviar_email(
         resultado = porta.enviar_email(materializado)
         await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
         await registrar_email_enviado_apos_sucesso(pool, pedido, resultado)
-        await tocar_engajamento_email(pool, pedido.usuario_id, EngajamentoEmailEstado.EMAIL_ENVIADO_API)
+        await tocar_engajamento_email(pool, pedido.fornecedor_id, EngajamentoEmailEstado.EMAIL_ENVIADO_API)
         return resultado
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e

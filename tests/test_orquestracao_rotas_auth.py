@@ -21,14 +21,7 @@ def test_recebe_consulta_401_sem_api_key() -> None:
 
 def test_verificar_creditos_401_sem_api_key() -> None:
     with TestClient(app) as client:
-        r = client.post(
-            "/v1/interno/orquestracao/verificar-creditos",
-            json={
-                "usuario_id": "00000000-0000-4000-8000-000000000002",
-                "email_destinatario": "x@y.com",
-                "creditos_restantes": 0,
-            },
-        )
+        r = client.post("/v1/interno/orquestracao/verificar-creditos")
     assert r.status_code == 401
 
 

@@ -77,6 +77,18 @@ class Configuracao(BaseSettings):
     )
     reenvio_sms_reprocessar_max: int = Field(default=10, ge=0, le=1000, validation_alias="REENVIO_SMS_REPROCESSAR_MAX")
 
+    limiar_creditos_no_fim: int = Field(
+        default=5,
+        ge=0,
+        validation_alias="LIMIAR_CREDITOS_NO_FIM",
+        description="Job verificar-creditos: aviso 'no fim' quando 0 < créditos <= limiar; zerados usam template de esgotados.",
+    )
+    link_area_creditos: str = Field(
+        default="https://buscafornecedor.com.br/creditos",
+        validation_alias="LINK_AREA_CREDITOS",
+        description="URL nos e-mails de alerta de créditos (orquestração).",
+    )
+
     mensagens_provedor_email: ProvedorMensagem = Field(
         default=ProvedorMensagem.ZENVIA,
         validation_alias="MENSAGENS_PROVEDOR_EMAIL",

@@ -8,7 +8,7 @@ from redis.asyncio import Redis
 
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo, RespostaRecebeConsulta
 from app.orquestracao.repositorios.consultas_repo import buscar_por_id as buscar_consulta_por_id
-from app.orquestracao.repositorios.engajamento_consulta_repo import carregar_para_usuario
+from app.orquestracao.repositorios.engajamento_consulta_repo import carregar_para_fornecedor
 from app.orquestracao.repositorios.fornecedores_repo import obter_ou_criar_e_incrementar_aparicao
 from app.orquestracao.servicos.auxiliares.decidir_canal_e_cadencia import decidir_canal_e_cadencia
 from app.orquestracao.servicos.auxiliares.enfileirar_ou_enviar_interno import (
@@ -36,10 +36,9 @@ async def executar_receber_consulta(
 ) -> RespostaRecebeConsulta:
     cnpj = corpo.cnpj_14()
     _log.info(
-        "[orquestracao] recebe-consulta inicio id_consulta=%s cnpj=%s usuario_id=%s",
+        "[orquestracao] recebe-consulta inicio id_consulta=%s cnpj=%s",
         corpo.id_consulta,
         cnpj,
-        corpo.usuario_id,
     )
 
     await buscar_consulta_por_id(pool, corpo.id_consulta)
@@ -54,7 +53,6 @@ async def executar_receber_consulta(
         nome=corpo.nome_fantasia,
         email=str(corpo.email_fornecedor) if corpo.email_fornecedor else None,
         telefone=corpo.telefone_fornecedor,
-        usuario_id=corpo.usuario_id,
     )
     _log.info(
         "[orquestracao] fornecedor fornecedor_id=%s email=%s telefone=%s aparicoes=%s ativo=%s",
@@ -90,11 +88,10 @@ async def executar_receber_consulta(
         tel_e,
     )
 
-    uid = corpo.usuario_id or row_f["usuario_id"]
-    snap = await carregar_para_usuario(pool, uid)
+    snap = await carregar_para_fornecedor(pool, fid)
     _log.info(
-        "[orquestracao] engajamento usuario_id=%s email=%s sms=%s recebe_email=%s",
-        uid,
+        "[orquestracao] engajamento fornecedor_id=%s email=%s sms=%s recebe_email=%s",
+        fid,
         snap.engajamento_email,
         snap.engajamento_sms,
         snap.recebe_email,
@@ -127,7 +124,7 @@ async def executar_receber_consulta(
         pedido = montar_pedido_email_apareceu_busca(
             corpo,
             destinatario=email_e or "",
-            usuario_id=uid,
+            fornecedor_id=fid,
             id_externo=ext,
             telefone_sms_fallback=tel_e,
         )
@@ -150,7 +147,7 @@ async def executar_receber_consulta(
     pedido_s = montar_pedido_sms_consultado_sem_email(
         corpo,
         destinatario=tel_e or "",
-        usuario_id=uid,
+        fornecedor_id=fid,
         id_externo=ext,
     )
     ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)

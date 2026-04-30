@@ -1,9 +1,10 @@
 from __future__ import annotations
 
+from redis.asyncio import Redis
+
 from app.mensageria.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import RepositorioEmailsPendenteRedis
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
-from redis.asyncio import Redis
 
 
 async def enfileirar_email_pendente(
@@ -21,10 +22,10 @@ async def enfileirar_email_pendente(
         tipo_template=pedido.tipo_template.value,
         contexto=dict(pedido.contexto),
         remetente=pedido.remetente,
-        usuario_id=str(pedido.usuario_id) if pedido.usuario_id else None,
-        origem=origem,
         telefone_sms_fallback=pedido.telefone_sms_fallback,
+        fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
         consulta_id=pedido.consulta_id,
+        origem=origem,
     )
 
 
@@ -44,6 +45,6 @@ async def enfileirar_sms_pendente(
         contexto=dict(pedido.contexto),
         remetente=pedido.remetente,
         origem=origem,
-        usuario_id=str(pedido.usuario_id) if pedido.usuario_id else None,
+        fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
         consulta_id=pedido.consulta_id,
     )

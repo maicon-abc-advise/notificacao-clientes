@@ -16,13 +16,24 @@ CREATE TABLE IF NOT EXISTS public.fornecedores (
     telefone text,
     ativo boolean NOT NULL DEFAULT true,
     aparicoes_busca int NOT NULL DEFAULT 0,
-    usuario_id uuid,
+    creditos int NOT NULL DEFAULT 0,
     created_at timestamptz NOT NULL DEFAULT now(),
     updated_at timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT fornecedores_cnpj_chk CHECK (cnpj ~ '^[0-9]{14}$'),
     CONSTRAINT fornecedores_cnpj_uniq UNIQUE (cnpj)
 );
 
+CREATE TABLE IF NOT EXISTS public.engajamento_fornecedores (
+    fornecedor_id uuid PRIMARY KEY REFERENCES public.fornecedores(fornecedor_id) ON DELETE CASCADE,
+    engajamento_email text NOT NULL DEFAULT 'ativo',
+    engajamento_sms text NOT NULL DEFAULT 'ativo',
+    engajamento_email_atualizado_em timestamptz,
+    engajamento_sms_atualizado_em timestamptz,
+    engajamento_atualizado_em timestamptz NOT NULL DEFAULT now(),
+    ultimo_lembrete_limite_semanal_em timestamptz,
+    recebe_email boolean NOT NULL DEFAULT true,
+    aparicoes_mes int NOT NULL DEFAULT 0,
+    aparicoes_mes_referencia varchar(7) NOT NULL DEFAULT ''
+);
+
 CREATE INDEX IF NOT EXISTS idx_consultas_created_at ON public.consultas (created_at DESC);
-CREATE INDEX IF NOT EXISTS idx_fornecedores_usuario_id ON public.fornecedores (usuario_id)
-    WHERE usuario_id IS NOT NULL;

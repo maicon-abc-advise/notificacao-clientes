@@ -50,7 +50,7 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
         remetente: str | None,
         telefone_sms_fallback: str | None,
         sweep_score_ts: int,
-        usuario_id: str | None = None,
+        fornecedor_id: str | None = None,
         consulta_id: uuid.UUID | None = None,
     ) -> None:
         agora = str(int(time.time()))
@@ -62,7 +62,7 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
             "contexto_json": json.dumps(contexto, ensure_ascii=False),
             "remetente": remetente or "",
             "telefone_sms_fallback": telefone_sms_fallback or "",
-            "usuario_id": usuario_id or "",
+            "fornecedor_id": fornecedor_id or "",
             "consulta_id": str(consulta_id) if consulta_id is not None else "",
             "status_atual": "AGUARDANDO_ABERTURA",
             "criado_em": agora,

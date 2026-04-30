@@ -12,7 +12,7 @@ from app.reenvio.repositorios.redis_emails_esperando_confirmacao import (
 from app.reenvio.repositorios.redis_consulta_notificacao import parse_consulta_id_hash
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado
-from app.reenvio.servicos.engajamento_usuario import parse_usuario_id, tocar_engajamento_email
+from app.reenvio.servicos.engajamento_fornecedor import parse_fornecedor_id, tocar_engajamento_email
 from app.reenvio.servicos.processar_status_email import TEMPLATE_SMS_EMAIL_INVALIDO, _contexto_sms_de_hash
 
 _log = logging.getLogger(__name__)
@@ -52,7 +52,7 @@ async def executar_sweep_emails_pendentes(
 
         sms_ext = f"{ext}:sweep:{uuid.uuid4().hex[:16]}"
         ctx = _contexto_sms_de_hash(campos)
-        uid_s = campos.get("usuario_id") or None
+        uid_s = (campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip() or None
         cid = parse_consulta_id_hash(campos.get("consulta_id"))
         ok = await repo_s.criar(
             redis,
@@ -62,14 +62,14 @@ async def executar_sweep_emails_pendentes(
             contexto=ctx,
             remetente=(campos.get("remetente") or None) or None,
             origem="sweep_emails_esperando_confirmacao",
-            usuario_id=uid_s if uid_s else None,
+            fornecedor_id=uid_s if uid_s else None,
             consulta_id=cid,
             sobrescrever_trava_de_email_esperando=True,
         )
         if ok:
             inseridos += 1
             await tocar_engajamento_email(
-                pool, parse_usuario_id(uid_s), EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS
+                pool, parse_fornecedor_id(uid_s), EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS
             )
             await repo_e.remover(redis, message_id)
         else:
