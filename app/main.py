@@ -10,7 +10,6 @@ from app.iam.rotas import ping_autenticado
 from app.mensageria.api.rotas import envio_mensagens, saude
 from app.reenvio.api.rotas import (
     interno_reenvio_router,
-    teste_pipeline_router,
     webhook_email_router,
     webhook_sms_router,
 )
@@ -66,5 +65,4 @@ app.include_router(envio_mensagens.router, tags=["envio"])
 app.include_router(webhook_email_router)
 app.include_router(webhook_sms_router)
 app.include_router(interno_reenvio_router)
-app.include_router(teste_pipeline_router)
 app.include_router(orquestracao_router)

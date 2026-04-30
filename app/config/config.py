@@ -13,7 +13,7 @@ def _strip(v: str | None) -> str:
 
 
 class Configuracao(BaseSettings):
-    """Infra por ambiente (Redis/Postgres *_TEST / *_PROD); mock e pipeline derivados de flags globais + ``AMBIENTE``."""
+    """Infra por ambiente (Redis/Postgres *_TEST / *_PROD); mocks derivados de flags globais + ``AMBIENTE``."""
 
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
@@ -86,9 +86,6 @@ class Configuracao(BaseSettings):
         validation_alias="MENSAGENS_PROVEDOR_SMS",
     )
 
-    # Inferido: rotas /v1/interno/teste-pipeline/* só em AMBIENTE=local
-    teste_pipeline_habilitado: bool = False
-
     @field_validator("ambiente", mode="before")
     @classmethod
     def _normalizar_ambiente(cls, v: Any) -> Any:
@@ -139,7 +136,7 @@ class Configuracao(BaseSettings):
         return v
 
     @model_validator(mode="after")
-    def _aplicar_redis_postgres_e_pipeline(self) -> Self:
+    def _aplicar_redis_postgres(self) -> Self:
         local = self.ambiente == Ambiente.LOCAL
 
         r_test, r_prod, r_fb = _strip(self.redis_url_test), _strip(self.redis_url_prod), _strip(self.redis_url_fallback)
@@ -162,8 +159,6 @@ class Configuracao(BaseSettings):
 
         wh = _strip(self.zenvia_webhook_secret_prod) or self.zenvia_webhook_secret_fallback
         object.__setattr__(self, "zenvia_webhook_secret", wh)
-
-        object.__setattr__(self, "teste_pipeline_habilitado", self.ambiente == Ambiente.LOCAL)
 
         return self
 

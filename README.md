@@ -1,29 +1,26 @@
 # Sistema de e-mail / notificações
 
-API em **FastAPI** para o fluxo de notificações (ABC Advise). Hoje o código cobre **envio de e-mail e SMS** (Zenvia), autenticação interna com API key, saúde da API, Docker/Redis e **templates** em **Postgres** (`public.templates_notificacao`). Os pedidos `POST /v1/mensagens/email` e `POST /v1/mensagens/sms` usam **só modo template**: `tipo_template` (enum alinhado à coluna `tipo`) + `contexto` (mapa para substituir `{{ chave }}`); o HTML e o texto SMS vêm da base. O **assunto** do e-mail é **inferido no servidor** a partir de `tipo_template` (`app/templates/assunto_email.py`), sem campo no JSON.
-
+API em **FastAPI** para o fluxo de notificações (ABC Advise). 
 **Requisitos:** Python 3.11 ou superior.
 
 ---
 
-## 1. Estrutura de pastas (conforme o repositório)
+## 1. Estrutura de pastas 
 
-A raiz do projeto (ex.: a pasta clonada como `notificacao-clientes/`) contém o seguinte. **Não existe** pasta com o nome `provedor`; a escolha do conector de mensageria fica no **módulo** `app.config.provedor_mensagens` (ficheiro `provedor_mensagens.py` dentro de `app/config/`, juntamente com `config.py`, `dependencias.py` e `security.py`).
-
-O código de negócio do envio está agrupado em **`app.mensageria`**. **`app.reenvio`** implementa filas e webhooks; **`app.orquestracao`** permanece reservado.
+O código de negócio do envio está agrupado em **`app.mensageria`**. **`app.reenvio`** implementa filas e webhooks para receber feedbacks e reenvios; **`app.orquestracao`** é responsável por transformar uma consulta em um envio de mensagem.
 
 ### Raiz do repositório
 
 ```
 .
-├── app/                    # Pacote da aplicação
-├── popula-tabelas/         # DDL + seed de dev/teste (um comando; ver secção 2)
-├── tests/                  # Testes (pytest)
-├── alembic/                # Só com .gitkeep hoje; reservado a migrações
+├── app/                    
+├── popula-tabelas/         
+├── tests/                  
+├── alembic/                
 ├── .env.example
 ├── .gitignore
 ├── docker-compose.yml
-├── docker-compose.postgres.yml  # Postgres (5433) + Redis (6379) para dev local
+├── docker-compose.postgres.yml  
 ├── Dockerfile
 ├── pyproject.toml
 └── README.md
@@ -43,8 +40,8 @@ app/
 │   └── provedor_mensagens.py
 ├── templates/
 │   ├── __init__.py
-│   ├── modelo.py         # TemplateNotificacao, CodigoTipoTemplate
-│   ├── porta.py          # PortaTemplates (Protocol)
+│   ├── modelo.py
+│   ├── porta.py
 │   └── repositorio_postgres.py
 ├── mensageria/
 │   ├── __init__.py
@@ -79,48 +76,80 @@ app/
 │       └── porta_composta.py
 ├── orquestracao/
 │   ├── __init__.py
-│   ├── api/__init__.py
-│   ├── excecoes/__init__.py
-│   ├── repositorios/__init__.py
-│   └── servicos/__init__.py
+│   ├── api/
+│   │   ├── __init__.py
+│   │   ├── dependencias.py
+│   │   ├── router.py
+│   │   ├── dto/
+│   │   │   ├── __init__.py
+│   │   │   ├── recebe_consulta_dto.py
+│   │   │   └── verificar_creditos_dto.py
+│   │   └── rotas/
+│   │       ├── __init__.py
+│   │       ├── emails_pendentes_rota.py
+│   │       ├── recebe_consulta_rota.py
+│   │       └── verificar_creditos_rota.py
+│   ├── externo/
+│   │   └── bigdatacorp/
+│   │       ├── __init__.py
+│   │       ├── adaptador_api.py
+│   │       └── adaptador_mock.py
+│   ├── excecoes/
+│   │   └── __init__.py
+│   ├── repositorios/
+│   │   ├── __init__.py
+│   │   ├── consultas_repo.py
+│   │   ├── engajamento_consulta_repo.py
+│   │   ├── fornecedores_repo.py
+│   │   └── redis_emails_pendentes_repo.py
+│   └── servicos/
+│       ├── __init__.py
+│       ├── receber_consulta_servico.py
+│       ├── verificar_creditos_servico.py
+│       └── auxiliares/
+│           ├── __init__.py
+│           ├── decidir_canal_e_cadencia.py
+│           ├── enfileirar_ou_enviar_interno.py
+│           ├── enriquecer_contato_fornecedor.py
+│           ├── montar_pedido_mensagem.py
+│           ├── porta_enriquecimento_contato.py
+│           └── ultimo_envio_qualquer_canal.py
 └── reenvio/
     ├── __init__.py
     ├── redis_app.py
     ├── api/
     │   ├── dependencias_webhook.py
     │   ├── dto/webhook_zenvia.py
-    │   └── rotas/          # webhooks, interno, teste-pipeline
+    │   └── rotas/
     ├── excecoes/
-    ├── repositorios/       # Redis (filas) + Postgres (idempotência de webhooks)
+    ├── repositorios/
     └── servicos/
 ```
 
-### O que é cada bloco (resumido)
+---
 
-| Local | Papel |
-|--------|--------|
-| `app.mensageria.api.dto` + `app.mensageria.api.rotas` | Contrato JSON e rotas (FastAPI). |
-| `app.mensageria.api.externo.zenvia` | Chamada HTTP à API v2 da Zenvia. |
-| `app.config` | `Configuracao` a partir do `.env` (pares `*_TEST`/`*_PROD` + `AMBIENTE`), `Depends` compartilhado e provedores de e-mail/SMS. |
-| `app.mensageria.excecoes` | `ErroEnvioZenvia`, `FalhaConfiguracaoProvedor` e similares. |
-| `app.mensageria.servicos` | Abstração de “enviar mensagem” (porta + fábrica) sem lógica HTTP do Zenvia. |
-| `app.mensageria.repositorios` | `emails_enviados` e `sms_enviados` (Postgres) após envio pela API. |
-| `app.templates` | Tabela `templates_notificacao` no Postgres, porta `PortaTemplates`, `RepositorioTemplatesPostgres`. |
-| `app.reenvio` | Webhooks, Redis (`emails-esperando-confirmacao`, `sms-pendente`), rotas internas (sweep, listagem SMS). |
-| `app.orquestracao.*` | Reservado. |
+## 2. Ambiente local vs produção e mocks
 
-A pasta **`analise-inicial/`** pode conter notas de análise (não faz parte do arranque da API).
+A variável **`AMBIENTE`** (`local`, `dev`, `development` → tratado como local; `producao`, `prod`, `production`, `produção` → produção) define **qual par de URLs** a aplicação usa para Redis e Postgres, não se os provedores externos são mockados.
+
+- **Local:** entram `REDIS_URL_TEST` e `DATABASE_URL_TEST`. Se algum estiver vazio, vale o fallback `REDIS_URL` e `DATABASE_URL` (este último tem default no código apontando para Postgres em `127.0.0.1:5433`).
+- **Produção:** entram `REDIS_URL_PROD` e `DATABASE_URL_PROD`, com o mesmo tipo de fallback (`REDIS_URL`, `DATABASE_URL`) quando faltar o par `*_PROD`.
+
+**Mocks (independentes do `AMBIENTE`):**
+
+- **`USE_ZENVIA_MOCK`:** `true` → envio de e-mail/SMS pela Zenvia é simulado (sem HTTP). `false` → usa a API real; credenciais em `ZENVIA_*_PROD` ou, sem sufixo, o fallback esperado pelo código (ex.: `ZENVIA_API_TOKEN`).
+- **`USE_BIGDATACORP_MOCK`:** `true` → dados da Big Data Corp vêm do adaptador mock. `false` → espera `BIGDATACORP_API_BASE_URL` e `BIGDATACORP_ACCESS_TOKEN` para chamadas reais (conforme **`.env.example`**).
+
+Ou seja: você pode rodar **`AMBIENTE=local`** com mocks ligados e apontar Redis/Postgres do Docker na sua máquina, ou **`AMBIENTE=producao`** em deploy com `*_PROD` e mocks desligados para integrações reais — os dois eixos (URLs de infra vs flags de mock) se combinam, mas não são a mesma coisa.
 
 ---
 
-## 2. Postgres + Redis (Docker local)
+## 3. Postgres + Redis (Docker local)
 
 Na **raiz deste projeto** existe `docker-compose.postgres.yml` com:
 
 - **Postgres** na porta **5433** (templates + tabelas de reenvio: use `DATABASE_URL_TEST` / `DATABASE_URL` no `.env` conforme **`.env.example`**);
 - **Redis** na porta **6379** (e-mails esperando confirmação + fila `sms-pendente`).
-
-Chaves Redis usadas pelo reenvio: **`emails-esperando-confirmacao:*`** (pós-envio de e-mail, webhooks e sweep) e **`sms-pendente:*`** (fila de SMS antes do disparo). Dados antigos em `email:pendente:*` / `sms:pendente:*` **não** são migrados automaticamente.
 
 Credenciais alinhadas ao **`.env.example`** (`REDIS_URL_TEST` / `REDIS_URL_PROD`, mocks globais, Zenvia só `*_PROD` ou sem sufixo).
 
@@ -137,48 +166,30 @@ docker compose -f docker-compose.postgres.yml up -d
 docker compose -f docker-compose.postgres.yml down
 ```
 
-**Popular tabelas (só desenvolvimento / teste)** — não faz parte do pacote publicado da API; em produção o schema vem de migrações ou do pipeline de implantação. Na raiz do repositório, com Postgres acessível e variáveis de base no `.env` (a app resolve `DATABASE_URL_*` conforme `AMBIENTE`):
+**Popular tabelas (só desenvolvimento / teste)**:
 
 ```powershell
 cd caminho\para\notificacao-clientes
 .\.venv\Scripts\python popula-tabelas\run.py
 ```
 
-Isso aplica em sequência DDL + seed de templates, DDL de reenvio e DDL de orquestração. SQL e dados em `popula-tabelas/popula_tabelas/`. Para conferir templates: `SELECT id, tipo, email IS NULL AS sem_email, length(sms) FROM public.templates_notificacao;`.
+**Acessar o Redis dentro do contêiner** (CLI interativo; sair com `quit`):
 
-**Bases que já tinham `engajamento_usuarios.engajamento_estado` (coluna única):** aplique uma vez o script `popula-tabelas/popula_tabelas/sql/migrate_engajamento_dois_canais.sql` no Postgres antes de subir esta versão da API (ele cria `engajamento_email` / `engajamento_sms`, copia dados e remove a coluna antiga). Instalações novas só com `reenvio.sql` atual já nascem com as duas colunas.
+```powershell
+docker compose -f docker-compose.postgres.yml exec redis-local redis-cli
+```
 
-Para aplicar só um bloco (ex.: só templates), use as funções em `popula_tabelas.aplicar` a partir desse diretório (mesmo `PYTHONPATH` que `run.py`).
+**Acessar o Postgres dentro do contêiner** e listar tabelas:
 
----
+```powershell
+docker compose -f docker-compose.postgres.yml exec postgres-templates psql -U notificacao -d notificacao
+```
 
-## 2.1. Testes locais sem Zenvia (`/v1/interno/teste-pipeline/`)
-
-Rotas para **simular** envio de e-mail/SMS e webhooks **sem** chamar a API da Zenvia (útil para exercitar Redis + Postgres em desenvolvimento).
-
-**Ativar:** com **`AMBIENTE=local`** as rotas ficam disponíveis (não há variável `TESTE_PIPELINE_HABILITADO`). Com **`AMBIENTE=producao`** não são expostas.
-
-**Autenticação:** igual às outras rotas internas — **`Authorization: Bearer <API_KEY>`** ou **`X-Api-Key`**.
-
-**Mocks:** `USE_ZENVIA_MOCK` e `USE_BIGDATACORP_MOCK` são únicos (não há pares por ambiente). Credenciais Zenvia reais: `ZENVIA_*_PROD` ou fallback sem sufixo; Big Data Corp: `BIGDATACORP_API_BASE_URL` e `BIGDATACORP_ACCESS_TOKEN` quando o mock estiver desligado (ver **`.env.example`**).
-
-| Método | Caminho (prefixo `/v1/interno/teste-pipeline`) | Resumo |
-|--------|--------------------------------------------------|--------|
-| `POST` | `/engajamento` | Garante uma linha em `engajamento_usuarios` (UUID opcional no body). |
-| `POST` | `/simular-email-enviado` | Pós-envio simulado: Redis `emails-esperando-confirmacao:*` + `emails_enviados` (+ engajamento opcional), com `messageId` falso. |
-| `POST` | `/disparar-webhook-email` | Monta um `MESSAGE_STATUS` e usa a mesma lógica que `POST /v1/webhooks/notificacao/email`. |
-| `POST` | `/simular-sms-enviado` | Remove `sms-pendente:*` se existir e grava `sms_enviados` com id Zenvia falso. |
-| `POST` | `/cenario-email-bounce-gera-sms-redis` | E-mail falso + webhook de bounce “duro” → entrada na fila `sms-pendente` (Redis). |
-
-No **Swagger** (`/docs`, grupo **teste-pipeline**) vês os corpos e testas no browser.
-
-**Webhooks de status** (fora deste modo; o corpo segue o contrato do provedor): `POST /v1/webhooks/notificacao/email` e `POST /v1/webhooks/notificacao/sms`. Com **`ZENVIA_WEBHOOK_SECRET`** definido, inclui **`X-Webhook-Secret`** no pedido. Esquema do corpo: modelo **WebhookMessageStatusZenvia** no OpenAPI.
-
-**Documentação complementar** (fluxos em diagrama): `../analise-inicial/README-REENVIO.md` se o clone incluir a pasta `analise-inicial/`.
+No `psql`, para listar tabelas do schema público: `\dt`
 
 ---
 
-## 3. Como rodar
+## 4. Como rodar
 
 ### Opção A — ambiente virtual (desenvolvimento)
 
