@@ -1,11 +1,7 @@
 from __future__ import annotations
-
 from app.orquestracao.servicos.auxiliares.porta_enriquecimento_contato import ResultadoEnriquecimentoContato
 
-
 class AdaptadorBigDataCorpApi:
-    """Cliente HTTP real (em construção). Recebe base URL e token do ``.env``."""
-
     def __init__(
         self,
         api_base_url: str | None = None,

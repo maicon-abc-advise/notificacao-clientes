@@ -1,7 +1,5 @@
 from typing import Annotated
-
 from fastapi import Depends, HTTPException
-
 from app.config.config import Configuracao, obter_configuracao
 from app.mensageria.excecoes.erro_provedor import FalhaConfiguracaoProvedor
 from app.mensageria.servicos.fabrica_provedor_mensagem import construir_porta_mensagem

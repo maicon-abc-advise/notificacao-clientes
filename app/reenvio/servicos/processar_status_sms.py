@@ -65,7 +65,17 @@ async def processar_webhook_status_sms(
     description = payload.messageStatus.description
     motivo = " ".join(x for x in (cause, description) if x)[:2000] or None
 
-    if code in ("DELIVERED", "READ"):
+    if code == "READ":
+        await atualizar_status_por_id_interno(
+            pool,
+            id_interno=id_interno,
+            status_ultimo="lido",
+            motivo=motivo,
+        )
+        await tocar_engajamento_sms(pool, fid, EngajamentoSmsEstado.SMS_ENTREGUE)
+        return {"acao": "sms_lido", "id": str(id_interno), "code": code}
+
+    if code == "DELIVERED":
         await atualizar_status_por_id_interno(
             pool,
             id_interno=id_interno,
@@ -73,7 +83,7 @@ async def processar_webhook_status_sms(
             motivo=motivo,
         )
         await tocar_engajamento_sms(pool, fid, EngajamentoSmsEstado.SMS_ENTREGUE)
-        return {"acao": "sms_enviado", "id": str(id_interno), "code": code}
+        return {"acao": "sms_entregue", "id": str(id_interno), "code": code}
 
     if code == "SENT":
         await atualizar_status_por_id_interno(

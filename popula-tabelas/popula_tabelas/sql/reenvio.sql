@@ -20,7 +20,7 @@ CREATE TABLE IF NOT EXISTS public.sms_enviados (
     criado_em timestamptz NOT NULL DEFAULT now(),
     atualizado_em timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT sms_enviados_status_chk CHECK (
-        status_ultimo IN ('processando', 'enviado', 'falha_definitiva', 'reprocessar')
+        status_ultimo IN ('processando', 'enviado', 'lido', 'falha_definitiva', 'reprocessar')
     )
 );
 
@@ -49,7 +49,7 @@ CREATE TABLE IF NOT EXISTS public.emails_enviados (
     criado_em timestamptz NOT NULL DEFAULT now(),
     atualizado_em timestamptz NOT NULL DEFAULT now(),
     CONSTRAINT emails_enviados_status_chk CHECK (
-        status_ultimo IN ('processando', 'enviado', 'falha_definitiva', 'reprocessar')
+        status_ultimo IN ('processando', 'enviado', 'lido', 'falha_definitiva', 'reprocessar')
     )
 );
 

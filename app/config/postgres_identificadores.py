@@ -1,23 +1,18 @@
-"""Nomes qualificados de schema/tabela/coluna para Postgres (sufixo só em consultas/fornecedores + coluna FK)."""
-
 from __future__ import annotations
-
 import re
 from dataclasses import dataclass
 from functools import lru_cache
-
 from app.config.config import obter_configuracao
 
+_RE_FID = re.compile(r"\bfornecedor_id\b")
 
 def _q_ident(ident: str) -> str:
     if re.match(r"^[a-z_][a-z0-9_]*$", ident):
         return ident
     return '"' + ident.replace('"', '""') + '"'
 
-
 @dataclass(frozen=True, slots=True)
 class PostgresIdentificadores:
-    """Alinhado a POSTGRES_SCHEMA e POSTGRES_TABELA_SUFFIX no .env."""
 
     schema: str
     tabela_suffix: str
@@ -36,12 +31,7 @@ class PostgresIdentificadores:
     def qual(self, base: str) -> str:
         return f"{_q_ident(self.schema)}.{_q_ident(self.nome_fisico_tabela(base))}"
 
-
-_RE_FID = re.compile(r"\bfornecedor_id\b")
-
-
 def substituir_sql_ddl(sql: str, p: PostgresIdentificadores) -> str:
-    """Ajusta DDL/arquivos .sql: schema, tabelas consultas/fornecedores e coluna fornecedor_id."""
     s = sql
     s = s.replace("public.fornecedores", p.qual("fornecedores"))
     s = s.replace("public.consultas", p.qual("consultas"))
@@ -50,7 +40,6 @@ def substituir_sql_ddl(sql: str, p: PostgresIdentificadores) -> str:
     if p.tabela_suffix:
         s = _RE_FID.sub(p.col_fornecedor_id, s)
     return s
-
 
 @lru_cache
 def obter_identificadores_postgres() -> PostgresIdentificadores:

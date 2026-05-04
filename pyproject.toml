@@ -1,4 +1,3 @@
-# Empacotamento e dependências do projeto (equivalente conceitual ao Maven no Java).
 [build-system]
 requires = ["hatchling>=1.26"]
 build-backend = "hatchling.build"

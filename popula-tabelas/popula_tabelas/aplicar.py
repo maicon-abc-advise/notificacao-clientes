@@ -17,11 +17,9 @@ _MIGRACOES_ORQUESTRACAO_INCREMENTAIS: tuple[str, ...] = (
     "migracao_engajamento_fornecedor_id.sql",
 )
 
-
 def _sql_arquivo(nome: str) -> str:
     raw = (_DIR_SQL / nome).read_text(encoding="utf-8")
     return substituir_sql_ddl(raw, obter_identificadores_postgres())
-
 
 async def aplicar_migracoes_orquestracao_incrementais(dsn: str) -> None:
     """Apenas ALTER/ADD seguros em orquestração — não recria tabelas nem roda seed."""
@@ -66,11 +64,29 @@ async def aplicar_templates_schema_e_seed(dsn: str) -> None:
     await aplicar_seed_templates(dsn)
 
 
+async def _migrar_status_ultimo_lido_e_limpar_zenvia(conn: asyncpg.Connection) -> None:
+    """Remove coluna legada ``zenvia_ultimo_code`` e alinha CHECK de ``status_ultimo`` com valor ``lido``."""
+    p = obter_identificadores_postgres()
+    for base, chk in (
+        ("emails_enviados", "emails_enviados_status_chk"),
+        ("sms_enviados", "sms_enviados_status_chk"),
+    ):
+        t = p.qual(base)
+        await conn.execute(f"ALTER TABLE {t} DROP COLUMN IF EXISTS zenvia_ultimo_code")
+        await conn.execute(f"ALTER TABLE {t} DROP CONSTRAINT IF EXISTS {chk}")
+        await conn.execute(
+            f"""ALTER TABLE {t} ADD CONSTRAINT {chk} CHECK (
+                status_ultimo IN ('processando', 'enviado', 'lido', 'falha_definitiva', 'reprocessar')
+            )""",
+        )
+
+
 async def aplicar_schema_reenvio(dsn: str) -> None:
     sql = _sql_arquivo("reenvio.sql")
     conn = await asyncpg.connect(dsn)
     try:
         await conn.execute(sql)
+        await _migrar_status_ultimo_lido_e_limpar_zenvia(conn)
     finally:
         await conn.close()
 

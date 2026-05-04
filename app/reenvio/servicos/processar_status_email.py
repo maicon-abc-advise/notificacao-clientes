@@ -73,7 +73,9 @@ async def processar_webhook_status_email(
 
     if code == "READ":
         await atualizar_status_por_id_mensagem_zenvia(
-            pool, id_mensagem_zenvia=message_id, status_ultimo="enviado"
+            pool,
+            id_mensagem_zenvia=message_id,
+            status_ultimo="lido",
         )
         await tocar_engajamento_email(pool, fid, EngajamentoEmailEstado.EMAIL_LIDO)
         await repo.remover(redis, message_id)
@@ -81,7 +83,9 @@ async def processar_webhook_status_email(
 
     if code == "SENT":
         await atualizar_status_por_id_mensagem_zenvia(
-            pool, id_mensagem_zenvia=message_id, status_ultimo="processando"
+            pool,
+            id_mensagem_zenvia=message_id,
+            status_ultimo="processando",
         )
         await tocar_engajamento_email(pool, fid, EngajamentoEmailEstado.EMAIL_WEBHOOK_SENT)
         await repo.atualizar_campos(redis, message_id, {"status_atual": "ENVIADO_PROVEDOR"})
@@ -89,7 +93,9 @@ async def processar_webhook_status_email(
 
     if code == "DELIVERED":
         await atualizar_status_por_id_mensagem_zenvia(
-            pool, id_mensagem_zenvia=message_id, status_ultimo="enviado"
+            pool,
+            id_mensagem_zenvia=message_id,
+            status_ultimo="enviado",
         )
         await tocar_engajamento_email(pool, fid, EngajamentoEmailEstado.EMAIL_ENTREGUE_CAIXA)
         await repo.atualizar_campos(redis, message_id, {"status_atual": "ENTREGUE_CAIXA"})
@@ -106,7 +112,9 @@ async def processar_webhook_status_email(
                     ext,
                 )
                 await atualizar_status_por_id_mensagem_zenvia(
-                    pool, id_mensagem_zenvia=message_id, status_ultimo="falha_definitiva"
+                    pool,
+                    id_mensagem_zenvia=message_id,
+                    status_ultimo="falha_definitiva",
                 )
                 await tocar_engajamento_email(pool, fid, EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SEM_SMS)
                 await definir_recebe_email(pool, fid, False)
@@ -134,7 +142,9 @@ async def processar_webhook_status_email(
                 sobrescrever_trava_de_email_esperando=True,
             )
             await atualizar_status_por_id_mensagem_zenvia(
-                pool, id_mensagem_zenvia=message_id, status_ultimo="falha_definitiva"
+                pool,
+                id_mensagem_zenvia=message_id,
+                status_ultimo="falha_definitiva",
             )
             await tocar_engajamento_email(pool, fid, EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SMS_FILA)
             await definir_recebe_email(pool, fid, False)
@@ -147,7 +157,9 @@ async def processar_webhook_status_email(
             }
 
         await atualizar_status_por_id_mensagem_zenvia(
-            pool, id_mensagem_zenvia=message_id, status_ultimo="reprocessar"
+            pool,
+            id_mensagem_zenvia=message_id,
+            status_ultimo="reprocessar",
         )
         await tocar_engajamento_email(pool, fid, engajamento_falha_recuperavel_email(cls))
         await repo.atualizar_campos(

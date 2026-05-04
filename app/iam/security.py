@@ -1,7 +1,6 @@
 from secrets import compare_digest
 from fastapi import HTTPException, status
 
-
 def exigir_api_key(valor_recebido: str | None, api_key_servidor: str) -> None:
 
     if not valor_recebido:

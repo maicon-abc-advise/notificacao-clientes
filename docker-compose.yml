@@ -1,4 +1,3 @@
-# Orquestração local: Redis + API.
 services:
   redis:
     image: redis:7-alpine
@@ -6,7 +5,9 @@ services:
       - "6379:6379"
 
   api:
-    build: .
+    build:
+      context: .
+      dockerfile: Dockerfile.local
     ports:
       - "8000:8000"
     environment:

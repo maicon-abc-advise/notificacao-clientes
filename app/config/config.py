@@ -13,8 +13,6 @@ def _strip(v: str | None) -> str:
 
 
 class Configuracao(BaseSettings):
-    """Infra por ambiente (Redis/Postgres *_TEST / *_PROD); mocks derivados de flags globais + ``AMBIENTE``."""
-
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     ambiente: Ambiente = Field(
@@ -39,13 +37,13 @@ class Configuracao(BaseSettings):
         validation_alias="BIGDATACORP_API_BASE_URL",
         description="Base da API (ex.: plataforma Big Data Corp); usado quando USE_BIGDATACORP_MOCK=false.",
     )
+
     bigdatacorp_access_token: str | None = Field(
         default=None,
         validation_alias="BIGDATACORP_ACCESS_TOKEN",
         description="AccessToken / API key; cabeçalho típico na integração BDC.",
     )
-
-    # --- Redis / Postgres (pares por ambiente de dados) ---
+    
     redis_url_test: str | None = Field(default=None, validation_alias="REDIS_URL_TEST")
     redis_url_prod: str | None = Field(default=None, validation_alias="REDIS_URL_PROD")
     redis_url_fallback: str | None = Field(default=None, validation_alias="REDIS_URL")

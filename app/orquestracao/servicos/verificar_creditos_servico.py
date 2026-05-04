@@ -1,12 +1,9 @@
 from __future__ import annotations
-
 import logging
 import uuid
 from datetime import UTC, datetime, timedelta
-
 import asyncpg
 from redis.asyncio import Redis
-
 from app.config.config import Configuracao
 from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.orquestracao.api.dto.verificar_creditos_dto import RespostaVerificarCreditos
@@ -33,7 +30,6 @@ from app.templates.modelo import CodigoTipoTemplate
 
 _log = logging.getLogger(__name__)
 _ORIGEM = "orquestracao-verificar-creditos"
-
 
 async def executar_verificar_creditos(
     pool: asyncpg.Pool,

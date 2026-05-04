@@ -21,8 +21,8 @@ async def obter_ou_criar_e_incrementar_aparicao(
     cf = p.col_fornecedor_id
     row = await pool.fetchrow(
         f"""
-        INSERT INTO {t} (cnpj, nome, email, telefone, aparicoes_busca, creditos)
-        VALUES ($1, $2, $3, $4, 1, 0)
+        INSERT INTO {t} (cnpj, nome, email, telefone, aparicoes_busca, creditos, ativo)
+        VALUES ($1, $2, $3, $4, 1, 0, true)
         ON CONFLICT (cnpj) DO UPDATE SET
             nome = COALESCE(EXCLUDED.nome, {t}.nome),
             email = COALESCE(NULLIF(EXCLUDED.email, ''), {t}.email),

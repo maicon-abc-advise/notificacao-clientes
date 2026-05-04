@@ -215,6 +215,11 @@ docker compose up --build
 
 Detalhe das variáveis: **`.env.example`**.
 
+### Dashboard (`notificacao-clientes-dashboard`)
+
+- Rotas internas só de leitura: prefixo **`/v1/interno/dashboard`** (header **`X-Api-Key`** igual às outras rotas internas). Instruções de execução: README na pasta do dashboard.
+- Ao correr **`python popula-tabelas/run.py`**, após o `reenvio.sql` é aplicada uma migração que remove a coluna legada **`zenvia_ultimo_code`** (se existir) e recria o `CHECK` de **`status_ultimo`** em **`emails_enviados`** e **`sms_enviados`** para permitir também o valor **`lido`** (além de `processando`, `enviado`, `falha_definitiva`, `reprocessar`). No **Supabase**, se não correres o `run.py`, executa o equivalente: `DROP COLUMN IF EXISTS zenvia_ultimo_code` e atualiza o constraint conforme o DDL em `popula-tabelas/popula_tabelas/aplicar.py` (`_migrar_status_ultimo_lido_e_limpar_zenvia`).
+
 ---
 
 **Não comitar** `.env`, `.venv/`, `__pycache__/` (conforme **`.gitignore`**).
