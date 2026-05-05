@@ -16,7 +16,7 @@ async def enriquecer_se_necessario(
     porta: PortaEnriquecimentoContato,
     *,
     fornecedor_id: uuid.UUID,
-    cnpj: str,
+    cnpj_basico: str,
     email_atual: str | None,
     telefone_atual: str | None,
 ) -> tuple[str | None, str | None]:
@@ -27,8 +27,13 @@ async def enriquecer_se_necessario(
         _log.info("[orquestracao] enriquecimento: e-mail e telefone ja presentes — sem chamada a porta")
         return email, telefone
 
-    _log.info("[orquestracao] enriquecimento: chamando porta cnpj=%s (faltava email=%s telefone=%s)", cnpj, not email, not telefone)
-    r = await porta.enriquecer_por_cnpj(cnpj)
+    _log.info(
+        "[orquestracao] enriquecimento: chamando porta cnpj_basico=%s (faltava email=%s telefone=%s)",
+        cnpj_basico,
+        not email,
+        not telefone,
+    )
+    r = await porta.enriquecer_por_cnpj_basico(cnpj_basico)
     _log.info("[orquestracao] enriquecimento: porta retornou email=%s telefone=%s", r.email, r.telefone)
     novo_email = email or (r.email.strip() if r.email else None)
     novo_tel = telefone or (r.telefone.strip() if r.telefone else None)

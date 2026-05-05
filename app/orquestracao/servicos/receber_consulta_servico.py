@@ -80,7 +80,7 @@ async def executar_receber_consulta(
         pool,
         porta_enriquecimento,
         fornecedor_id=fid,
-        cnpj=cnpj,
+        cnpj_basico=corpo.cnpj_basico,
         email_atual=email_f,
         telefone_atual=tel_f,
     )

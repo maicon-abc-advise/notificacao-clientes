@@ -6,7 +6,7 @@ import pytest
 os.environ.setdefault("API_KEY", "test-api-key-unit")
 os.environ.setdefault("AMBIENTE", "local")
 os.environ.setdefault("USE_ZENVIA_MOCK", "false")
-os.environ.setdefault("USE_BIGDATACORP_MOCK", "true")
+os.environ.setdefault("MOCK_COMPANY_PROFILE_ENRIQUECIMENTO", "true")
 os.environ.setdefault("REDIS_URL_TEST", "redis://localhost:6379/0")
 os.environ.setdefault(
     "DATABASE_URL_TEST",

@@ -90,14 +90,16 @@ app/
 │   │       ├── recebe_consulta_rota.py
 │   │       └── verificar_creditos_rota.py
 │   ├── externo/
-│   │   └── bigdatacorp/
+│   │   └── company_profile/
 │   │       ├── __init__.py
-│   │       ├── adaptador_api.py
-│   │       └── adaptador_mock.py
+│   │       ├── adaptador_mock.py
+│   │       ├── adaptador_postgres.py
+│   │       └── extrair_contato.py
 │   ├── excecoes/
 │   │   └── __init__.py
 │   ├── repositorios/
 │   │   ├── __init__.py
+│   │   ├── company_profile_repo.py
 │   │   ├── consultas_repo.py
 │   │   ├── engajamento_consulta_repo.py
 │   │   ├── fornecedores_repo.py
@@ -138,7 +140,7 @@ A variável **`AMBIENTE`** (`local`, `dev`, `development` → tratado como local
 **Mocks (independentes do `AMBIENTE`):**
 
 - **`USE_ZENVIA_MOCK`:** `true` → envio de e-mail/SMS pela Zenvia é simulado (sem HTTP). `false` → usa a API real; credenciais em `ZENVIA_*_PROD` ou, sem sufixo, o fallback esperado pelo código (ex.: `ZENVIA_API_TOKEN`).
-- **`USE_BIGDATACORP_MOCK`:** `true` → dados da Big Data Corp vêm do adaptador mock. `false` → espera `BIGDATACORP_API_BASE_URL` e `BIGDATACORP_ACCESS_TOKEN` para chamadas reais (conforme **`.env.example`**).
+- **`MOCK_COMPANY_PROFILE_ENRIQUECIMENTO`** (ou legado **`USE_BIGDATACORP_MOCK`**): `true` → e-mail/telefone para enriquecimento vêm do adaptador mock. `false` → leitura em Postgres na tabela **`company_profile`** (`cnpj` = CNPJ básico de 8 dígitos da requisição; `full_profile` JSON com `contato.emails` / `contato.telefones`), no schema configurado em **`POSTGRES_SCHEMA`**.
 
 Ou seja: você pode rodar **`AMBIENTE=local`** com mocks ligados e apontar Redis/Postgres do Docker na sua máquina, ou **`AMBIENTE=producao`** em deploy com `*_PROD` e mocks desligados para integrações reais — os dois eixos (URLs de infra vs flags de mock) se combinam, mas não são a mesma coisa.
 

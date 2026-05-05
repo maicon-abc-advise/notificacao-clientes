@@ -21,10 +21,13 @@ class Configuracao(BaseSettings):
         description="local | producao (também dev, prod, produção).",
     )
 
-    use_bigdatacorp_mock: bool = Field(
+    mock_company_profile_enriquecimento: bool = Field(
         default=True,
-        validation_alias="USE_BIGDATACORP_MOCK",
-        description="true = AdaptadorBigDataCorpMock; false = cliente API (credenciais abaixo).",
+        validation_alias=AliasChoices(
+            "MOCK_COMPANY_PROFILE_ENRIQUECIMENTO",
+            "USE_BIGDATACORP_MOCK",
+        ),
+        description="true = AdaptadorCompanyProfileMock; false = leitura Postgres em company_profile.",
     )
     use_zenvia_mock: bool = Field(
         default=True,
@@ -32,17 +35,6 @@ class Configuracao(BaseSettings):
         description="true = envio simulado sem chamar a API Zenvia.",
     )
 
-    bigdatacorp_api_base_url: str | None = Field(
-        default=None,
-        validation_alias="BIGDATACORP_API_BASE_URL",
-        description="Base da API (ex.: plataforma Big Data Corp); usado quando USE_BIGDATACORP_MOCK=false.",
-    )
-
-    bigdatacorp_access_token: str | None = Field(
-        default=None,
-        validation_alias="BIGDATACORP_ACCESS_TOKEN",
-        description="AccessToken / API key; cabeçalho típico na integração BDC.",
-    )
     
     redis_url_test: str | None = Field(default=None, validation_alias="REDIS_URL_TEST")
     redis_url_prod: str | None = Field(default=None, validation_alias="REDIS_URL_PROD")
@@ -121,7 +113,7 @@ class Configuracao(BaseSettings):
         return v
 
     @field_validator(
-        "use_bigdatacorp_mock",
+        "mock_company_profile_enriquecimento",
         "use_zenvia_mock",
         mode="before",
     )
@@ -138,13 +130,6 @@ class Configuracao(BaseSettings):
     @field_validator("zenvia_webhook_secret_fallback", "zenvia_webhook_secret_prod", mode="before")
     @classmethod
     def _webhook_secret_vazio_none(cls, v: Any) -> Any:
-        if v == "" or v is None:
-            return None
-        return v
-
-    @field_validator("bigdatacorp_api_base_url", "bigdatacorp_access_token", mode="before")
-    @classmethod
-    def _bdc_opcional_vazio_none(cls, v: Any) -> Any:
         if v == "" or v is None:
             return None
         return v

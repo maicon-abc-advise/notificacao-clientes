@@ -13,7 +13,7 @@ services:
     environment:
       AMBIENTE: ${AMBIENTE:-local}
       API_KEY: ${API_KEY:-dev-change-me}
-      USE_BIGDATACORP_MOCK: ${USE_BIGDATACORP_MOCK:-true}
+      MOCK_COMPANY_PROFILE_ENRIQUECIMENTO: ${MOCK_COMPANY_PROFILE_ENRIQUECIMENTO:-true}
       USE_ZENVIA_MOCK: ${USE_ZENVIA_MOCK:-true}
       REDIS_URL_TEST: ${REDIS_URL_TEST:-redis://redis:6379/0}
       REDIS_URL: redis://redis:6379/0
