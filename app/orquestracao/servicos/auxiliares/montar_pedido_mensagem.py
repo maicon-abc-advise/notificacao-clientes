@@ -19,7 +19,6 @@ def contexto_apareceu_busca(corpo: RecebeConsultaCorpo) -> dict[str, str]:
         "cnpj_ordem": corpo.cnpj_ordem,
         "cnpj_dv": corpo.cnpj_dv,
         "id_consulta": str(corpo.id_consulta),
-        "motivo": corpo.motivo or "",
     }
 
 
@@ -27,6 +26,7 @@ def contexto_consultado_sem_email(corpo: RecebeConsultaCorpo) -> dict[str, str]:
     return {
         "url_plataforma": "https://buscafornecedor.com.br",
         "link_area_conta": "https://buscafornecedor.com.br/conta",
+        "cnpj_basico": corpo.cnpj_basico,
         "id_consulta": str(corpo.id_consulta),
     }
 
@@ -36,16 +36,16 @@ def montar_pedido_email_apareceu_busca(
     *,
     destinatario: str,
     fornecedor_id: uuid.UUID | None,
+    cnpj_basico: str | None,
     id_externo: str,
-    telefone_sms_fallback: str | None,
 ) -> PedidoEnvioEmail:
     return PedidoEnvioEmail(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.APARECEU_BUSCA,
         contexto=contexto_apareceu_busca(corpo),
         id_externo=id_externo,
-        telefone_sms_fallback=telefone_sms_fallback,
         fornecedor_id=fornecedor_id,
+        cnpj_basico=cnpj_basico,
         consulta_id=corpo.id_consulta,
     )
 
@@ -55,6 +55,7 @@ def montar_pedido_sms_consultado_sem_email(
     *,
     destinatario: str,
     fornecedor_id: uuid.UUID | None,
+    cnpj_basico: str | None,
     id_externo: str,
 ) -> PedidoEnvioSms:
     return PedidoEnvioSms(
@@ -63,21 +64,24 @@ def montar_pedido_sms_consultado_sem_email(
         contexto=contexto_consultado_sem_email(corpo),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
+        cnpj_basico=cnpj_basico,
         consulta_id=corpo.id_consulta,
     )
 
 
-def contexto_creditos_no_fim(nome: str | None, link: str) -> dict[str, str]:
+def contexto_creditos_no_fim(nome: str | None, link: str, cnpj_basico: str) -> dict[str, str]:
     return {
         "nome_fantasia": nome or "Fornecedor",
         "link_area_creditos": link,
+        "cnpj_basico": cnpj_basico,
     }
 
 
-def contexto_creditos_esgotados(nome: str | None, link: str) -> dict[str, str]:
+def contexto_creditos_esgotados(nome: str | None, link: str, cnpj_basico: str) -> dict[str, str]:
     return {
         "nome_fantasia": nome or "Fornecedor",
         "link_area_creditos": link,
+        "cnpj_basico": cnpj_basico,
     }
 
 
@@ -85,6 +89,7 @@ def montar_pedido_email_creditos_no_fim(
     *,
     destinatario: str,
     fornecedor_id: uuid.UUID,
+    cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
     link_creditos: str,
@@ -92,9 +97,10 @@ def montar_pedido_email_creditos_no_fim(
     return PedidoEnvioEmail(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.CREDITOS_NO_FIM,
-        contexto=contexto_creditos_no_fim(nome_fantasia, link_creditos),
+        contexto=contexto_creditos_no_fim(nome_fantasia, link_creditos, cnpj_basico),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
+        cnpj_basico=cnpj_basico,
     )
 
 
@@ -102,6 +108,7 @@ def montar_pedido_email_creditos_esgotados(
     *,
     destinatario: str,
     fornecedor_id: uuid.UUID,
+    cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
     link_creditos: str,
@@ -109,9 +116,10 @@ def montar_pedido_email_creditos_esgotados(
     return PedidoEnvioEmail(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS,
-        contexto=contexto_creditos_esgotados(nome_fantasia, link_creditos),
+        contexto=contexto_creditos_esgotados(nome_fantasia, link_creditos, cnpj_basico),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
+        cnpj_basico=cnpj_basico,
     )
 
 
@@ -119,6 +127,7 @@ def montar_pedido_sms_creditos_no_fim(
     *,
     destinatario: str,
     fornecedor_id: uuid.UUID,
+    cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
     link_creditos: str,
@@ -126,9 +135,10 @@ def montar_pedido_sms_creditos_no_fim(
     return PedidoEnvioSms(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.CREDITOS_NO_FIM,
-        contexto=contexto_creditos_no_fim(nome_fantasia, link_creditos),
+        contexto=contexto_creditos_no_fim(nome_fantasia, link_creditos, cnpj_basico),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
+        cnpj_basico=cnpj_basico,
         consulta_id=None,
     )
 
@@ -137,6 +147,7 @@ def montar_pedido_sms_creditos_esgotados(
     *,
     destinatario: str,
     fornecedor_id: uuid.UUID,
+    cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
     link_creditos: str,
@@ -144,8 +155,9 @@ def montar_pedido_sms_creditos_esgotados(
     return PedidoEnvioSms(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS,
-        contexto=contexto_creditos_esgotados(nome_fantasia, link_creditos),
+        contexto=contexto_creditos_esgotados(nome_fantasia, link_creditos, cnpj_basico),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
+        cnpj_basico=cnpj_basico,
         consulta_id=None,
     )

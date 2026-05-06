@@ -5,16 +5,20 @@ from datetime import UTC, datetime, timedelta
 import asyncpg
 from redis.asyncio import Redis
 from app.config.config import Configuracao
-from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.orquestracao.api.dto.verificar_creditos_dto import RespostaVerificarCreditos
 from app.orquestracao.repositorios.engajamento_consulta_repo import (
-    carregar_para_fornecedor,
+    carregar_por_cnpj_basico,
     registrar_lembrete_creditos_semanal,
 )
 from app.orquestracao.repositorios.fornecedores_repo import listar_fornecedores_alerta_creditos
 from app.orquestracao.servicos.auxiliares.decidir_canal_e_cadencia import (
     email_usavel_para_notificacao,
     telefone_usavel_para_sms,
+)
+from app.reenvio.servicos.engajamento_contatos import (
+    agregado_canal_bloqueado,
+    estado_granular_email,
+    estado_granular_sms,
 )
 from app.orquestracao.servicos.auxiliares.enfileirar_ou_enviar_interno import (
     enfileirar_email_pendente,
@@ -48,20 +52,22 @@ async def executar_verificar_creditos(
         len(rows),
     )
 
-    _cf = obter_identificadores_postgres().col_fornecedor_id
     for row in rows:
-        fid: uuid.UUID = row[_cf]
+        fid: uuid.UUID = row["fornecedor_id"]
         creditos_restantes: int = row["creditos"]
         email = (row["email"] or "").strip()
         telefone = (row["telefone"] or "").strip()
         nome = row["nome"]
+        cnpj_basico = (row["cnpj_basico"] or "").strip()
 
-        snap = await carregar_para_fornecedor(pool, fid)
+        snap = await carregar_por_cnpj_basico(pool, cnpj_basico)
 
-        email_ok = email_usavel_para_notificacao(
-            email, recebe_email=snap.recebe_email, engajamento_email=snap.engajamento_email
+        st_e = estado_granular_email(snap.contatos_email, email)
+        st_s = estado_granular_sms(snap.contatos_sms, telefone)
+        email_ok = email_usavel_para_notificacao(email, estado_granular=st_e) and not agregado_canal_bloqueado(
+            snap.engajamento_email,
         )
-        sms_ok = telefone_usavel_para_sms(telefone, snap.engajamento_sms)
+        sms_ok = telefone_usavel_para_sms(telefone, st_s) and not agregado_canal_bloqueado(snap.engajamento_sms)
 
         if not email_ok and not sms_ok:
             _log.info(
@@ -98,6 +104,7 @@ async def executar_verificar_creditos(
                 pedido = montar_pedido_email_creditos_esgotados(
                     destinatario=email,
                     fornecedor_id=fid,
+                    cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
                     link_creditos=link_creditos,
@@ -107,13 +114,14 @@ async def executar_verificar_creditos(
                 pedido_s = montar_pedido_sms_creditos_esgotados(
                     destinatario=telefone,
                     fornecedor_id=fid,
+                    cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
                     link_creditos=link_creditos,
                 )
                 ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)
             if ok:
-                await registrar_lembrete_creditos_semanal(pool, fid)
+                await registrar_lembrete_creditos_semanal(pool, cnpj_basico)
                 enfileirados += 1
             else:
                 ignorados += 1
@@ -132,6 +140,7 @@ async def executar_verificar_creditos(
                 pedido = montar_pedido_email_creditos_no_fim(
                     destinatario=email,
                     fornecedor_id=fid,
+                    cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
                     link_creditos=link_creditos,
@@ -141,13 +150,14 @@ async def executar_verificar_creditos(
                 pedido_s = montar_pedido_sms_creditos_no_fim(
                     destinatario=telefone,
                     fornecedor_id=fid,
+                    cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
                     link_creditos=link_creditos,
                 )
                 ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)
             if ok:
-                await registrar_lembrete_creditos_semanal(pool, fid)
+                await registrar_lembrete_creditos_semanal(pool, cnpj_basico)
                 enfileirados += 1
             else:
                 ignorados += 1

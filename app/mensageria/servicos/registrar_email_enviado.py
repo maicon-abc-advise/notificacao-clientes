@@ -32,7 +32,6 @@ async def registrar_email_enviado_apos_sucesso(
         tipo_template=pedido.tipo_template.value,
         contexto=dict(pedido.contexto),
         remetente=pedido.remetente,
-        telefone_sms_fallback=pedido.telefone_sms_fallback,
         id_mensagem_zenvia=msg_id,
         fornecedor_id=pedido.fornecedor_id,
     )

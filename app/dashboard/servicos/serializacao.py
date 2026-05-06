@@ -26,6 +26,14 @@ def _valor_json(v: Any) -> Any:
         return {str(k): _valor_json(x) for k, x in v.items()}
     if isinstance(v, (list, tuple)):
         return [_valor_json(x) for x in v]
+    if isinstance(v, str):
+        s = v.strip()
+        if len(s) >= 2 and s[0] in "[{" and s[-1] in "]}":
+            try:
+                return _valor_json(json.loads(s))
+            except json.JSONDecodeError:
+                pass
+        return v
     return v
 
 

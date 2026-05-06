@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Protocol, runtime_checkable
 
 
@@ -8,6 +8,8 @@ from typing import Protocol, runtime_checkable
 class ResultadoEnriquecimentoContato:
     email: str | None
     telefone: str | None
+    emails: tuple[str, ...] = field(default_factory=tuple)
+    telefones: tuple[str, ...] = field(default_factory=tuple)
 
 
 @runtime_checkable

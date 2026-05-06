@@ -1,12 +1,8 @@
 from __future__ import annotations
-
 import re
 from typing import Any
-
 import asyncpg
-
 from app.config.postgres_identificadores import obter_identificadores_postgres
-
 
 def _q_ident(ident: str) -> str:
     if re.match(r"^[a-z_][a-z0-9_]*$", ident):

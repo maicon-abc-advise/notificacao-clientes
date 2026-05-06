@@ -27,7 +27,7 @@ async def _pool() -> asyncpg.Pool:
     summary="Diagnóstico: listar fornecedores (somente leitura)",
     description=(
         "Executa apenas ``SELECT`` na tabela de fornecedores resolvida pelo ambiente "
-        "(ex.: ``fornecedores_teste`` quando ``POSTGRES_TABELA_SUFFIX=_teste``). "
+        "(ex.: ``usuario_fornecedor_teste`` quando ``POSTGRES_TABELA_SUFFIX=_teste``; PK ``id``). "
         "Não altera nem apaga dados."
     ),
 )
@@ -42,7 +42,7 @@ async def get_diagnostico_fornecedores(
         "tabela": tabela_fisica,
         "postgres_schema": p.schema,
         "postgres_tabela_suffix": p.tabela_suffix or "",
-        "coluna_fornecedor_id": p.col_fornecedor_id,
+        "coluna_fornecedor_id": p.col_usuario_fornecedor_id,
         "limite": limite,
         "total_retorno": len(linhas),
         "linhas": linhas,

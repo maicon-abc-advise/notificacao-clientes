@@ -44,6 +44,7 @@ class RepositorioSmsPendenteRedis:
         remetente: str | None,
         origem: str,
         fornecedor_id: str | None = None,
+        cnpj_basico: str | None = None,
         consulta_id: uuid.UUID | None = None,
         sobrescrever_trava_de_email_esperando: bool = False,
     ) -> bool:
@@ -69,6 +70,7 @@ class RepositorioSmsPendenteRedis:
                 "remetente": remetente or "",
                 "origem": origem,
                 "fornecedor_id": fornecedor_id or "",
+                "cnpj_basico": cnpj_basico or "",
                 "consulta_id": str(consulta_id) if consulta_id is not None else "",
                 "criado_em": str(agora),
             }
@@ -118,6 +120,7 @@ class RepositorioSmsPendenteRedis:
                     "remetente": raw.get("remetente") or None,
                     "origem": raw.get("origem", ""),
                     "fornecedor_id": raw.get("fornecedor_id") or raw.get("usuario_id") or None,
+                    "cnpj_basico": raw.get("cnpj_basico") or None,
                     "consulta_id": raw.get("consulta_id") or None,
                     "criado_em": raw.get("criado_em"),
                 },

@@ -1,49 +1,46 @@
 from __future__ import annotations
 
-import uuid
-
 import asyncpg
 
 from app.config.postgres_identificadores import obter_identificadores_postgres
 
 
-async def obter_ou_criar_e_incrementar_aparicao(
+async def buscar_usuario_fornecedor_por_cnpj_partes(
     pool: asyncpg.Pool,
     *,
-    cnpj: str,
-    nome: str | None,
-    email: str | None,
-    telefone: str | None,
+    cnpj_basico: str,
+    cnpj_ordem: str,
+    cnpj_dv: str,
 ) -> asyncpg.Record:
-    """Garante linha em `fornecedores`, incrementa `aparicoes_busca` e preenche contato quando vier no payload."""
+    """Retorna usuário fornecedor por CNPJ; sem criar/alterar linha."""
     p = obter_identificadores_postgres()
     t = p.qual("fornecedores")
-    cf = p.col_fornecedor_id
+    ufid = p.col_usuario_fornecedor_id
     row = await pool.fetchrow(
         f"""
-        INSERT INTO {t} (cnpj, nome, email, telefone, aparicoes_busca, creditos, ativo)
-        VALUES ($1, $2, $3, $4, 1, 0, true)
-        ON CONFLICT (cnpj) DO UPDATE SET
-            nome = COALESCE(EXCLUDED.nome, {t}.nome),
-            email = COALESCE(NULLIF(EXCLUDED.email, ''), {t}.email),
-            telefone = COALESCE(NULLIF(EXCLUDED.telefone, ''), {t}.telefone),
-            aparicoes_busca = {t}.aparicoes_busca + 1,
-            updated_at = now()
-        RETURNING
-            {cf},
-            cnpj,
-            nome,
-            email,
-            telefone,
-            ativo,
-            aparicoes_busca
+        SELECT
+            uf.{ufid} AS fornecedor_id,
+            uf.nome,
+            uf.telefone,
+            uf.cnpj,
+            uf.cnpj_basico,
+            uf.cnpj_ordem,
+            uf.cnpj_dv,
+            uf.n_creditos,
+            au.email
+        FROM {t} AS uf
+        LEFT JOIN auth.users AS au ON au.id = uf.{ufid}
+        WHERE uf.cnpj_basico = $1
+          AND uf.cnpj_ordem = $2
+          AND uf.cnpj_dv = $3
+        LIMIT 1
         """,
-        cnpj,
-        nome,
-        email or None,
-        telefone or None,
+        cnpj_basico,
+        cnpj_ordem,
+        cnpj_dv,
     )
-    assert row is not None
+    if row is None:
+        raise LookupError("usuario_fornecedor não encontrado para o CNPJ informado")
     return row
 
 
@@ -52,53 +49,30 @@ async def listar_fornecedores_alerta_creditos(
     *,
     limiar: int,
 ) -> list[asyncpg.Record]:
-    """Fornecedores ativos com e-mail ou telefone, créditos zerados ou até o limiar (inclusive)."""
+    """Usuários fornecedores com canal e n_creditos zerado/no limiar."""
     p = obter_identificadores_postgres()
     t = p.qual("fornecedores")
-    cf = p.col_fornecedor_id
+    ufid = p.col_usuario_fornecedor_id
     return await pool.fetch(
         f"""
         SELECT
-            {cf},
-            nome,
-            email,
-            telefone,
-            creditos
-        FROM {t}
-        WHERE ativo = true
-          AND (
-              NULLIF(trim(email), '') IS NOT NULL
-              OR NULLIF(trim(telefone), '') IS NOT NULL
+            uf.{ufid} AS fornecedor_id,
+            uf.nome,
+            au.email,
+            uf.telefone,
+            uf.cnpj_basico,
+            uf.n_creditos AS creditos
+        FROM {t} AS uf
+        LEFT JOIN auth.users AS au ON au.id = uf.{ufid}
+        WHERE (
+              NULLIF(trim(au.email), '') IS NOT NULL
+              OR NULLIF(trim(uf.telefone), '') IS NOT NULL
           )
           AND (
-              creditos = 0
-              OR (creditos > 0 AND creditos <= $1)
+              uf.n_creditos = 0
+              OR (uf.n_creditos > 0 AND uf.n_creditos <= $1)
           )
-        ORDER BY {cf}
+        ORDER BY uf.{ufid}
         """,
         limiar,
-    )
-
-
-async def atualizar_contato_apos_enriquecimento(
-    pool: asyncpg.Pool,
-    *,
-    fornecedor_id: uuid.UUID,
-    email: str | None,
-    telefone: str | None,
-) -> None:
-    p = obter_identificadores_postgres()
-    t = p.qual("fornecedores")
-    cf = p.col_fornecedor_id
-    await pool.execute(
-        f"""
-        UPDATE {t} SET
-            email = COALESCE(NULLIF($2, ''), email),
-            telefone = COALESCE(NULLIF($3, ''), telefone),
-            updated_at = now()
-        WHERE {cf} = $1
-        """,
-        fornecedor_id,
-        email or "",
-        telefone or "",
     )

@@ -12,6 +12,7 @@ from app.dashboard.servicos.exibicao import (
     enriquecer_linha_postgres,
     enriquecer_redis_email_esperando,
     enriquecer_redis_email_pendente,
+    enriquecer_redis_sms_esperando,
     enriquecer_redis_sms_pendente,
 )
 from app.dashboard.servicos.serializacao import decodificar_contexto_json_bruto, registo_para_json
@@ -21,6 +22,8 @@ from app.orquestracao.repositorios.redis_emails_pendentes_repo import KEY_INDEX 
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import chave_hash as chave_email_pend
 from app.reenvio.repositorios.redis_emails_esperando_confirmacao import KEY_SWEEP as IDX_EMAIL_CONF
 from app.reenvio.repositorios.redis_emails_esperando_confirmacao import chave_hash as chave_email_conf
+from app.reenvio.repositorios.redis_sms_esperando_confirmacao import KEY_SWEEP as IDX_SMS_CONF
+from app.reenvio.repositorios.redis_sms_esperando_confirmacao import chave_hash as chave_sms_conf
 from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as IDX_SMS_PEND
 from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_pend
 
@@ -145,8 +148,8 @@ async def lista_emails_redis_pendentes(
             "tipo_template": _h(raw, "tipo_template"),
             "contexto": ctx if isinstance(ctx, dict) else {},
             "remetente": _h(raw, "remetente") or None,
-            "telefone_sms_fallback": _h(raw, "telefone_sms_fallback") or None,
             "fornecedor_id": _h(raw, "fornecedor_id") or _h(raw, "usuario_id") or None,
+            "cnpj_basico": _h(raw, "cnpj_basico") or None,
             "origem": _h(raw, "origem"),
             "consulta_id": _h(raw, "consulta_id") or None,
             "criado_em": _h(raw, "criado_em"),
@@ -180,8 +183,8 @@ async def lista_emails_redis_esperando(
             "tipo_template": _h(raw, "tipo_template"),
             "contexto": ctx if isinstance(ctx, dict) else {},
             "remetente": _h(raw, "remetente") or None,
-            "telefone_sms_fallback": _h(raw, "telefone_sms_fallback") or None,
             "fornecedor_id": _h(raw, "fornecedor_id") or _h(raw, "usuario_id") or None,
+            "cnpj_basico": _h(raw, "cnpj_basico") or None,
             "consulta_id": _h(raw, "consulta_id") or None,
             "status_atual": _h(raw, "status_atual"),
             "criado_em": _h(raw, "criado_em"),
@@ -218,14 +221,17 @@ async def metricas_sms(
         or 0,
     )
     pendentes = int(await redis.zcard(IDX_SMS_PEND) or 0)
+    esperando = int(await redis.zcard(IDX_SMS_CONF) or 0)
     return {
         "sms_enviados_total": total,
         "sms_pendentes_fila": pendentes,
+        "sms_esperando_confirmacao": esperando,
         "sms_falha_definitiva": falhas,
         "sms_lidos": lidos,
         "cartoes": [
             {"chave": "enviados", "valor": total, "legenda": "SMS registados"},
             {"chave": "pendentes", "valor": pendentes, "legenda": "Na fila a enviar"},
+            {"chave": "esperando_feedback", "valor": esperando, "legenda": "Esperando confirmação"},
             {"chave": "recusados", "valor": falhas, "legenda": "Falha definitiva"},
             {"chave": "abertos", "valor": lidos, "legenda": "SMS lidos"},
         ],
@@ -279,11 +285,53 @@ async def lista_sms_redis_pendentes(
             "remetente": _h(raw, "remetente") or None,
             "origem": _h(raw, "origem"),
             "fornecedor_id": _h(raw, "fornecedor_id") or _h(raw, "usuario_id") or None,
+            "cnpj_basico": _h(raw, "cnpj_basico") or None,
             "consulta_id": _h(raw, "consulta_id") or None,
             "criado_em": _h(raw, "criado_em"),
         }
         itens.append(enriquecer_redis_sms_pendente(linha))
     return {"origem": "redis", "tabela_logica": "sms_pendentes", "itens": itens, **_meta(total, page)}
+
+
+@router.get("/sms/redis-esperando-confirmacao")
+async def lista_sms_redis_esperando(
+    redis: RedisOrquestracao,
+    page: Annotated[int, Query(ge=1)] = 1,
+) -> dict[str, Any]:
+    page = _page_clamped(page)
+    start = (page - 1) * PAGE_SIZE
+    end = start + PAGE_SIZE - 1
+    total = int(await redis.zcard(IDX_SMS_CONF) or 0)
+    ids_raw = await redis.zrevrange(IDX_SMS_CONF, start, end)
+    itens: list[dict[str, Any]] = []
+    for mid in ids_raw:
+        mid_s = mid.decode() if isinstance(mid, bytes) else str(mid)
+        raw = await redis.hgetall(chave_sms_conf(mid_s))
+        if not raw:
+            await redis.zrem(IDX_SMS_CONF, mid_s)
+            continue
+        ctx = decodificar_contexto_json_bruto(_h(raw, "contexto_json"))
+        linha = {
+            "message_id_zenvia": mid_s,
+            "id_externo": _h(raw, "id_externo") or _h(raw, "external_id"),
+            "telefone_destinatario": _h(raw, "telefone_destinatario"),
+            "tipo_template": _h(raw, "tipo_template"),
+            "contexto": ctx if isinstance(ctx, dict) else {},
+            "remetente": _h(raw, "remetente") or None,
+            "fornecedor_id": _h(raw, "fornecedor_id") or _h(raw, "usuario_id") or None,
+            "cnpj_basico": _h(raw, "cnpj_basico") or None,
+            "consulta_id": _h(raw, "consulta_id") or None,
+            "status_atual": _h(raw, "status_atual"),
+            "criado_em": _h(raw, "criado_em"),
+            "atualizado_em": _h(raw, "atualizado_em"),
+        }
+        itens.append(enriquecer_redis_sms_esperando(linha))
+    return {
+        "origem": "redis",
+        "tabela_logica": "sms_esperando_confirmacao",
+        "itens": itens,
+        **_meta(total, page),
+    }
 
 
 @router.get("/engajamento/fornecedores")
@@ -294,16 +342,15 @@ async def lista_engajamento_fornecedores(
     p = obter_identificadores_postgres()
     te = p.qual("engajamento_fornecedores")
     tf = p.qual("fornecedores")
-    cf = p.col_fornecedor_id
     page = _page_clamped(page)
     offset = (page - 1) * PAGE_SIZE
     total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {te}") or 0)
     rows = await pool.fetch(
         f"""
-        SELECT e.*, f.nome AS nome_fornecedor
+        SELECT e.*, COALESCE(f.nome, e.nome_fantasia) AS nome_fornecedor
         FROM {te} AS e
-        LEFT JOIN {tf} AS f ON f.{cf} = e.{cf}
-        ORDER BY e.engajamento_atualizado_em DESC NULLS LAST, e.{cf} DESC
+        LEFT JOIN {tf} AS f ON f.cnpj_basico = e.cnpj_basico
+        ORDER BY e.engajamento_atualizado_em DESC NULLS LAST, e.cnpj_basico DESC
         LIMIT {PAGE_SIZE} OFFSET {offset}
         """,
     )

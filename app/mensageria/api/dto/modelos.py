@@ -2,7 +2,7 @@ from enum import StrEnum
 from typing import Any
 from uuid import UUID
 
-from pydantic import BaseModel, Field
+from pydantic import BaseModel, ConfigDict, Field
 from app.templates.modelo import CodigoTipoTemplate
 
 class CanalMensagem(StrEnum):
@@ -10,6 +10,8 @@ class CanalMensagem(StrEnum):
     SMS = "sms"
 
 class PedidoEnvioEmail(BaseModel):
+    model_config = ConfigDict(extra="forbid")
+
     destinatario: str = Field(..., min_length=3, description="E-mail do destinatário (campo to na API do provedor)")
     tipo_template: CodigoTipoTemplate = Field(
         ...,
@@ -30,14 +32,15 @@ class PedidoEnvioEmail(BaseModel):
         max_length=64,
         description="Correlação do envio; na API Zenvia é enviado como externalId.",
     )
-    telefone_sms_fallback: str | None = Field(
-        default=None,
-        max_length=20,
-        description="E.164 do SMS se o e-mail falhar (bounce) ou para o sweep; necessário para enfileirar SMS.",
-    )
     fornecedor_id: UUID | None = Field(
         default=None,
         description="Opcional: atualiza engajamento_fornecedores em eventos de e-mail (API + webhooks).",
+    )
+    cnpj_basico: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=8,
+        description="Opcional: identificador principal de engajamento quando não houver fornecedor_id.",
     )
     consulta_id: UUID | None = Field(
         default=None,
@@ -69,6 +72,12 @@ class PedidoEnvioSms(BaseModel):
     fornecedor_id: UUID | None = Field(
         default=None,
         description="Opcional: liga o envio a engajamento_fornecedores e webhooks de estado.",
+    )
+    cnpj_basico: str | None = Field(
+        default=None,
+        min_length=8,
+        max_length=8,
+        description="Opcional: identificador principal de engajamento quando não houver fornecedor_id.",
     )
     consulta_id: UUID | None = Field(
         default=None,

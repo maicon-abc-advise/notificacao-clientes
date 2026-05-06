@@ -11,7 +11,6 @@ class RecebeConsultaCorpo(BaseModel):
     cnpj_dv: str = Field(..., min_length=2, max_length=2)
     email_fornecedor: EmailStr | None = None
     telefone_fornecedor: str | None = None
-    motivo: str | None = Field(default=None, max_length=512)
     nome_fantasia: str | None = Field(default=None, max_length=256)
 
     @field_validator("email_fornecedor", "telefone_fornecedor", mode="before")

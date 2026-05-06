@@ -15,6 +15,8 @@ _DIR_SQL = Path(__file__).resolve().parent / "sql"
 _MIGRACOES_ORQUESTRACAO_INCREMENTAIS: tuple[str, ...] = (
     "orquestracao_fornecedores_creditos.sql",
     "migracao_engajamento_fornecedor_id.sql",
+    "engajamento_nome_fantasia.sql",
+    "engajamento_multi_contato.sql",
 )
 
 def _sql_arquivo(nome: str) -> str:
@@ -86,6 +88,8 @@ async def aplicar_schema_reenvio(dsn: str) -> None:
     conn = await asyncpg.connect(dsn)
     try:
         await conn.execute(sql)
+        te = obter_identificadores_postgres().qual("emails_enviados")
+        await conn.execute(f"ALTER TABLE {te} DROP COLUMN IF EXISTS telefone_sms_fallback")
         await _migrar_status_ultimo_lido_e_limpar_zenvia(conn)
     finally:
         await conn.close()

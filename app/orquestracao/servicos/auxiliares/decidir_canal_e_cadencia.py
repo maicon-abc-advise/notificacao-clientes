@@ -2,7 +2,11 @@ from __future__ import annotations
 
 from dataclasses import dataclass
 
-from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, EngajamentoSmsEstado
+from app.reenvio.servicos.engajamento_contatos import (
+    agregado_canal_bloqueado,
+    email_granular_bloqueia_notificacao,
+    sms_granular_bloqueia_notificacao,
+)
 from app.templates.modelo import CodigoTipoTemplate
 
 
@@ -11,20 +15,6 @@ class DecisaoCanal:
     canal: str  # "nenhum" | "email" | "sms"
     tipo_template: CodigoTipoTemplate | None
     motivo: str
-
-
-def _bounce_hard_email(engajamento_email: str) -> bool:
-    return engajamento_email in (
-        EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SEM_SMS.value,
-        EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SMS_FILA.value,
-    )
-
-
-def _sms_problematico(engajamento_sms: str) -> bool:
-    return engajamento_sms in (
-        EngajamentoSmsEstado.SMS_FALHA_NUMERO.value,
-        EngajamentoSmsEstado.SMS_FALHA_LIMITE.value,
-    )
 
 
 def _email_formato_plausivel(email: str) -> bool:
@@ -40,50 +30,60 @@ def _email_formato_plausivel(email: str) -> bool:
 def email_usavel_para_notificacao(
     email: str | None,
     *,
-    recebe_email: bool,
-    engajamento_email: str,
+    estado_granular: str,
 ) -> bool:
-    """E-mail não vazio, formato mínimo plausível, opt-in e sem bounce hard."""
+    """E-mail não vazio, formato mínimo plausível e estado granular permite envio."""
     e = (email or "").strip()
-    if not e or not recebe_email or _bounce_hard_email(engajamento_email):
+    if not e or email_granular_bloqueia_notificacao(estado_granular):
         return False
     return _email_formato_plausivel(e)
 
 
-def telefone_usavel_para_sms(telefone: str | None, engajamento_sms: str) -> bool:
-    """Telefone não vazio e SMS não bloqueado por falha definitiva."""
+def telefone_usavel_para_sms(telefone: str | None, estado_granular: str) -> bool:
+    """Telefone não vazio e estado granular SMS permite envio."""
     t = (telefone or "").strip()
-    return bool(t) and not _sms_problematico(engajamento_sms)
+    return bool(t) and not sms_granular_bloqueia_notificacao(estado_granular)
 
 
 def decidir_canal_e_cadencia(
     *,
+    engajamento_email_agg: str,
+    engajamento_sms_agg: str,
     email_efetivo: str | None,
     telefone_efetivo: str | None,
-    recebe_email: bool,
-    engajamento_email: str,
-    engajamento_sms: str,
+    estado_granular_email: str,
+    estado_granular_sms: str,
 ) -> DecisaoCanal:
     """Canal para notificação de “apareceu busca”. Cadência por dias **não** entra aqui — só em `verificar_creditos_servico`."""
     if not telefone_efetivo and not email_efetivo:
         return DecisaoCanal("nenhum", None, "sem e-mail e sem telefone após enriquecimento")
 
     email_ok = email_usavel_para_notificacao(
-        email_efetivo, recebe_email=recebe_email, engajamento_email=engajamento_email
-    )
+        email_efetivo,
+        estado_granular=estado_granular_email,
+    ) and not agregado_canal_bloqueado(engajamento_email_agg)
 
     if email_ok:
         return DecisaoCanal("email", CodigoTipoTemplate.APARECEU_BUSCA, "e-mail disponível e permitido")
 
-    if telefone_efetivo and not _sms_problematico(engajamento_sms):
-        if bool(email_efetivo) and not recebe_email:
-            motivo_sms = "SMS: existe e-mail mas recebe_email=false em engajamento_fornecedores (opt-out)"
-        elif bool(email_efetivo) and _bounce_hard_email(engajamento_email):
-            motivo_sms = "SMS: bounce hard de e-mail — não reenviar por e-mail"
-        elif not email_efetivo:
+    if (
+        telefone_efetivo
+        and not sms_granular_bloqueia_notificacao(estado_granular_sms)
+        and not agregado_canal_bloqueado(engajamento_sms_agg)
+    ):
+        if not email_efetivo:
             motivo_sms = "SMS: sem e-mail após enriquecimento"
+        elif email_granular_bloqueia_notificacao(estado_granular_email):
+            motivo_sms = "SMS: e-mail bloqueado ou pendente — usar SMS"
+        elif agregado_canal_bloqueado(engajamento_email_agg):
+            motivo_sms = "SMS: engajamento e-mail inativo — usar SMS"
         else:
             motivo_sms = "SMS: e-mail não utilizável para este envio"
         return DecisaoCanal("sms", CodigoTipoTemplate.CONSULTADO_SEM_EMAIL, motivo_sms)
+
+    if telefone_efetivo and agregado_canal_bloqueado(engajamento_sms_agg):
+        return DecisaoCanal("nenhum", None, "SMS agregado inativo")
+    if email_efetivo and agregado_canal_bloqueado(engajamento_email_agg) and not telefone_efetivo:
+        return DecisaoCanal("nenhum", None, "e-mail agregado inativo e sem telefone")
 
     return DecisaoCanal("nenhum", None, "sem canal utilizável (SMS bloqueado ou sem telefone)")

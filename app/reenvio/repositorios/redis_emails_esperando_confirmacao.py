@@ -48,9 +48,9 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
         tipo_template: str,
         contexto: dict[str, str],
         remetente: str | None,
-        telefone_sms_fallback: str | None,
         sweep_score_ts: int,
         fornecedor_id: str | None = None,
+        cnpj_basico: str | None = None,
         consulta_id: uuid.UUID | None = None,
     ) -> None:
         agora = str(int(time.time()))
@@ -61,8 +61,8 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
             "tipo_template": tipo_template,
             "contexto_json": json.dumps(contexto, ensure_ascii=False),
             "remetente": remetente or "",
-            "telefone_sms_fallback": telefone_sms_fallback or "",
             "fornecedor_id": fornecedor_id or "",
+            "cnpj_basico": cnpj_basico or "",
             "consulta_id": str(consulta_id) if consulta_id is not None else "",
             "status_atual": "AGUARDANDO_ABERTURA",
             "criado_em": agora,

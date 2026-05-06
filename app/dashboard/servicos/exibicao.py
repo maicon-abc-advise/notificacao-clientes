@@ -44,6 +44,17 @@ def estado_redis_sms_pendente() -> dict[str, str]:
     return _badge("Na fila (a enviar)", "neutral")
 
 
+def estado_redis_sms_esperando(status_atual: str | None) -> dict[str, str]:
+    s = (status_atual or "").strip().upper()
+    m: dict[str, tuple[str, str]] = {
+        "AGUARDANDO_CONFIRMACAO": ("Aguardando confirmação", "neutral"),
+        "ENVIADO_PROVEDOR": ("Enviado ao provedor", "info"),
+        "ENTREGUE": ("Entregue", "success"),
+    }
+    rotulo, cor = m.get(s, (status_atual or "—", "neutral"))
+    return _badge(rotulo, cor)
+
+
 def enriquecer_linha_postgres(linha: dict[str, Any], *, canal: str) -> dict[str, Any]:
     out = dict(linha)
     if canal in ("email", "sms"):
@@ -66,4 +77,10 @@ def enriquecer_redis_email_esperando(linha: dict[str, Any]) -> dict[str, Any]:
 def enriquecer_redis_sms_pendente(linha: dict[str, Any]) -> dict[str, Any]:
     out = dict(linha)
     out["estado_exibicao"] = estado_redis_sms_pendente()
+    return out
+
+
+def enriquecer_redis_sms_esperando(linha: dict[str, Any]) -> dict[str, Any]:
+    out = dict(linha)
+    out["estado_exibicao"] = estado_redis_sms_esperando(out.get("status_atual"))
     return out

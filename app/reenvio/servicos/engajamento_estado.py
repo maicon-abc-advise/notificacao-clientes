@@ -2,6 +2,15 @@ from __future__ import annotations
 import enum
 from app.reenvio.servicos.classificar_cause_email import ResultadoClassificacaoEmail
 
+
+class EngajamentoCanalAgregado(enum.StrEnum):
+    """Estado agregado por canal em ``engajamento_fornecedores`` (colunas ``engajamento_email`` / ``engajamento_sms``)."""
+
+    ATIVO = "ativo"
+    EM_ANALISE = "em_analise"
+    INATIVO = "inativo"
+
+
 class EngajamentoEmailEstado(enum.StrEnum):
     ATIVO = "ativo"
     EMAIL_ENVIADO_API = "email_enviado_api"
@@ -14,6 +23,7 @@ class EngajamentoEmailEstado(enum.StrEnum):
     EMAIL_FALHA_RECUPERAVEL_TEMPORARY = "email_falha_recuperavel_temporary"
     EMAIL_FALHA_RECUPERAVEL_UNKNOWN = "email_falha_recuperavel_unknown"
     EMAIL_SWEEP_LEMBRETE_SMS = "email_sweep_lembrete_sms"
+    EMAIL_NAO_EXISTE = "email_nao_existe"
 
 class EngajamentoSmsEstado(enum.StrEnum):
     ATIVO = "ativo"
@@ -23,6 +33,7 @@ class EngajamentoSmsEstado(enum.StrEnum):
     SMS_FALHA_NUMERO = "sms_falha_numero"
     SMS_FALHA_LIMITE = "sms_falha_limite"
     SMS_REPROCESSAR_FILA = "sms_reprocessar_fila"
+    SMS_NAO_EXISTE = "sms_nao_existe"
 
 def engajamento_falha_recuperavel_email(cls: ResultadoClassificacaoEmail) -> EngajamentoEmailEstado:
     m: dict[ResultadoClassificacaoEmail, EngajamentoEmailEstado] = {

@@ -48,8 +48,13 @@ def _id_provedor_valido_para_idempotencia(id_z: str | None) -> bool:
     return bool(s) and not s.startswith("(sem")
 
 
-async def _garantir_fornecedor_cadastrado(pool: asyncpg.Pool, fornecedor_id: UUID | None) -> None:
+async def _garantir_fornecedor_cadastrado(pool: asyncpg.Pool, fornecedor_id: UUID | None, cnpj_basico: str | None) -> None:
     if fornecedor_id is None:
+        if not (cnpj_basico or "").strip():
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail="informe fornecedor_id ou cnpj_basico",
+            )
         return
     if not await fornecedor_id_existe(pool, fornecedor_id):
         raise HTTPException(
@@ -75,12 +80,18 @@ async def post_enviar_email(
                     canal=CanalMensagem.EMAIL,
                     resposta_parcial={"idempotente": True},
                 )
-        await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id)
+        await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id, pedido.cnpj_basico)
         materializado = await materializar_email(pedido, templates)
         resultado = porta.enviar_email(materializado)
         await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
         await registrar_email_enviado_apos_sucesso(pool, pedido, resultado)
-        await tocar_engajamento_email(pool, pedido.fornecedor_id, EngajamentoEmailEstado.EMAIL_ENVIADO_API)
+        await tocar_engajamento_email(
+            pool,
+            pedido.fornecedor_id,
+            pedido.cnpj_basico,
+            EngajamentoEmailEstado.EMAIL_ENVIADO_API,
+            endereco=pedido.destinatario,
+        )
         return resultado
     except ValueError as e:
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(e)) from e
@@ -109,7 +120,7 @@ async def post_enviar_sms(
                     canal=CanalMensagem.SMS,
                     resposta_parcial={"idempotente": True},
                 )
-        await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id)
+        await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id, pedido.cnpj_basico)
         materializado = await materializar_sms(pedido, templates)
         resultado = porta.enviar_sms(materializado)
         await registrar_sms_enviado_apos_sucesso(pool, redis, pedido, resultado)

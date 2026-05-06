@@ -40,7 +40,6 @@ CREATE TABLE IF NOT EXISTS public.emails_enviados (
     tipo_template text NOT NULL,
     contexto jsonb NOT NULL DEFAULT '{}'::jsonb,
     remetente text,
-    telefone_sms_fallback text,
     fornecedor_id uuid,
     status_ultimo text NOT NULL DEFAULT 'processando',
     motivo_ultimo_evento text,

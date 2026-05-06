@@ -5,10 +5,15 @@ A rota de envio vive em ``mensageria``; a persistência do registo de envio fica
 
 from __future__ import annotations
 import logging
+import time
+
 import asyncpg
 from redis.asyncio import Redis
+
+from app.config.config import obter_configuracao
 from app.mensageria.api.dto.modelos import CanalMensagem, PedidoEnvioSms, ResultadoEnvioMensagem
 from app.mensageria.repositorios.postgres_sms_enviados import inserir_ou_atualizar_apos_envio_api
+from app.reenvio.repositorios.redis_sms_esperando_confirmacao import RepositorioSmsEsperandoConfirmacaoRedis
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.engajamento_estado import EngajamentoSmsEstado
 from app.reenvio.servicos.engajamento_fornecedor import tocar_engajamento_sms
@@ -44,4 +49,34 @@ async def registrar_sms_enviado_apos_sucesso(
         id_mensagem_zenvia=msg_id,
         fornecedor_id=pedido.fornecedor_id,
     )
-    await tocar_engajamento_sms(pool, pedido.fornecedor_id, EngajamentoSmsEstado.SMS_ENVIADO_API)
+    await tocar_engajamento_sms(
+        pool,
+        pedido.fornecedor_id,
+        pedido.cnpj_basico,
+        EngajamentoSmsEstado.SMS_ENVIADO_API,
+        endereco=pedido.destinatario,
+    )
+
+    cfg = obter_configuracao()
+    sweep_ts = int(time.time()) + cfg.sweep_emails_esperando_confirmacao_dias * 86400
+    repo_esp = RepositorioSmsEsperandoConfirmacaoRedis()
+    try:
+        await repo_esp.criar_apos_envio(
+            redis,
+            message_id=msg_id,
+            id_externo=pedido.id_externo,
+            telefone_destinatario=pedido.destinatario,
+            tipo_template=pedido.tipo_template.value,
+            contexto=dict(pedido.contexto),
+            remetente=pedido.remetente,
+            sweep_score_ts=sweep_ts,
+            fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
+            cnpj_basico=pedido.cnpj_basico,
+            consulta_id=pedido.consulta_id,
+        )
+    except Exception:
+        _log.exception(
+            "Falha ao registar SMS no Redis (esperando confirmação). id_externo=%s message_id=%s",
+            pedido.id_externo,
+            msg_id,
+        )

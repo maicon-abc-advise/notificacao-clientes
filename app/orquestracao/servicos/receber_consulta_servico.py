@@ -8,22 +8,35 @@ from redis.asyncio import Redis
 
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo, RespostaRecebeConsulta
 from app.orquestracao.repositorios.consultas_repo import buscar_por_id as buscar_consulta_por_id
-from app.orquestracao.repositorios.engajamento_consulta_repo import carregar_para_fornecedor
-from app.orquestracao.repositorios.fornecedores_repo import obter_ou_criar_e_incrementar_aparicao
+from app.orquestracao.repositorios.engajamento_consulta_repo import (
+    carregar_por_cnpj_basico,
+    garantir_linha_engajamento,
+    incrementar_aparicao_busca,
+)
+from app.orquestracao.repositorios.fornecedores_repo import buscar_usuario_fornecedor_por_cnpj_partes
 from app.orquestracao.servicos.auxiliares.decidir_canal_e_cadencia import decidir_canal_e_cadencia
 from app.orquestracao.servicos.auxiliares.enfileirar_ou_enviar_interno import (
     enfileirar_email_pendente,
     enfileirar_sms_pendente,
 )
-from app.orquestracao.servicos.auxiliares.enriquecer_contato_fornecedor import enriquecer_se_necessario
+from app.orquestracao.servicos.auxiliares.enriquecer_contato_fornecedor import enriquecer_retorno_completo
 from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
     montar_pedido_email_apareceu_busca,
     montar_pedido_sms_consultado_sem_email,
 )
 from app.orquestracao.servicos.auxiliares.porta_enriquecimento_contato import PortaEnriquecimentoContato
-from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.orquestracao.excecoes import ConsultaJaNotificadaError
 from app.reenvio.repositorios.redis_consulta_notificacao import consulta_tem_trava_ativa
+from app.reenvio.servicos.engajamento_contatos import (
+    agora_iso,
+    contatos_iniciais_email,
+    contatos_iniciais_sms,
+    escolher_email_efetivo,
+    escolher_telefone_efetivo,
+    estado_granular_email,
+    estado_granular_sms,
+)
+from app.reenvio.servicos.engajamento_fornecedor import persistir_contatos_iniciais_engajamento
 
 _log = logging.getLogger(__name__)
 _ORIGEM = "orquestracao-recebe-consulta"
@@ -48,63 +61,84 @@ async def executar_receber_consulta(
     if await consulta_tem_trava_ativa(redis, corpo.id_consulta):
         raise ConsultaJaNotificadaError(str(corpo.id_consulta))
 
-    row_f = await obter_ou_criar_e_incrementar_aparicao(
+    fid: uuid.UUID | None = None
+    email_f = str(corpo.email_fornecedor).strip() if corpo.email_fornecedor else None
+    tel_f = (corpo.telefone_fornecedor or "").strip() or None
+    nome_nf = (corpo.nome_fantasia or "").strip() or None
+    await garantir_linha_engajamento(
         pool,
+        cnpj_basico=corpo.cnpj_basico,
         cnpj=cnpj,
-        nome=corpo.nome_fantasia,
-        email=str(corpo.email_fornecedor) if corpo.email_fornecedor else None,
-        telefone=corpo.telefone_fornecedor,
+        fornecedor_id=None,
+        nome_fantasia=nome_nf,
     )
-    _cf = obter_identificadores_postgres().col_fornecedor_id
-    _log.info(
-        "[orquestracao] fornecedor fornecedor_id=%s email=%s telefone=%s aparicoes=%s ativo=%s",
-        row_f[_cf],
-        row_f["email"],
-        row_f["telefone"],
-        row_f["aparicoes_busca"],
-        row_f["ativo"],
-    )
-
-    if not row_f["ativo"]:
-        _log.info("[orquestracao] fim: fornecedor inativo — sem fila")
-        return RespostaRecebeConsulta(
-            acao="nada",
-            id_consulta=corpo.id_consulta,
-            motivo="fornecedor inativo",
+    await incrementar_aparicao_busca(pool, cnpj_basico=corpo.cnpj_basico, nome_fantasia=nome_nf)
+    try:
+        row_f = await buscar_usuario_fornecedor_por_cnpj_partes(
+            pool,
+            cnpj_basico=corpo.cnpj_basico,
+            cnpj_ordem=corpo.cnpj_ordem,
+            cnpj_dv=corpo.cnpj_dv,
         )
+        fid = row_f["fornecedor_id"]
+        await garantir_linha_engajamento(
+            pool,
+            cnpj_basico=corpo.cnpj_basico,
+            cnpj=cnpj,
+            fornecedor_id=fid,
+            nome_fantasia=nome_nf,
+        )
+        email_f = email_f or ((row_f["email"] or "").strip() or None)
+        tel_f = tel_f or ((row_f["telefone"] or "").strip() or None)
+    except LookupError:
+        _log.info("[orquestracao] usuario_fornecedor ausente para cnpj=%s", cnpj)
 
-    fid: uuid.UUID = row_f[_cf]
-    email_f = row_f["email"]
-    tel_f = row_f["telefone"]
-    email_e, tel_e = await enriquecer_se_necessario(
-        pool,
+    # Sempre: e-mail/telefone do payload entram nas listas (merge com perfil quando faltar dado).
+    r = await enriquecer_retorno_completo(
         porta_enriquecimento,
-        fornecedor_id=fid,
         cnpj_basico=corpo.cnpj_basico,
         email_atual=email_f,
         telefone_atual=tel_f,
     )
+    now_iso = agora_iso()
+    ce = contatos_iniciais_email(list(r.emails), now_iso=now_iso)
+    cs = contatos_iniciais_sms(list(r.telefones), now_iso=now_iso)
+    await persistir_contatos_iniciais_engajamento(
+        pool,
+        cnpj_basico=corpo.cnpj_basico,
+        fornecedor_id=fid,
+        contatos_email=ce,
+        contatos_sms=cs,
+    )
+    snap = await carregar_por_cnpj_basico(pool, corpo.cnpj_basico)
+    email_e = escolher_email_efetivo(snap.contatos_email, email_f)
+    tel_e = escolher_telefone_efetivo(snap.contatos_sms, tel_f)
+
     _log.info(
-        "[orquestracao] dados apos enriquecimento email=%s telefone=%s",
+        "[orquestracao] dados efetivos email=%s telefone=%s",
         email_e,
         tel_e,
     )
 
-    snap = await carregar_para_fornecedor(pool, fid)
+    st_e = estado_granular_email(snap.contatos_email, email_e)
+    st_s = estado_granular_sms(snap.contatos_sms, tel_e)
     _log.info(
-        "[orquestracao] engajamento fornecedor_id=%s email=%s sms=%s recebe_email=%s",
+        "[orquestracao] engajamento cnpj_basico=%s fornecedor_id=%s agg_email=%s agg_sms=%s st_gran_email=%s st_gran_sms=%s",
+        corpo.cnpj_basico,
         fid,
         snap.engajamento_email,
         snap.engajamento_sms,
-        snap.recebe_email,
+        st_e,
+        st_s,
     )
 
     decisao = decidir_canal_e_cadencia(
+        engajamento_email_agg=snap.engajamento_email,
+        engajamento_sms_agg=snap.engajamento_sms,
         email_efetivo=email_e,
         telefone_efetivo=tel_e,
-        recebe_email=snap.recebe_email,
-        engajamento_email=snap.engajamento_email,
-        engajamento_sms=snap.engajamento_sms,
+        estado_granular_email=st_e,
+        estado_granular_sms=st_s,
     )
     _log.info(
         "[orquestracao] decisao canal=%s template=%s motivo=%s",
@@ -127,8 +161,8 @@ async def executar_receber_consulta(
             corpo,
             destinatario=email_e or "",
             fornecedor_id=fid,
+            cnpj_basico=corpo.cnpj_basico,
             id_externo=ext,
-            telefone_sms_fallback=tel_e,
         )
         ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
         _log.info(
@@ -150,6 +184,7 @@ async def executar_receber_consulta(
         corpo,
         destinatario=tel_e or "",
         fornecedor_id=fid,
+        cnpj_basico=corpo.cnpj_basico,
         id_externo=ext,
     )
     ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)

@@ -22,8 +22,8 @@ async def enfileirar_email_pendente(
         tipo_template=pedido.tipo_template.value,
         contexto=dict(pedido.contexto),
         remetente=pedido.remetente,
-        telefone_sms_fallback=pedido.telefone_sms_fallback,
         fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
+        cnpj_basico=pedido.cnpj_basico,
         consulta_id=pedido.consulta_id,
         origem=origem,
     )
@@ -46,5 +46,6 @@ async def enfileirar_sms_pendente(
         remetente=pedido.remetente,
         origem=origem,
         fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
+        cnpj_basico=pedido.cnpj_basico,
         consulta_id=pedido.consulta_id,
     )

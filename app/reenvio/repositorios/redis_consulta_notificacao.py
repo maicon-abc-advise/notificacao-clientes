@@ -20,6 +20,10 @@ def fase_esperando_email(message_id: str) -> str:
     return f"esperando-email:{message_id}"
 
 
+def fase_esperando_sms(message_id: str) -> str:
+    return f"esperando-sms:{message_id}"
+
+
 def fase_pendente_sms(id_externo: str) -> str:
     return f"pendente-sms:{id_externo}"
 
@@ -45,6 +49,12 @@ async def promover_para_esperando_email(redis: Redis, consulta_id: uuid.UUID | N
     if consulta_id is None:
         return
     await redis.set(chave_trava_consulta(consulta_id), fase_esperando_email(message_id))
+
+
+async def promover_para_esperando_sms(redis: Redis, consulta_id: uuid.UUID | None, message_id: str) -> None:
+    if consulta_id is None:
+        return
+    await redis.set(chave_trava_consulta(consulta_id), fase_esperando_sms(message_id))
 
 
 async def redefinir_para_pendente_sms_pos_bounce(redis: Redis, consulta_id: uuid.UUID | None, id_externo: str) -> None:

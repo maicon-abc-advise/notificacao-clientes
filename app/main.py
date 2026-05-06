@@ -2,6 +2,7 @@ from contextlib import asynccontextmanager
 import logging
 import asyncpg
 from fastapi import FastAPI, Request
+from fastapi.exceptions import RequestValidationError
 from fastapi.responses import JSONResponse
 from app.config.config import obter_configuracao
 from app.iam.rotas import ping_autenticado
@@ -12,7 +13,7 @@ from app.reenvio.api.rotas import (
     webhook_sms_router,
 )
 from app.dashboard.api import dashboard_router
-from app.orquestracao.api import orquestracao_router
+from app.orquestracao.api.router import router as orquestracao_router
 from app.reenvio.redis_app import fechar_cliente_redis, obter_cliente_redis
 from app.templates.conexao import fechar_pool
 
@@ -39,6 +40,15 @@ app = FastAPI(
     description="Infraestrutura inicial",
     lifespan=lifespan,
 )
+
+@app.exception_handler(RequestValidationError)
+async def _validacao_mensagens_email_400(request: Request, exc: RequestValidationError) -> JSONResponse:
+    """Payload inválido em POST /v1/mensagens/email (ex.: campo ``telefone_sms_fallback`` removido) → 400."""
+    path = request.url.path.rstrip("/")
+    if path.endswith("/v1/mensagens/email"):
+        return JSONResponse(status_code=400, content={"detail": exc.errors()})
+    return JSONResponse(status_code=422, content={"detail": exc.errors()})
+
 
 @app.exception_handler(asyncpg.exceptions.UndefinedTableError)
 async def _sem_tabela_postgres(_request: Request, _exc: asyncpg.exceptions.UndefinedTableError) -> JSONResponse:

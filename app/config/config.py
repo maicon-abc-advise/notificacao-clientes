@@ -1,16 +1,12 @@
 from functools import lru_cache
 from typing import Any, Self
-
 from pydantic import AliasChoices, Field, field_validator, model_validator
 from pydantic_settings import BaseSettings, SettingsConfigDict
-
 from app.config.ambiente import Ambiente
 from app.config.provedor_mensagens import ProvedorMensagem
 
-
 def _strip(v: str | None) -> str:
     return (v or "").strip()
-
 
 class Configuracao(BaseSettings):
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
@@ -57,7 +53,7 @@ class Configuracao(BaseSettings):
     postgres_tabela_suffix: str = Field(
         default="",
         validation_alias="POSTGRES_TABELA_SUFFIX",
-        description="Sufixo só em consultas e fornecedores; coluna FK vira fornecedor_id + sufixo (ex.: _teste).",
+        description="Sufixo em consultas e usuario_fornecedor; FKs para usuario_fornecedor usam coluna fornecedor_id + sufixo (ex.: _teste).",
     )
 
     api_key: str = Field(validation_alias="API_KEY")
