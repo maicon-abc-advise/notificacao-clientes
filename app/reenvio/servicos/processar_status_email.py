@@ -46,7 +46,7 @@ async def processar_webhook_status_email(
     payload: WebhookMessageStatusZenvia,
 ) -> dict[str, Any]:
 
-    if payload.channel != "email":
+    if (payload.channel or "").lower() != "email":
         return {"acao": "ignorado", "motivo": "canal não é email"}
 
     novo = await registrar_evento_se_novo(pool, payload.id)
@@ -54,10 +54,13 @@ async def processar_webhook_status_email(
         return {"acao": "duplicado", "id_evento": payload.id}
 
     repo = RepositorioEmailsEsperandoConfirmacaoRedis()
-    message_id = payload.messageId
+    message_id = payload.obter_id_mensagem_zenvia()
+    if not message_id:
+        return {"acao": "sem_message_id", "motivo": "message.id e messageId ausentes ou vazios"}
+
     code = payload.messageStatus.code
-    cause = payload.messageStatus.cause
-    description = payload.messageStatus.description
+    texto_falha = payload.texto_para_classificacao_falha()
+    cause = texto_falha
 
     dados = await repo.obter(redis, message_id)
     if not dados:
@@ -84,7 +87,7 @@ async def processar_webhook_status_email(
         await repo.remover(redis, message_id)
         return {"acao": "removido_fila", "message_id": message_id, "code": code}
 
-    if code == "CLICK":
+    if code == "CLICKED":
         await atualizar_status_por_id_mensagem_zenvia(
             pool,
             id_mensagem_zenvia=message_id,
@@ -121,7 +124,7 @@ async def processar_webhook_status_email(
         return {"acao": "atualizado", "message_id": message_id, "code": code}
 
     if code in ("NOT_DELIVERED", "REJECTED"):
-        cls = classificar_falha_email(cause=cause, description=description)
+        cls = classificar_falha_email(cause=texto_falha, description=None)
         if cls == ResultadoClassificacaoEmail.HARD_BOUNCE:
             ext = (dados.get("id_externo") or dados.get("external_id") or "").strip()
             if cnpj_basico:

@@ -32,7 +32,7 @@ async def post_webhook_sms_status(
     redis: Annotated[Redis, Depends(_redis)],
     config: Annotated[Configuracao, Depends(obter_configuracao)],
 ) -> dict:
-    if corpo.channel != "sms":
+    if (corpo.channel or "").lower() != "sms":
         return {"erro": "esta rota aceita apenas channel=sms", "recebido": corpo.channel}
     resultado = await processar_webhook_status_sms(pool, redis, config, corpo)
     return resultado

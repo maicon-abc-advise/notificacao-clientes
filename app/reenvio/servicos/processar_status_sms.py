@@ -49,20 +49,24 @@ async def processar_webhook_status_sms(
     cfg: Configuracao,
     payload: WebhookMessageStatusZenvia,
 ) -> dict[str, Any]:
-    if payload.channel != "sms":
+    if (payload.channel or "").lower() != "sms":
         return {"acao": "ignorado", "motivo": "canal não é sms"}
 
     novo = await registrar_evento_se_novo(pool, payload.id)
     if not novo:
         return {"acao": "duplicado", "id_evento": payload.id}
 
-    row = await buscar_por_id_mensagem_zenvia(pool, payload.messageId)
+    mid_z = payload.obter_id_mensagem_zenvia()
+    if not mid_z:
+        return {"acao": "sem_message_id", "motivo": "message.id e messageId ausentes ou vazios"}
+
+    row = await buscar_por_id_mensagem_zenvia(pool, mid_z)
     if row is None:
         _log.info(
             "Webhook SMS sem linha em sms_enviados (message_id=%s). Envio fora desta API?",
-            payload.messageId,
+            mid_z,
         )
-        return {"acao": "linha_nao_encontrada", "message_id": payload.messageId}
+        return {"acao": "linha_nao_encontrada", "message_id": mid_z}
 
     id_interno = row["id"]
     telefone = row["telefone"]
@@ -71,9 +75,8 @@ async def processar_webhook_status_sms(
     cnpj_basico = _cnpj_basico_de_row(row)
     tentativas = int(row["tentativas_reprocessar"] or 0)
     code = payload.messageStatus.code
-    cause = payload.messageStatus.cause
-    description = payload.messageStatus.description
-    motivo = " ".join(x for x in (cause, description) if x)[:2000] or None
+    texto_falha = payload.texto_para_classificacao_falha()
+    motivo = (texto_falha[:2000] if texto_falha else None)
 
     repo_esp = RepositorioSmsEsperandoConfirmacaoRedis()
 
@@ -87,10 +90,10 @@ async def processar_webhook_status_sms(
         await tocar_engajamento_sms(
             pool, fid, cnpj_basico, EngajamentoSmsEstado.SMS_ENTREGUE, endereco=str(telefone) if telefone else None
         )
-        await repo_esp.remover(redis, payload.messageId)
+        await repo_esp.remover(redis, mid_z)
         return {"acao": "sms_lido", "id": str(id_interno), "code": code}
 
-    if code == "CLICK":
+    if code == "CLICKED":
         await atualizar_status_por_id_interno(
             pool,
             id_interno=id_interno,
@@ -104,7 +107,7 @@ async def processar_webhook_status_sms(
             EngajamentoSmsEstado.SMS_LINK_CLICADO,
             endereco=str(telefone) if telefone else None,
         )
-        await repo_esp.remover(redis, payload.messageId)
+        await repo_esp.remover(redis, mid_z)
         return {"acao": "sms_clicado", "id": str(id_interno), "code": code}
 
     if code == "DELIVERED":
@@ -117,8 +120,8 @@ async def processar_webhook_status_sms(
         await tocar_engajamento_sms(
             pool, fid, cnpj_basico, EngajamentoSmsEstado.SMS_ENTREGUE, endereco=str(telefone) if telefone else None
         )
-        if await repo_esp.obter(redis, payload.messageId):
-            await repo_esp.atualizar_campos(redis, payload.messageId, {"status_atual": "ENTREGUE"})
+        if await repo_esp.obter(redis, mid_z):
+            await repo_esp.atualizar_campos(redis, mid_z, {"status_atual": "ENTREGUE"})
         return {"acao": "sms_entregue", "id": str(id_interno), "code": code}
 
     if code == "SENT":
@@ -131,12 +134,12 @@ async def processar_webhook_status_sms(
         await tocar_engajamento_sms(
             pool, fid, cnpj_basico, EngajamentoSmsEstado.SMS_WEBHOOK_SENT, endereco=str(telefone) if telefone else None
         )
-        if await repo_esp.obter(redis, payload.messageId):
-            await repo_esp.atualizar_campos(redis, payload.messageId, {"status_atual": "ENVIADO_PROVEDOR"})
+        if await repo_esp.obter(redis, mid_z):
+            await repo_esp.atualizar_campos(redis, mid_z, {"status_atual": "ENVIADO_PROVEDOR"})
         return {"acao": "sms_encaminhado_provedor", "id": str(id_interno)}
 
     if code in ("NOT_DELIVERED", "REJECTED"):
-        if classificar_falha_sms_numero(cause=cause, description=description):
+        if classificar_falha_sms_numero(cause=texto_falha, description=None):
             await registrar_telefone_invalido_stub(telefone=telefone, motivo=motivo)
             await atualizar_status_por_id_interno(
                 pool,
@@ -151,7 +154,7 @@ async def processar_webhook_status_sms(
                 EngajamentoSmsEstado.SMS_FALHA_NUMERO,
                 endereco=str(telefone) if telefone else None,
             )
-            await repo_esp.remover(redis, payload.messageId)
+            await repo_esp.remover(redis, mid_z)
             if cnpj_basico:
                 snap = await carregar_por_cnpj_basico(pool, cnpj_basico)
                 next_tel = proximo_telefone_tentavel_apos_contato(snap.contatos_sms, str(telefone) if telefone else None)
@@ -235,4 +238,4 @@ async def processar_webhook_status_sms(
         return {"acao": "sms_reprocessar", "id": str(id_interno), "tentativas": tentativas + 1}
 
     _log.warning("Código SMS não tratado: %s", code)
-    return {"acao": "nao_tratado", "code": code, "message_id": payload.messageId}
+    return {"acao": "nao_tratado", "code": code, "message_id": mid_z}

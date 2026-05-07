@@ -39,7 +39,7 @@ async def post_webhook_email_status(
     redis: Annotated[Redis, Depends(_redis)],
     config: Annotated[Configuracao, Depends(obter_configuracao)],
 ) -> dict:
-    if corpo.channel != "email":
+    if (corpo.channel or "").lower() != "email":
         return {"erro": "esta rota aceita apenas channel=email", "recebido": corpo.channel}
     resultado = await processar_webhook_status_email(pool, redis, config, corpo)
     return resultado
