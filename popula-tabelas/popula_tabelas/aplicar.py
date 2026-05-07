@@ -78,7 +78,7 @@ async def _migrar_status_ultimo_lido_e_limpar_zenvia(conn: asyncpg.Connection) -
         await conn.execute(f"ALTER TABLE {t} DROP CONSTRAINT IF EXISTS {chk}")
         await conn.execute(
             f"""ALTER TABLE {t} ADD CONSTRAINT {chk} CHECK (
-                status_ultimo IN ('processando', 'enviado', 'lido', 'falha_definitiva', 'reprocessar')
+                status_ultimo IN ('processando', 'enviado', 'lido', 'clicado', 'falha_definitiva', 'reprocessar')
             )""",
         )
 

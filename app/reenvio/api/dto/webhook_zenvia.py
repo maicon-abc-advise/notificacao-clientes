@@ -1,7 +1,7 @@
 from typing import Literal
 from pydantic import BaseModel, ConfigDict, Field
 
-CodigoStatusMensagem = Literal["REJECTED", "SENT", "DELIVERED", "NOT_DELIVERED", "READ"]
+CodigoStatusMensagem = Literal["REJECTED", "SENT", "DELIVERED", "NOT_DELIVERED", "READ", "CLICK"]
 TipoEventoWebhook = Literal["MESSAGE_STATUS"]
 CanalWebhook = Literal["email", "sms"]
 

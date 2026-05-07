@@ -27,6 +27,18 @@ def test_webhook_message_status_ok() -> None:
     assert m.messageStatus.code == "READ"
 
 
+def test_webhook_message_status_click_ok() -> None:
+    p = _payload_valido()
+    p["messageStatus"] = {
+        "timestamp": "2026-04-27T12:00:01Z",
+        "code": "CLICK",
+        "description": "click",
+        "cause": None,
+    }
+    m = WebhookMessageStatusZenvia.model_validate(p)
+    assert m.messageStatus.code == "CLICK"
+
+
 def test_webhook_rejeita_campo_extra() -> None:
     p = _payload_valido()
     p["extra"] = "nope"

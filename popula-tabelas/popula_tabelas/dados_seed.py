@@ -51,8 +51,6 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
     .highlight { background: #f8fafc; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; border-left: 4px solid #00c38a; margin-bottom: 28px; font-size: 15px; color: #334155; }
     .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
     .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
-    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
-    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
     @media (max-width: 600px) { .content { padding: 24px 16px; } }
   </style>
 </head>
@@ -62,7 +60,7 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
     <div class="content">
       <h1>Detectamos buscas por Fornecedores de {{ segmento }} em {{ uf }}!</h1>
       <div class="highlight">
-        Olá{{ saudacao_nome }} <br><br>
+        Olá, {{ saudacao_nome }}. <br><br>
         Temos ótimas notícias: sua empresa acaba de ser encontrada por compradores que buscam fornecedores exatamente no seu setor em <strong>{{ uf }}</strong>.
       </div>
       <p>
@@ -80,9 +78,7 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
     </div>
     <div class="footer">
       © BuscaFornecedor — Todos os direitos reservados.<br/>
-      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
-      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
-      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a>
     </div>
   </div>
 </body>
@@ -104,8 +100,6 @@ EMAIL_APARECEU_BUSCA_SEM_REGISTRO = """<!DOCTYPE html>
     .highlight { background: #f8fafc; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; border-left: 4px solid #00c38a; margin-bottom: 28px; font-size: 15px; color: #334155; }
     .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
     .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
-    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
-    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
     @media (max-width: 600px) { .content { padding: 24px 16px; } }
   </style>
 </head>
@@ -115,7 +109,7 @@ EMAIL_APARECEU_BUSCA_SEM_REGISTRO = """<!DOCTYPE html>
     <div class="content">
       <h1>Detectamos demanda para fornecedores de {{ segmento }} em {{ uf }} e você foi listado!</h1>
       <div class="highlight">
-        Olá{{ saudacao_nome }} <br><br>
+        Olá, {{ saudacao_nome }}. <br><br>
         Identificamos que compradores em <strong>{{ uf }}</strong> realizaram buscas por fornecedores de <strong>{{ segmento }}</strong> e sua empresa foi listada.
       </div>
       <p>
@@ -133,9 +127,7 @@ EMAIL_APARECEU_BUSCA_SEM_REGISTRO = """<!DOCTYPE html>
     </div>
     <div class="footer">
       © BuscaFornecedor — Todos os direitos reservados.<br/>
-      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
-      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
-      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a>
     </div>
   </div>
 </body>
@@ -157,8 +149,6 @@ EMAIL_CREDITOS_NO_FIM = """<!DOCTYPE html>
     .highlight { background: #fef2f2; padding: 20px; border-radius: 10px; border: 1px solid #fee2e2; border-left: 4px solid #ef4444; margin-bottom: 28px; font-size: 15px; color: #991b1b; }
     .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
     .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
-    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
-    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
     @media (max-width: 600px) { .content { padding: 24px 16px; } }
   </style>
 </head>
@@ -183,9 +173,7 @@ EMAIL_CREDITOS_NO_FIM = """<!DOCTYPE html>
     </div>
     <div class="footer">
       © BuscaFornecedor — Todos os direitos reservados.<br/>
-      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
-      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
-      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a>
     </div>
   </div>
 </body>
@@ -207,8 +195,6 @@ EMAIL_LEMBRETE_CREDITOS = """<!DOCTYPE html>
     .highlight { background: #fef2f2; padding: 20px; border-radius: 10px; border: 1px solid #fee2e2; border-left: 4px solid #ef4444; margin-bottom: 28px; font-size: 15px; color: #991b1b; }
     .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
     .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
-    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
-    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
     @media (max-width: 600px) { .content { padding: 24px 16px; } }
   </style>
 </head>
@@ -233,9 +219,7 @@ EMAIL_LEMBRETE_CREDITOS = """<!DOCTYPE html>
     </div>
     <div class="footer">
       © BuscaFornecedor — Todos os direitos reservados.<br/>
-      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
-      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
-      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a>
     </div>
   </div>
 </body>

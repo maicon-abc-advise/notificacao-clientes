@@ -90,6 +90,23 @@ async def processar_webhook_status_sms(
         await repo_esp.remover(redis, payload.messageId)
         return {"acao": "sms_lido", "id": str(id_interno), "code": code}
 
+    if code == "CLICK":
+        await atualizar_status_por_id_interno(
+            pool,
+            id_interno=id_interno,
+            status_ultimo="clicado",
+            motivo=motivo,
+        )
+        await tocar_engajamento_sms(
+            pool,
+            fid,
+            cnpj_basico,
+            EngajamentoSmsEstado.SMS_LINK_CLICADO,
+            endereco=str(telefone) if telefone else None,
+        )
+        await repo_esp.remover(redis, payload.messageId)
+        return {"acao": "sms_clicado", "id": str(id_interno), "code": code}
+
     if code == "DELIVERED":
         await atualizar_status_por_id_interno(
             pool,

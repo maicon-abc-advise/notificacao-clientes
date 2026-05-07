@@ -61,8 +61,6 @@ async def listar_fornecedores_alerta_creditos(
             au.email,
             uf.telefone,
             uf.cnpj_basico,
-            uf.cnpj_ordem,
-            uf.cnpj_dv,
             uf.n_creditos AS creditos
         FROM {t} AS uf
         LEFT JOIN auth.users AS au ON au.id = uf.{ufid}

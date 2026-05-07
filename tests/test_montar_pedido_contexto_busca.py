@@ -18,7 +18,7 @@ def _corpo() -> RecebeConsultaCorpo:
     )
 
 
-def test_pedido_email_busca_traz_uf_segmento_no_contexto() -> None:
+def test_pedido_email_apareceu_busca_contexto_minimo_logado() -> None:
     c = _corpo()
     p = montar_pedido_email_apareceu_busca(
         c,
@@ -30,12 +30,37 @@ def test_pedido_email_busca_traz_uf_segmento_no_contexto() -> None:
         uf="MG",
         segmento="alimentícios",
     )
-    assert p.contexto["uf"] == "MG"
-    assert p.contexto["segmento"] == "alimentícios"
-    assert p.contexto["link_cadastro"]
+    assert p.contexto == {
+        "saudacao_nome": "ACME",
+        "uf": "MG",
+        "segmento": "alimentícios",
+        "link_area_conta": "https://buscafornecedor.com.br/conta",
+        "url_plataforma": "https://buscafornecedor.com.br",
+    }
 
 
-def test_pedido_sms_consultado_sem_email_traz_uf_segmento() -> None:
+def test_pedido_email_sem_registro_contexto_minimo() -> None:
+    c = _corpo()
+    p = montar_pedido_email_apareceu_busca(
+        c,
+        destinatario="a@b.co",
+        fornecedor_id=None,
+        cnpj_basico=c.cnpj_basico,
+        id_externo="ext-1",
+        tipo_template=CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO,
+        uf="MG",
+        segmento="alimentícios",
+    )
+    assert p.contexto == {
+        "saudacao_nome": "ACME",
+        "uf": "MG",
+        "segmento": "alimentícios",
+        "link_cadastro": "https://buscafornecedor.com.br/cadastro",
+        "url_plataforma": "https://buscafornecedor.com.br",
+    }
+
+
+def test_pedido_sms_busca_contexto_minimo() -> None:
     c = _corpo()
     p = montar_pedido_sms_consultado_sem_email(
         c,
@@ -47,6 +72,8 @@ def test_pedido_sms_consultado_sem_email_traz_uf_segmento() -> None:
         uf="sua região",
         segmento="seu segmento",
     )
-    assert p.contexto["uf"] == "sua região"
-    assert p.contexto["segmento"] == "seu segmento"
-    assert "link_cadastro" in p.contexto
+    assert p.contexto == {
+        "uf": "sua região",
+        "segmento": "seu segmento",
+        "url_plataforma": "https://buscafornecedor.com.br",
+    }

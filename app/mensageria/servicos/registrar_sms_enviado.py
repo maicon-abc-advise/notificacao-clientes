@@ -12,6 +12,7 @@ from redis.asyncio import Redis
 
 from app.config.config import obter_configuracao
 from app.mensageria.api.dto.modelos import CanalMensagem, PedidoEnvioSms, ResultadoEnvioMensagem
+from app.mensageria.repositorios.postgres_fornecedores import resolver_cnpj_basico_para_envio_mensagem
 from app.mensageria.repositorios.postgres_sms_enviados import inserir_ou_atualizar_apos_envio_api
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import RepositorioSmsEsperandoConfirmacaoRedis
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
@@ -49,12 +50,18 @@ async def registrar_sms_enviado_apos_sucesso(
         id_mensagem_zenvia=msg_id,
         fornecedor_id=pedido.fornecedor_id,
     )
+    cnpj_eng = await resolver_cnpj_basico_para_envio_mensagem(
+        pool,
+        cnpj_basico=pedido.cnpj_basico,
+        fornecedor_id=pedido.fornecedor_id,
+    )
     await tocar_engajamento_sms(
         pool,
         pedido.fornecedor_id,
-        pedido.cnpj_basico,
+        cnpj_eng,
         EngajamentoSmsEstado.SMS_ENVIADO_API,
         endereco=pedido.destinatario,
+        somente_endereco_existente=True,
     )
 
     cfg = obter_configuracao()

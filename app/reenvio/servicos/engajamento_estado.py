@@ -24,6 +24,7 @@ class EngajamentoEmailEstado(enum.StrEnum):
     EMAIL_FALHA_RECUPERAVEL_UNKNOWN = "email_falha_recuperavel_unknown"
     EMAIL_SWEEP_LEMBRETE_SMS = "email_sweep_lembrete_sms"
     EMAIL_NAO_EXISTE = "email_nao_existe"
+    EMAIL_LINK_CLICADO = "email_link_clicado"
 
 class EngajamentoSmsEstado(enum.StrEnum):
     ATIVO = "ativo"
@@ -34,6 +35,7 @@ class EngajamentoSmsEstado(enum.StrEnum):
     SMS_FALHA_LIMITE = "sms_falha_limite"
     SMS_REPROCESSAR_FILA = "sms_reprocessar_fila"
     SMS_NAO_EXISTE = "sms_nao_existe"
+    SMS_LINK_CLICADO = "sms_link_clicado"
 
 def engajamento_falha_recuperavel_email(cls: ResultadoClassificacaoEmail) -> EngajamentoEmailEstado:
     m: dict[ResultadoClassificacaoEmail, EngajamentoEmailEstado] = {

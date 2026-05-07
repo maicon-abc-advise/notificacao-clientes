@@ -92,11 +92,16 @@ async def _templates_fixos() -> object:
     return _T()
 
 
+async def _pool_dep_fornecedor_404():
+    return _PoolFornecedorInexistente()
+
+
 def test_post_email_404_quando_fornecedor_id_inexistente() -> None:
     async def _fake_dep() -> object:
         return await _templates_fixos()
 
     app.dependency_overrides[obter_porta_templates] = _fake_dep
+    app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep_fornecedor_404
     try:
         with TestClient(app) as client:
             r = client.post(
@@ -121,6 +126,7 @@ def test_post_sms_404_quando_fornecedor_id_inexistente() -> None:
         return await _templates_fixos()
 
     app.dependency_overrides[obter_porta_templates] = _fake_dep
+    app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep_fornecedor_404
     try:
         with TestClient(app) as client:
             r = client.post(
@@ -140,7 +146,51 @@ def test_post_sms_404_quando_fornecedor_id_inexistente() -> None:
     assert r.json()["detail"] == "fornecedor não encontrado"
 
 
-def test_post_email_200_com_override() -> None:
+async def _validar_engajamento_email_sem_db(*_a, **_k) -> str:
+    return "12345678"
+
+
+async def _validar_engajamento_sms_sem_db(*_a, **_k) -> str:
+    return "12345678"
+
+
+async def _tocar_engajamento_noop(*_a, **_k) -> None:
+    return None
+
+
+class _PoolSemPostgres:
+    """Substitui o pool real quando o fluxo do teste não executa SQL."""
+
+    async def fetchval(self, *_a, **_k):
+        return None
+
+    async def fetchrow(self, *_a, **_k):
+        return None
+
+
+class _PoolFornecedorInexistente:
+    async def fetchval(self, sql: str, *_args):
+        if "EXISTS" in sql:
+            return False
+        return None
+
+    async def fetchrow(self, *_a, **_k):
+        return None
+
+
+async def _pool_dep_sem_postgres():
+    return _PoolSemPostgres()
+
+
+def test_post_email_200_com_override(monkeypatch: pytest.MonkeyPatch) -> None:
+    monkeypatch.setattr(
+        envio_mensagens,
+        "_validar_engajamento_antes_envio_email",
+        _validar_engajamento_email_sem_db,
+    )
+    monkeypatch.setattr(envio_mensagens, "tocar_engajamento_email", _tocar_engajamento_noop)
+    app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep_sem_postgres
+
     class FalsaPorta:
         def enviar_email(self, pedido: PedidoEmailProvedor) -> ResultadoEnvioMensagem:
             return ResultadoEnvioMensagem(
@@ -165,6 +215,7 @@ def test_post_email_200_com_override() -> None:
                     "destinatario": "a@b.com",
                     "tipo_template": "APARECEU_BUSCA",
                     "contexto": {},
+                    "cnpj_basico": "12345678",
                 },
             )
     finally:
@@ -263,14 +314,22 @@ def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> No
     from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
     from app.config.config import obter_configuracao
 
+    monkeypatch.setattr(
+        envio_mensagens,
+        "_validar_engajamento_antes_envio_sms",
+        _validar_engajamento_sms_sem_db,
+    )
+
     async def _fake_dep() -> object:
         return await _templates_fixos()
 
+    monkeypatch.setenv("USE_ZENVIA_MOCK", "false")
     monkeypatch.setenv("ZENVIA_API_TOKEN", "")
     monkeypatch.setenv("ZENVIA_API_TOKEN_PROD", "")
     obter_configuracao.cache_clear()
     obter_parametros_zenvia.cache_clear()
     app.dependency_overrides[obter_porta_templates] = _fake_dep
+    app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep_sem_postgres
     try:
         with TestClient(app) as client:
             r = client.post(
@@ -280,11 +339,13 @@ def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> No
                     "destinatario": "5511987654321",
                     "tipo_template": "APARECEU_BUSCA",
                     "contexto": {"link_area_conta": "https://exemplo.com"},
+                    "cnpj_basico": "12345678",
                 },
             )
     finally:
         app.dependency_overrides.clear()
     assert r.status_code == 503
+    monkeypatch.setenv("USE_ZENVIA_MOCK", "true")
     monkeypatch.setenv("ZENVIA_API_TOKEN", "test-zenvia-token-somente-para-testes")
     obter_configuracao.cache_clear()
     obter_parametros_zenvia.cache_clear()

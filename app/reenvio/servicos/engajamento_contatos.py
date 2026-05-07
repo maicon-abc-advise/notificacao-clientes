@@ -48,6 +48,7 @@ _EMAIL_GOOD_AGG = frozenset(
         EngajamentoEmailEstado.ATIVO.value,
         EngajamentoEmailEstado.EMAIL_ENTREGUE_CAIXA.value,
         EngajamentoEmailEstado.EMAIL_LIDO.value,
+        EngajamentoEmailEstado.EMAIL_LINK_CLICADO.value,
     }
 )
 
@@ -74,6 +75,7 @@ _SMS_GOOD_AGG = frozenset(
     {
         EngajamentoSmsEstado.ATIVO.value,
         EngajamentoSmsEstado.SMS_ENTREGUE.value,
+        EngajamentoSmsEstado.SMS_LINK_CLICADO.value,
     }
 )
 
@@ -169,21 +171,39 @@ def fundir_lista_contatos_sms(
     return list(by_k.values())
 
 
+def contatos_incluem_email(contatos: list[dict[str, Any]], endereco: str | None) -> bool:
+    n = normalizar_email(endereco)
+    if not n:
+        return False
+    return any(normalizar_email(str(c.get("endereco") or "")) == n for c in contatos)
+
+
+def contatos_incluem_telefone(contatos: list[dict[str, Any]], endereco: str | None) -> bool:
+    t = normalizar_telefone(endereco)
+    if not t:
+        return False
+    return any(normalizar_telefone(str(c.get("endereco") or "")) == t for c in contatos)
+
+
 def merge_contato(
     lista: list[dict[str, Any]],
     endereco_norm: str,
     estado: str,
     *,
     now_iso: str,
-) -> None:
+    permitir_novo: bool = True,
+) -> bool:
     n = normalizar_email(endereco_norm)
     for c in lista:
         if normalizar_email(str(c.get("endereco") or "")) == n:
             c["endereco"] = n
             c["estado"] = estado
             c["ultima_atualizacao_em"] = now_iso
-            return
+            return True
+    if not permitir_novo:
+        return False
     lista.append({"endereco": n, "estado": estado, "ultima_atualizacao_em": now_iso})
+    return True
 
 
 def merge_contato_sms(
@@ -192,15 +212,19 @@ def merge_contato_sms(
     estado: str,
     *,
     now_iso: str,
-) -> None:
+    permitir_novo: bool = True,
+) -> bool:
     t_norm = normalizar_telefone(endereco_norm)
     for c in lista:
         if normalizar_telefone(str(c.get("endereco") or "")) == t_norm:
             c["endereco"] = t_norm
             c["estado"] = estado
             c["ultima_atualizacao_em"] = now_iso
-            return
+            return True
+    if not permitir_novo:
+        return False
     lista.append({"endereco": t_norm, "estado": estado, "ultima_atualizacao_em": now_iso})
+    return True
 
 
 def estado_granular_email(contatos: list[dict[str, Any]], endereco: str | None) -> str:

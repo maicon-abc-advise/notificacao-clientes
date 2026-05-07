@@ -85,6 +85,12 @@ async def metricas_emails(
         )
         or 0,
     )
+    clicados = int(
+        await pool.fetchval(
+            f"SELECT COUNT(*) FROM {te} WHERE status_ultimo = 'clicado'",
+        )
+        or 0,
+    )
     pendentes = int(await redis.zcard(IDX_EMAIL_PEND) or 0)
     esperando = int(await redis.zcard(IDX_EMAIL_CONF) or 0)
     return {
@@ -93,12 +99,14 @@ async def metricas_emails(
         "emails_esperando_confirmacao": esperando,
         "emails_falha_definitiva": falhas,
         "emails_lidos": lidos,
+        "emails_clicados": clicados,
         "cartoes": [
             {"chave": "enviados", "valor": total, "legenda": "E-mails registados"},
             {"chave": "pendentes", "valor": pendentes, "legenda": "Na fila pré-envio"},
             {"chave": "recusados", "valor": falhas, "legenda": "Falha definitiva"},
             {"chave": "esperando_feedback", "valor": esperando, "legenda": "Esperando confirmação"},
             {"chave": "abertos", "valor": lidos, "legenda": "E-mails lidos"},
+            {"chave": "cliques", "valor": clicados, "legenda": "Link clicado (e-mail)"},
         ],
     }
 
@@ -220,6 +228,12 @@ async def metricas_sms(
         )
         or 0,
     )
+    clicados = int(
+        await pool.fetchval(
+            f"SELECT COUNT(*) FROM {ts} WHERE status_ultimo = 'clicado'",
+        )
+        or 0,
+    )
     pendentes = int(await redis.zcard(IDX_SMS_PEND) or 0)
     esperando = int(await redis.zcard(IDX_SMS_CONF) or 0)
     return {
@@ -228,12 +242,14 @@ async def metricas_sms(
         "sms_esperando_confirmacao": esperando,
         "sms_falha_definitiva": falhas,
         "sms_lidos": lidos,
+        "sms_clicados": clicados,
         "cartoes": [
             {"chave": "enviados", "valor": total, "legenda": "SMS registados"},
             {"chave": "pendentes", "valor": pendentes, "legenda": "Na fila a enviar"},
             {"chave": "esperando_feedback", "valor": esperando, "legenda": "Esperando confirmação"},
             {"chave": "recusados", "valor": falhas, "legenda": "Falha definitiva"},
             {"chave": "abertos", "valor": lidos, "legenda": "SMS lidos"},
+            {"chave": "cliques", "valor": clicados, "legenda": "Link clicado (SMS)"},
         ],
     }
 

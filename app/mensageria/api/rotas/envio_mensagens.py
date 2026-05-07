@@ -15,7 +15,10 @@ from app.mensageria.api.dto.modelos import (
     ResultadoEnvioMensagem,
 )
 from app.mensageria.repositorios.postgres_emails_enviados import buscar_por_id_externo as buscar_email_por_id_externo
-from app.mensageria.repositorios.postgres_fornecedores import fornecedor_id_existe
+from app.mensageria.repositorios.postgres_fornecedores import (
+    fornecedor_id_existe,
+    resolver_cnpj_basico_para_envio_mensagem,
+)
 from app.mensageria.repositorios.postgres_sms_enviados import buscar_por_id_externo as buscar_sms_por_id_externo
 from app.mensageria.excecoes.erro import ErroEnvioZenvia
 from app.mensageria.servicos.materializar import materializar_email, materializar_sms
@@ -23,7 +26,11 @@ from app.mensageria.servicos.porta import PortaEnvioMensagem
 from app.reenvio.redis_app import obter_cliente_redis
 from app.reenvio.servicos.enfileirar_apos_envio_email import enfileirar_email_enviado_apos_sucesso
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado
-from app.reenvio.servicos.engajamento_fornecedor import tocar_engajamento_email
+from app.reenvio.servicos.engajamento_fornecedor import (
+    exigir_destinatario_no_engajamento_email,
+    exigir_destinatario_no_engajamento_sms,
+    tocar_engajamento_email,
+)
 from app.mensageria.servicos.registrar_email_enviado import registrar_email_enviado_apos_sucesso
 from app.mensageria.servicos.registrar_sms_enviado import registrar_sms_enviado_apos_sucesso
 from app.templates.conexao import obter_pool
@@ -63,6 +70,34 @@ async def _garantir_fornecedor_cadastrado(pool: asyncpg.Pool, fornecedor_id: UUI
         )
 
 
+async def _validar_engajamento_antes_envio_email(pool: asyncpg.Pool, pedido: PedidoEnvioEmail) -> str:
+    cnpj = await resolver_cnpj_basico_para_envio_mensagem(
+        pool,
+        cnpj_basico=pedido.cnpj_basico,
+        fornecedor_id=pedido.fornecedor_id,
+    )
+    await exigir_destinatario_no_engajamento_email(
+        pool,
+        cnpj_basico=cnpj,
+        destinatario=pedido.destinatario,
+    )
+    return cnpj
+
+
+async def _validar_engajamento_antes_envio_sms(pool: asyncpg.Pool, pedido: PedidoEnvioSms) -> str:
+    cnpj = await resolver_cnpj_basico_para_envio_mensagem(
+        pool,
+        cnpj_basico=pedido.cnpj_basico,
+        fornecedor_id=pedido.fornecedor_id,
+    )
+    await exigir_destinatario_no_engajamento_sms(
+        pool,
+        cnpj_basico=cnpj,
+        destinatario=pedido.destinatario,
+    )
+    return cnpj
+
+
 @router.post("/email", response_model=ResultadoEnvioMensagem, status_code=status.HTTP_200_OK)
 async def post_enviar_email(
     pedido: PedidoEnvioEmail,
@@ -81,6 +116,7 @@ async def post_enviar_email(
                     resposta_parcial={"idempotente": True},
                 )
         await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id, pedido.cnpj_basico)
+        cnpj_eng = await _validar_engajamento_antes_envio_email(pool, pedido)
         materializado = await materializar_email(pedido, templates)
         resultado = porta.enviar_email(materializado)
         await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
@@ -88,9 +124,10 @@ async def post_enviar_email(
         await tocar_engajamento_email(
             pool,
             pedido.fornecedor_id,
-            pedido.cnpj_basico,
+            cnpj_eng,
             EngajamentoEmailEstado.EMAIL_ENVIADO_API,
             endereco=pedido.destinatario,
+            somente_endereco_existente=True,
         )
         return resultado
     except ValueError as e:
@@ -121,6 +158,7 @@ async def post_enviar_sms(
                     resposta_parcial={"idempotente": True},
                 )
         await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id, pedido.cnpj_basico)
+        await _validar_engajamento_antes_envio_sms(pool, pedido)
         materializado = await materializar_sms(pedido, templates)
         resultado = porta.enviar_sms(materializado)
         await registrar_sms_enviado_apos_sucesso(pool, redis, pedido, resultado)

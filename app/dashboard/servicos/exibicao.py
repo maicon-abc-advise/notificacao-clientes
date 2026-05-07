@@ -19,6 +19,8 @@ def estado_postgres_mensagem(status_ultimo: str) -> dict[str, str]:
         return _badge("Em processamento", "info")
     if status_ultimo == "lido":
         return _badge("Lido", "success")
+    if status_ultimo == "clicado":
+        return _badge("Link clicado", "success")
     if status_ultimo == "enviado":
         return _badge("Enviado / entregue", "success")
     return _badge(status_ultimo, "neutral")
