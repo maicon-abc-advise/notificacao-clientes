@@ -12,7 +12,7 @@ from app.templates.modelo import CodigoTipoTemplate
 
 @dataclass(frozen=True, slots=True)
 class DecisaoCanal:
-    canal: str  # "nenhum" | "email" | "sms"
+    canal: str  
     tipo_template: CodigoTipoTemplate | None
     motivo: str
 
@@ -53,6 +53,7 @@ def decidir_canal_e_cadencia(
     telefone_efetivo: str | None,
     estado_granular_email: str,
     estado_granular_sms: str,
+    usuario_fornecedor_cadastrado: bool = True,
 ) -> DecisaoCanal:
     """Canal para notificação de “apareceu busca”. Cadência por dias **não** entra aqui — só em `verificar_creditos_servico`."""
     if not telefone_efetivo and not email_efetivo:
@@ -64,7 +65,12 @@ def decidir_canal_e_cadencia(
     ) and not agregado_canal_bloqueado(engajamento_email_agg)
 
     if email_ok:
-        return DecisaoCanal("email", CodigoTipoTemplate.APARECEU_BUSCA, "e-mail disponível e permitido")
+        tipo = (
+            CodigoTipoTemplate.APARECEU_BUSCA
+            if usuario_fornecedor_cadastrado
+            else CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO
+        )
+        return DecisaoCanal("email", tipo, "e-mail disponível e permitido")
 
     if (
         telefone_efetivo
@@ -79,7 +85,12 @@ def decidir_canal_e_cadencia(
             motivo_sms = "SMS: engajamento e-mail inativo — usar SMS"
         else:
             motivo_sms = "SMS: e-mail não utilizável para este envio"
-        return DecisaoCanal("sms", CodigoTipoTemplate.CONSULTADO_SEM_EMAIL, motivo_sms)
+        tipo_sms = (
+            CodigoTipoTemplate.CONSULTADO_SEM_EMAIL
+            if usuario_fornecedor_cadastrado
+            else CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO
+        )
+        return DecisaoCanal("sms", tipo_sms, motivo_sms)
 
     if telefone_efetivo and agregado_canal_bloqueado(engajamento_sms_agg):
         return DecisaoCanal("nenhum", None, "SMS agregado inativo")

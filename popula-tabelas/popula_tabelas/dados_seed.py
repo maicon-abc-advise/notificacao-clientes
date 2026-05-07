@@ -4,28 +4,35 @@ from app.templates.modelo import CodigoTipoTemplate
 
 IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
     CodigoTipoTemplate.APARECEU_BUSCA: "a1b2c3d4-e5f6-4789-a012-345678abcdef",
+    CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO: "e5f6a7b8-c9d0-4123-e456-789abcdef012",
     CodigoTipoTemplate.CREDITOS_NO_FIM: "b2c3d4e5-f6a7-4890-b123-456789abcdef",
     CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS: "c3d4e5f6-a7b8-4901-c234-56789abcdef0",
     CodigoTipoTemplate.CONSULTADO_SEM_EMAIL: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
 }
 
 SMS_APARECEU_BUSCA = (
-    "BuscaFornecedor: você apareceu em uma busca! Veja detalhes em {{ link_area_conta }}."
+    "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}. "
+    "Sua empresa apareceu! Veja agora em: {{ url_plataforma }}."
+)
+
+SMS_APARECEU_BUSCA_SEM_REGISTRO = (
+    "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}. "
+    "Sua empresa apareceu! Veja agora em: {{ url_plataforma }}."
 )
 
 SMS_CREDITOS_NO_FIM = (
-    "{{ nome_fantasia }}: seus créditos mensais estão no fim na BuscaFornecedor. "
-    "Renove ou ajuste seu plano: {{ link_area_creditos }}"
+    "BuscaFornecedor: Seus créditos estão acabando! Garanta que sua empresa continue no topo "
+    "das buscas hoje. Renove agora em: buscafornecedor.com.br"
 )
 
 SMS_LEMBRETE_CREDITOS = (
-    "Lembrete BuscaFornecedor: seus créditos mensais acabaram. "
-    "Acesse {{ link_area_creditos }} para regularizar e continuar visível."
+    "Atenção: Sua visibilidade na BuscaFornecedor foi interrompida por falta de créditos. "
+    "Regularize e não perca vendas: buscafornecedor.com.br"
 )
 
 SMS_CONSULTADO_SEM_EMAIL = (
-    "BuscaFornecedor: você foi consultado mas não encontramos seu e-mail. "
-    "Cadastre na plataforma: {{ url_plataforma }}"
+    "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}, mas você está sem e-mail de contato. "
+    "Não perca vendas, resolva em: {{ url_plataforma }}."
 )
 
 EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
@@ -33,7 +40,7 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Você apareceu em uma busca</title>
+  <title>Oportunidade em {{ uf }} identificada</title>
   <style>
     body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
     .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
@@ -41,9 +48,9 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
     .content { padding: 32px 24px; line-height: 1.6; }
     .content h1 { font-size: 20px; color: #0f172a; margin-bottom: 16px; text-align: left; }
     .content p { font-size: 15px; color: #475569; margin-bottom: 20px; }
-    .highlight { background: #f1f5f9; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 28px; font-size: 14px; color: #475569; }
-    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; }
-    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    .highlight { background: #f8fafc; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; border-left: 4px solid #00c38a; margin-bottom: 28px; font-size: 15px; color: #334155; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
     .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
     .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
     @media (max-width: 600px) { .content { padding: 24px 16px; } }
@@ -53,18 +60,75 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
   <div class="container">
     <div class="header">BuscaFornecedor</div>
     <div class="content">
-      <h1>Você apareceu em uma busca!</h1>
+      <h1>Detectamos buscas por Fornecedores de {{ segmento }} em {{ uf }}!</h1>
       <div class="highlight">
-        Olá{{ saudacao_nome }} sua empresa foi encontrada por compradores na BuscaFornecedor. Isso mostra que sua presença está gerando interesse.
+        Olá{{ saudacao_nome }} <br><br>
+        Temos ótimas notícias: sua empresa acaba de ser encontrada por compradores que buscam fornecedores exatamente no seu setor em <strong>{{ uf }}</strong>.
       </div>
       <p>
-        Acesse sua área para ver detalhes da atividade, manter seus dados atualizados e aproveitar ao máximo as oportunidades de contato.
-      </p>
-      <p style="text-align:center;">
-        <a href="{{ link_area_conta }}" class="button" target="_blank">Ver minha conta</a>
+        O mercado de <strong>{{ segmento }}</strong> está em alta na sua região. O fato de você ter aparecido nessa busca prova que sua empresa está no radar de quem tem poder de compra agora.
       </p>
       <p>
-        Quanto mais completo estiver seu cadastro, melhor será a experiência de quem busca por você.
+        Não deixe essa visibilidade passar em branco. Acesse sua área exclusiva para ver os detalhes dessa atividade e garantir que seu perfil se destaque da concorrência.
+      </p>
+      <p style="text-align:center;">
+        <a href="{{ link_area_conta }}" class="button" target="_blank">Aproveitar Oportunidade</a>
+      </p>
+      <p style="font-size: 14px; color: #64748b; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
+        <strong>Dica:</strong> Manter seus dados 100% atualizados aumenta drasticamente as chances de converter essas buscas em novos contratos reais.
+      </p>
+    </div>
+    <div class="footer">
+      © BuscaFornecedor — Todos os direitos reservados.<br/>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a><br/><br/>
+      <a href="{{ url_unsubscribe }}" class="unsubscribe-btn">Não quero mais receber estes e-mails</a>
+      <span class="unsubscribe-label">Unsubscribe · CNPJ {{ cnpj_basico }}/{{ cnpj_ordem }}-{{ cnpj_dv }}</span>
+    </div>
+  </div>
+</body>
+</html>"""
+
+EMAIL_APARECEU_BUSCA_SEM_REGISTRO = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Empresas em {{ uf }} buscam seu setor</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
+    .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
+    .header { background: linear-gradient(90deg, #0f172a, #00c38a); color: #fff; text-align: center; padding: 24px; font-size: 22px; font-weight: 600; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .content h1 { font-size: 20px; color: #0f172a; margin-bottom: 16px; text-align: left; }
+    .content p { font-size: 15px; color: #475569; margin-bottom: 20px; }
+    .highlight { background: #f8fafc; padding: 20px; border-radius: 10px; border: 1px solid #e2e8f0; border-left: 4px solid #00c38a; margin-bottom: 28px; font-size: 15px; color: #334155; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
+    .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
+    @media (max-width: 600px) { .content { padding: 24px 16px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">BuscaFornecedor</div>
+    <div class="content">
+      <h1>Detectamos demanda para fornecedores de {{ segmento }} em {{ uf }} e você foi listado!</h1>
+      <div class="highlight">
+        Olá{{ saudacao_nome }} <br><br>
+        Identificamos que compradores em <strong>{{ uf }}</strong> realizaram buscas por fornecedores de <strong>{{ segmento }}</strong> e sua empresa foi listada.
+      </div>
+      <p>
+        Sua empresa já está no radar do mercado, mas você ainda não assumiu o controle do seu perfil. Sem um cadastro completo, potenciais clientes perdem o contato direto e acabam fechando com quem já está verificado na plataforma.
+      </p>
+      <p>
+        <strong>Não deixe essa oportunidade na mesa:</strong> finalize seu cadastro agora para ser encontrado com prioridade e receber propostas diretas.
+      </p>
+      <p style="text-align:center;">
+        <a href="{{ link_cadastro }}" class="button" target="_blank">Reivindicar meu Perfil</a>
+      </p>
+      <p style="font-size: 14px; color: #64748b; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
+        * Fornecedores com cadastro completo aparecem até 5x mais nos resultados de busca do que perfis básicos.
       </p>
     </div>
     <div class="footer">
@@ -82,17 +146,17 @@ EMAIL_CREDITOS_NO_FIM = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Créditos mensais no fim</title>
+  <title>Aviso de Visibilidade: Créditos no fim</title>
   <style>
     body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
     .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
     .header { background: linear-gradient(90deg, #0f172a, #00c38a); color: #fff; text-align: center; padding: 24px; font-size: 22px; font-weight: 600; }
     .content { padding: 32px 24px; line-height: 1.6; }
-    .content h1 { font-size: 20px; color: #0f172a; margin-bottom: 16px; text-align: left; }
+    .content h1 { font-size: 22px; color: #0f172a; margin-bottom: 16px; text-align: left; letter-spacing: -0.5px; }
     .content p { font-size: 15px; color: #475569; margin-bottom: 20px; }
-    .highlight { background: #fff7ed; padding: 16px; border-radius: 10px; border: 1px solid #fed7aa; margin-bottom: 28px; font-size: 14px; color: #9a3412; }
-    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; }
-    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    .highlight { background: #fef2f2; padding: 20px; border-radius: 10px; border: 1px solid #fee2e2; border-left: 4px solid #ef4444; margin-bottom: 28px; font-size: 15px; color: #991b1b; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
     .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
     .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
     @media (max-width: 600px) { .content { padding: 24px 16px; } }
@@ -102,18 +166,19 @@ EMAIL_CREDITOS_NO_FIM = """<!DOCTYPE html>
   <div class="container">
     <div class="header">BuscaFornecedor</div>
     <div class="content">
-      <h1>Seus créditos mensais estão no fim</h1>
+      <h1>Não deixe sua empresa sumir das buscas!</h1>
       <div class="highlight">
-        Estamos avisando com antecedência: seus créditos de visibilidade/consultas estão quase esgotados. Renovar a tempo evita interrupção na sua presença para compradores.
+        Olá, {{ saudacao_nome }}. <br><br>
+        Identificamos que seus créditos de visibilidade estão quase esgotados. Para evitar que sua empresa pare de aparecer para compradores, recomendamos a renovação imediata.
       </div>
       <p>
-        Acesse a área de planos e créditos para ajustar seu pacote ou renovar antes do limite.
-      </p>
-      <p style="text-align:center;">
-        <a href="{{ link_area_creditos }}" class="button" target="_blank">Gerenciar créditos e plano</a>
+        Estar ativo na <strong>BuscaFornecedor</strong> garante que você seja encontrado no momento exato em que o cliente decide comprar. Quando seus créditos acabam, sua empresa perde o lugar no topo para a concorrência.
       </p>
       <p>
-        Se precisar de ajuda, nossa equipe pode orientar a melhor opção para o seu perfil.
+        Acesse sua área de gestão para garantir a continuidade da sua visibilidade:
+      </p>
+      <p style="text-align:center;">
+        <a href="{{ link_area_creditos }}" class="button" target="_blank">Renovar meus créditos</a>
       </p>
     </div>
     <div class="footer">
@@ -131,17 +196,17 @@ EMAIL_LEMBRETE_CREDITOS = """<!DOCTYPE html>
 <head>
   <meta charset="UTF-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1.0" />
-  <title>Lembrete: créditos esgotados</title>
+  <title>Sua visibilidade foi interrompida</title>
   <style>
     body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
     .container { max-width: 600px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
     .header { background: linear-gradient(90deg, #0f172a, #00c38a); color: #fff; text-align: center; padding: 24px; font-size: 22px; font-weight: 600; }
     .content { padding: 32px 24px; line-height: 1.6; }
-    .content h1 { font-size: 20px; color: #0f172a; margin-bottom: 16px; text-align: left; }
+    .content h1 { font-size: 22px; color: #0f172a; margin-bottom: 16px; text-align: left; letter-spacing: -0.5px; }
     .content p { font-size: 15px; color: #475569; margin-bottom: 20px; }
-    .highlight { background: #f1f5f9; padding: 16px; border-radius: 10px; border: 1px solid #e2e8f0; margin-bottom: 28px; font-size: 14px; color: #475569; }
-    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 12px 28px; border-radius: 8px; font-weight: 600; }
-    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    .highlight { background: #fef2f2; padding: 20px; border-radius: 10px; border: 1px solid #fee2e2; border-left: 4px solid #ef4444; margin-bottom: 28px; font-size: 15px; color: #991b1b; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
     .unsubscribe-btn { display: inline-block; margin-top: 16px; background: #ffe5e5; color: #b91c1c !important; text-decoration: none; padding: 10px 22px; border-radius: 8px; font-weight: 600; font-size: 14px; border: 1px solid #fca5a5; }
     .unsubscribe-label { margin-top: 6px; font-size: 11px; color: #94a3b8; display: block; }
     @media (max-width: 600px) { .content { padding: 24px 16px; } }
@@ -151,18 +216,19 @@ EMAIL_LEMBRETE_CREDITOS = """<!DOCTYPE html>
   <div class="container">
     <div class="header">BuscaFornecedor</div>
     <div class="content">
-      <h1>Lembre-se! Seus créditos mensais acabaram</h1>
+      <h1>Sua empresa parou de aparecer nas buscas!</h1>
       <div class="highlight">
-        Este é um lembrete semanal: seus créditos mensais estão esgotados. Enquanto não regularizar, sua visibilidade ou recursos podem permanecer limitados na plataforma.
+        Olá, {{ saudacao_nome }}. <br><br>
+        Seus créditos mensais esgotaram completamente. Neste momento, <strong>seu perfil não está mais visível</strong> para novos compradores que buscam por seus serviços na plataforma.
       </div>
       <p>
-        Assim que renovar ou migrar de plano, você volta a concorrer com plena presença nas buscas e ferramentas associadas ao seu pacote.
-      </p>
-      <p style="text-align:center;">
-        <a href="{{ link_area_creditos }}" class="button" target="_blank">Regularizar créditos agora</a>
+        Cada dia com o perfil offline é uma oportunidade de negócio que vai direto para a concorrência. Não deixe sua presença de mercado ser interrompida.
       </p>
       <p>
-        Estamos à disposição para ajudar você a escolher a melhor opção.
+        Regularize seus créditos agora e volte a aparecer no topo dos resultados de busca imediatamente.
+      </p>
+      <p style="text-align:center;">
+        <a href="{{ link_area_creditos }}" class="button" target="_blank">Reativar minha visibilidade</a>
       </p>
     </div>
     <div class="footer">
@@ -184,6 +250,12 @@ def linhas_seed() -> list[tuple[str, str, str | None, str]]:
             CodigoTipoTemplate.APARECEU_BUSCA.value,
             EMAIL_APARECEU_BUSCA,
             SMS_APARECEU_BUSCA,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO],
+            CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO.value,
+            EMAIL_APARECEU_BUSCA_SEM_REGISTRO,
+            SMS_APARECEU_BUSCA_SEM_REGISTRO,
         ),
         (
             IDS_POR_TIPO[CodigoTipoTemplate.CREDITOS_NO_FIM],

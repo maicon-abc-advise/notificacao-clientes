@@ -12,8 +12,10 @@ class RecebeConsultaCorpo(BaseModel):
     email_fornecedor: EmailStr | None = None
     telefone_fornecedor: str | None = None
     nome_fantasia: str | None = Field(default=None, max_length=256)
+    uf: str | None = Field(default=None, max_length=8)
+    segmento: str | None = Field(default=None, max_length=256)
 
-    @field_validator("email_fornecedor", "telefone_fornecedor", mode="before")
+    @field_validator("email_fornecedor", "telefone_fornecedor", "uf", "segmento", mode="before")
     @classmethod
     def _vazio_ou_omissao_para_none(cls, v: object) -> object:
         if v is None:
@@ -21,6 +23,14 @@ class RecebeConsultaCorpo(BaseModel):
         if isinstance(v, str) and not v.strip():
             return None
         return v
+
+    @field_validator("uf", "segmento")
+    @classmethod
+    def _strip_opcionais(cls, v: str | None) -> str | None:
+        if v is None:
+            return None
+        s = v.strip()
+        return s if s else None
 
     @field_validator("cnpj_basico", "cnpj_ordem", "cnpj_dv")
     @classmethod

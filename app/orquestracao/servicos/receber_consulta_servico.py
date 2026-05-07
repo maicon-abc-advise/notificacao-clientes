@@ -24,6 +24,9 @@ from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
     montar_pedido_email_apareceu_busca,
     montar_pedido_sms_consultado_sem_email,
 )
+from app.orquestracao.servicos.auxiliares.resolver_uf_segmento_contexto import (
+    resolver_uf_e_segmento_para_contexto,
+)
 from app.orquestracao.servicos.auxiliares.porta_enriquecimento_contato import PortaEnriquecimentoContato
 from app.orquestracao.excecoes import ConsultaJaNotificadaError
 from app.reenvio.repositorios.redis_consulta_notificacao import consulta_tem_trava_ativa
@@ -93,6 +96,9 @@ async def executar_receber_consulta(
     except LookupError:
         _log.info("[orquestracao] usuario_fornecedor ausente para cnpj=%s", cnpj)
 
+    usuario_fornecedor_cadastrado = fid is not None
+    uf_ctx, segmento_ctx = await resolver_uf_e_segmento_para_contexto(pool, corpo)
+
     # Sempre: e-mail/telefone do payload entram nas listas (merge com perfil quando faltar dado).
     r = await enriquecer_retorno_completo(
         porta_enriquecimento,
@@ -139,6 +145,7 @@ async def executar_receber_consulta(
         telefone_efetivo=tel_e,
         estado_granular_email=st_e,
         estado_granular_sms=st_s,
+        usuario_fornecedor_cadastrado=usuario_fornecedor_cadastrado,
     )
     _log.info(
         "[orquestracao] decisao canal=%s template=%s motivo=%s",
@@ -163,6 +170,9 @@ async def executar_receber_consulta(
             fornecedor_id=fid,
             cnpj_basico=corpo.cnpj_basico,
             id_externo=ext,
+            tipo_template=decisao.tipo_template,
+            uf=uf_ctx,
+            segmento=segmento_ctx,
         )
         ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
         _log.info(
@@ -186,6 +196,9 @@ async def executar_receber_consulta(
         fornecedor_id=fid,
         cnpj_basico=corpo.cnpj_basico,
         id_externo=ext,
+        tipo_template=decisao.tipo_template,
+        uf=uf_ctx,
+        segmento=segmento_ctx,
     )
     ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)
     _log.info(

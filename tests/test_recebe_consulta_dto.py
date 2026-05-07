@@ -38,3 +38,16 @@ def test_recebe_consulta_email_valido() -> None:
         email_fornecedor="a@b.co",
     )
     assert m.email_fornecedor == "a@b.co"
+
+
+def test_recebe_consulta_uf_e_segmento_opcionais() -> None:
+    m = RecebeConsultaCorpo(
+        id_consulta=uuid4(),
+        cnpj_basico="12345678",
+        cnpj_ordem="0001",
+        cnpj_dv="00",
+        uf="  MG ",
+        segmento="  papel  ",
+    )
+    assert m.uf == "MG"
+    assert m.segmento == "papel"
