@@ -3,6 +3,7 @@ import logging
 import asyncpg
 from fastapi import FastAPI, Request
 from fastapi.exceptions import RequestValidationError
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config.config import obter_configuracao
 from app.iam.rotas import ping_autenticado
@@ -39,6 +40,15 @@ app = FastAPI(
     title="API do sistema de notificações da ABC Advise",
     description="Infraestrutura inicial",
     lifespan=lifespan,
+)
+
+_cfg = obter_configuracao()
+app.add_middleware(
+    CORSMiddleware,
+    allow_origins=_cfg.listar_origens_cors(),
+    allow_credentials=True,
+    allow_methods=["*"],
+    allow_headers=["*"],
 )
 
 @app.exception_handler(RequestValidationError)

@@ -59,6 +59,12 @@ class Configuracao(BaseSettings):
     api_key: str = Field(validation_alias="API_KEY")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
+    cors_origins: str = Field(
+        default="http://localhost:5173,http://127.0.0.1:5173",
+        validation_alias="CORS_ORIGINS",
+        description="Origens CORS permitidas, separadas por vírgula (ex.: dashboard local e URL pública do front).",
+    )
+
     zenvia_webhook_secret_prod: str | None = Field(default=None, validation_alias="ZENVIA_WEBHOOK_SECRET_PROD")
     zenvia_webhook_secret_fallback: str | None = Field(default=None, validation_alias="ZENVIA_WEBHOOK_SECRET")
     zenvia_webhook_secret: str | None = None
@@ -182,6 +188,9 @@ class Configuracao(BaseSettings):
         object.__setattr__(self, "zenvia_webhook_secret", wh)
 
         return self
+
+    def listar_origens_cors(self) -> list[str]:
+        return [o.strip() for o in self.cors_origins.split(",") if o.strip()]
 
 
 @lru_cache
