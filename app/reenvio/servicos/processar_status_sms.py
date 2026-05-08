@@ -120,8 +120,7 @@ async def processar_webhook_status_sms(
         await tocar_engajamento_sms(
             pool, fid, cnpj_basico, EngajamentoSmsEstado.SMS_ENTREGUE, endereco=str(telefone) if telefone else None
         )
-        if await repo_esp.obter(redis, mid_z):
-            await repo_esp.atualizar_campos(redis, mid_z, {"status_atual": "ENTREGUE"})
+        await repo_esp.remover(redis, mid_z)
         return {"acao": "sms_entregue", "id": str(id_interno), "code": code}
 
     if code == "SENT":

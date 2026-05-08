@@ -9,6 +9,9 @@ from app.iam.dependencias import verificar_chamada_interna
 from app.reenvio.redis_app import obter_cliente_redis
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.sweep_emails_pendentes import executar_sweep_emails_pendentes
+from app.reenvio.servicos.sweep_sms_esperando_confirmacao import (
+    executar_sweep_sms_esperando_confirmacao,
+)
 from app.templates.conexao import obter_pool
 
 router = APIRouter(
@@ -45,6 +48,19 @@ async def post_sweep_emails_esperando_confirmacao(
     config: Annotated[Configuracao, Depends(obter_configuracao)],
 ) -> dict:
     return await _executar_sweep_emails_esperando_confirmacao(pool, redis, config)
+
+
+@router.post(
+    "/sweep-sms-esperando-confirmacao",
+    status_code=status.HTTP_200_OK,
+    summary="Reenfileira SMS (sms-pendente) a partir de sms-esperando-confirmacao após o prazo do sweep",
+)
+async def post_sweep_sms_esperando_confirmacao(
+    pool: Annotated[asyncpg.Pool, Depends(_pool)],
+    redis: Annotated[Redis, Depends(_redis)],
+    config: Annotated[Configuracao, Depends(obter_configuracao)],
+) -> dict:
+    return await executar_sweep_sms_esperando_confirmacao(pool, redis, config)
 
 
 @router.get(
