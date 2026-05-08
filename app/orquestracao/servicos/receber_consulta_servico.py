@@ -29,7 +29,7 @@ from app.orquestracao.servicos.auxiliares.resolver_uf_segmento_contexto import (
 )
 from app.orquestracao.servicos.auxiliares.porta_enriquecimento_contato import PortaEnriquecimentoContato
 from app.orquestracao.excecoes import ConsultaJaNotificadaError
-from app.reenvio.repositorios.redis_consulta_notificacao import consulta_tem_trava_ativa
+from app.reenvio.repositorios.redis_consulta_notificacao import consulta_fornecedor_tem_trava_ativa
 from app.reenvio.servicos.engajamento_contatos import (
     agora_iso,
     contatos_iniciais_email,
@@ -61,8 +61,10 @@ async def executar_receber_consulta(
     await buscar_consulta_por_id(pool, corpo.id_consulta)
     _log.info("[orquestracao] consulta existe id=%s", corpo.id_consulta)
 
-    if await consulta_tem_trava_ativa(redis, corpo.id_consulta):
-        raise ConsultaJaNotificadaError(str(corpo.id_consulta))
+    if await consulta_fornecedor_tem_trava_ativa(
+        redis, corpo.id_consulta, corpo.cnpj_basico
+    ):
+        raise ConsultaJaNotificadaError(f"{corpo.id_consulta}:{corpo.cnpj_basico}")
 
     fid: uuid.UUID | None = None
     email_f = str(corpo.email_fornecedor).strip() if corpo.email_fornecedor else None

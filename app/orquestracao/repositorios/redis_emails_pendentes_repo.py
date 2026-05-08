@@ -42,13 +42,15 @@ class RepositorioEmailsPendenteRedis:
         key = chave_hash(id_externo)
         reservou_trava = False
         if consulta_id is not None:
-            if not await tentar_travar_pendente_email(redis, consulta_id, id_externo):
-                raise ConsultaJaNotificadaError(str(consulta_id))
+            if not await tentar_travar_pendente_email(
+                redis, consulta_id, cnpj_basico, id_externo
+            ):
+                raise ConsultaJaNotificadaError(f"{consulta_id}:{cnpj_basico or ''}")
             reservou_trava = True
         try:
             if await redis.exists(key):
                 if reservou_trava:
-                    await liberar_trava_forcado(redis, consulta_id)
+                    await liberar_trava_forcado(redis, consulta_id, cnpj_basico)
                 return False
             agora = int(time.time())
             mapping: dict[str, str] = {
@@ -69,7 +71,7 @@ class RepositorioEmailsPendenteRedis:
             await pipe.execute()
         except Exception:
             if reservou_trava:
-                await liberar_trava_forcado(redis, consulta_id)
+                await liberar_trava_forcado(redis, consulta_id, cnpj_basico)
             raise
         _log.info("E-mail na fila Redis (emails-pendentes): id_externo=%s origem=%s", id_externo, origem)
         return True
@@ -78,6 +80,7 @@ class RepositorioEmailsPendenteRedis:
         key = chave_hash(id_externo)
         raw = await redis.hgetall(key)
         cid_raw = (raw.get("consulta_id") or "").strip() if raw else ""
+        cnpj_lo = (raw.get("cnpj_basico") or "").strip() if raw else ""
         consulta_uuid: uuid.UUID | None = None
         if cid_raw:
             try:
@@ -88,7 +91,12 @@ class RepositorioEmailsPendenteRedis:
         pipe.delete(key)
         pipe.zrem(KEY_INDEX, id_externo)
         await pipe.execute()
-        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_email(id_externo))
+        await liberar_trava_se_fase(
+            redis,
+            consulta_uuid,
+            cnpj_lo or None,
+            fase_pendente_email(id_externo),
+        )
 
     async def listar_pendentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
         ids = await redis.zrange(KEY_INDEX, 0, limite - 1)

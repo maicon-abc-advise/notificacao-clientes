@@ -51,15 +51,19 @@ class RepositorioSmsPendenteRedis:
         key = chave_hash(id_externo)
         reservou_trava = False
         if sobrescrever_trava_de_email_esperando:
-            await redefinir_para_pendente_sms_pos_bounce(redis, consulta_id, id_externo)
+            await redefinir_para_pendente_sms_pos_bounce(
+                redis, consulta_id, cnpj_basico, id_externo
+            )
         elif consulta_id is not None:
-            if not await tentar_travar_pendente_sms(redis, consulta_id, id_externo):
-                raise ConsultaJaNotificadaError(str(consulta_id))
+            if not await tentar_travar_pendente_sms(
+                redis, consulta_id, cnpj_basico, id_externo
+            ):
+                raise ConsultaJaNotificadaError(f"{consulta_id}:{cnpj_basico or ''}")
             reservou_trava = True
         try:
             if await redis.exists(key):
                 if reservou_trava:
-                    await liberar_trava_forcado(redis, consulta_id)
+                    await liberar_trava_forcado(redis, consulta_id, cnpj_basico)
                 return False
             agora = int(time.time())
             mapping: dict[str, str] = {
@@ -80,7 +84,7 @@ class RepositorioSmsPendenteRedis:
             await pipe.execute()
         except Exception:
             if reservou_trava:
-                await liberar_trava_forcado(redis, consulta_id)
+                await liberar_trava_forcado(redis, consulta_id, cnpj_basico)
             raise
         _log.info("SMS na fila Redis (sms-pendente): id_externo=%s origem=%s", id_externo, origem)
         return True
@@ -89,6 +93,7 @@ class RepositorioSmsPendenteRedis:
         key = chave_hash(id_externo)
         raw = await redis.hgetall(key)
         cid_raw = (raw.get("consulta_id") or "").strip() if raw else ""
+        cnpj_lo = (raw.get("cnpj_basico") or "").strip() if raw else ""
         consulta_uuid: uuid.UUID | None = None
         if cid_raw:
             try:
@@ -99,7 +104,12 @@ class RepositorioSmsPendenteRedis:
         pipe.delete(key)
         pipe.zrem(KEY_INDEX, id_externo)
         await pipe.execute()
-        await liberar_trava_se_fase(redis, consulta_uuid, fase_pendente_sms(id_externo))
+        await liberar_trava_se_fase(
+            redis,
+            consulta_uuid,
+            cnpj_lo or None,
+            fase_pendente_sms(id_externo),
+        )
 
     async def listar_pendentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
         """Lista hashes de SMS pendentes (por ordem de entrada no índice)."""

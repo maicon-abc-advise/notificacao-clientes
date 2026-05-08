@@ -64,7 +64,9 @@ class RepositorioSmsEsperandoConfirmacaoRedis:
         pipe.set(chave_lookup_id_externo(id_externo), message_id)
         pipe.zadd(KEY_SWEEP, {message_id: float(sweep_score_ts)})
         await pipe.execute()
-        await promover_para_esperando_sms(redis, consulta_id, message_id)
+        await promover_para_esperando_sms(
+            redis, consulta_id, cnpj_basico, message_id
+        )
         _log.info(
             "SMS registado em Redis (esperando confirmação): message_id=%s id_externo=%s",
             message_id,
@@ -83,6 +85,7 @@ class RepositorioSmsEsperandoConfirmacaoRedis:
         data = await redis.hgetall(chave_hash(message_id))
         ext = (data.get("id_externo") or data.get("external_id") or "").strip() if data else ""
         cid_raw = (data.get("consulta_id") or "").strip() if data else ""
+        cnpj_lo = (data.get("cnpj_basico") or "").strip() if data else ""
         consulta_uuid: uuid.UUID | None = None
         if cid_raw:
             try:
@@ -95,7 +98,12 @@ class RepositorioSmsEsperandoConfirmacaoRedis:
         if ext:
             pipe.delete(chave_lookup_id_externo(ext))
         await pipe.execute()
-        await liberar_trava_se_fase(redis, consulta_uuid, fase_esperando_sms(message_id))
+        await liberar_trava_se_fase(
+            redis,
+            consulta_uuid,
+            cnpj_lo or None,
+            fase_esperando_sms(message_id),
+        )
         _log.info("SMS removido do Redis (esperando confirmação): message_id=%s", message_id)
 
     async def reagendar_sweep(self, redis: Redis, message_id: str, novo_score_ts: int) -> None:
