@@ -1,8 +1,8 @@
 from app.templates.modelo import CodigoTipoTemplate
 
 _MAPA: dict[CodigoTipoTemplate, str] = {
-    CodigoTipoTemplate.APARECEU_BUSCA: "Você apareceu em uma busca!",
-    CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO: "Você apareceu em uma busca!",
+    CodigoTipoTemplate.APARECEU_BUSCA: "Sua empresa apareceu em buscas por fornecedores em sua região",
+    CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO: "Sua empresa apareceu em buscas por fornecedores em sua região",
     CodigoTipoTemplate.CREDITOS_NO_FIM: "Seus créditos mensais estão no fim",
     CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS: "Lembre-se! Seus créditos mensais acabaram",
 }
