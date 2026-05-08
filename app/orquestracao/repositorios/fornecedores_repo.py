@@ -44,6 +44,45 @@ async def buscar_usuario_fornecedor_por_cnpj_partes(
     return row
 
 
+async def buscar_usuario_fornecedor_por_cnpj_basico(
+    pool: asyncpg.Pool,
+    *,
+    cnpj_basico: str,
+) -> asyncpg.Record:
+    """Primeiro fornecedor com aquele ``cnpj_basico`` (ordenado por id estável).
+
+    Se existir mais de uma matriz/filial com o mesmo básico, o resultado é determinístico
+    mas pode não ser o desejado; preferir ``buscar_usuario_fornecedor_por_cnpj_partes`` quando
+    ordem e DV forem conhecidos.
+    """
+    p = obter_identificadores_postgres()
+    t = p.qual("fornecedores")
+    ufid = p.col_usuario_fornecedor_id
+    row = await pool.fetchrow(
+        f"""
+        SELECT
+            uf.{ufid} AS fornecedor_id,
+            uf.nome,
+            uf.telefone,
+            uf.cnpj,
+            uf.cnpj_basico,
+            uf.cnpj_ordem,
+            uf.cnpj_dv,
+            uf.n_creditos,
+            au.email
+        FROM {t} AS uf
+        LEFT JOIN auth.users AS au ON au.id = uf.{ufid}
+        WHERE uf.cnpj_basico = $1
+        ORDER BY uf.{ufid}
+        LIMIT 1
+        """,
+        cnpj_basico,
+    )
+    if row is None:
+        raise LookupError("usuario_fornecedor não encontrado para o cnpj_basico informado")
+    return row
+
+
 async def listar_fornecedores_alerta_creditos(
     pool: asyncpg.Pool,
     *,

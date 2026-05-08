@@ -13,7 +13,10 @@ from app.orquestracao.repositorios.engajamento_consulta_repo import (
     garantir_linha_engajamento,
     incrementar_aparicao_busca,
 )
-from app.orquestracao.repositorios.fornecedores_repo import buscar_usuario_fornecedor_por_cnpj_partes
+from app.orquestracao.repositorios.fornecedores_repo import (
+    buscar_usuario_fornecedor_por_cnpj_basico,
+    buscar_usuario_fornecedor_por_cnpj_partes,
+)
 from app.orquestracao.servicos.auxiliares.decidir_canal_e_cadencia import decidir_canal_e_cadencia
 from app.orquestracao.servicos.auxiliares.enfileirar_ou_enviar_interno import (
     enfileirar_email_pendente,
@@ -52,10 +55,11 @@ async def executar_receber_consulta(
     corpo: RecebeConsultaCorpo,
 ) -> RespostaRecebeConsulta:
     cnpj = corpo.cnpj_14()
+    cnpj_log = cnpj if cnpj else corpo.cnpj_basico
     _log.info(
         "[orquestracao] recebe-consulta inicio id_consulta=%s cnpj=%s",
         corpo.id_consulta,
-        cnpj,
+        cnpj_log,
     )
 
     await buscar_consulta_por_id(pool, corpo.id_consulta)
@@ -79,12 +83,18 @@ async def executar_receber_consulta(
     )
     await incrementar_aparicao_busca(pool, cnpj_basico=corpo.cnpj_basico, nome_fantasia=nome_nf)
     try:
-        row_f = await buscar_usuario_fornecedor_por_cnpj_partes(
-            pool,
-            cnpj_basico=corpo.cnpj_basico,
-            cnpj_ordem=corpo.cnpj_ordem,
-            cnpj_dv=corpo.cnpj_dv,
-        )
+        if corpo.cnpj_ordem is not None and corpo.cnpj_dv is not None:
+            row_f = await buscar_usuario_fornecedor_por_cnpj_partes(
+                pool,
+                cnpj_basico=corpo.cnpj_basico,
+                cnpj_ordem=corpo.cnpj_ordem,
+                cnpj_dv=corpo.cnpj_dv,
+            )
+        else:
+            row_f = await buscar_usuario_fornecedor_por_cnpj_basico(
+                pool,
+                cnpj_basico=corpo.cnpj_basico,
+            )
         fid = row_f["fornecedor_id"]
         await garantir_linha_engajamento(
             pool,
@@ -96,7 +106,7 @@ async def executar_receber_consulta(
         email_f = email_f or ((row_f["email"] or "").strip() or None)
         tel_f = tel_f or ((row_f["telefone"] or "").strip() or None)
     except LookupError:
-        _log.info("[orquestracao] usuario_fornecedor ausente para cnpj=%s", cnpj)
+        _log.info("[orquestracao] usuario_fornecedor ausente para cnpj=%s", cnpj_log)
 
     usuario_fornecedor_cadastrado = fid is not None
     uf_ctx, segmento_ctx = await resolver_uf_e_segmento_para_contexto(pool, corpo)
