@@ -1,14 +1,9 @@
 from __future__ import annotations
-
 import uuid
-
+from app.config.config import obter_configuracao
 from app.mensageria.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo
 from app.templates.modelo import CodigoTipoTemplate
-
-_URL_PLATAFORMA = "https://buscafornecedor.com.br"
-_LINK_CONTA = f"{_URL_PLATAFORMA}/conta"
-_LINK_CADASTRO = f"{_URL_PLATAFORMA}/cadastro"
 
 
 def _saudacao_nome_ola(corpo: RecebeConsultaCorpo) -> str:
@@ -22,18 +17,23 @@ def _saudacao_creditos_ola(nome: str | None) -> str:
     return n if n else "fornecedor"
 
 
+def _cfg():
+    return obter_configuracao()
+
+
 def contexto_email_apareceu_busca_logado(
     corpo: RecebeConsultaCorpo,
     *,
     uf: str,
     segmento: str,
 ) -> dict[str, str]:
+    cfg = _cfg()
     return {
         "saudacao_nome": _saudacao_nome_ola(corpo),
         "uf": uf,
         "segmento": segmento,
-        "link_area_conta": _LINK_CONTA,
-        "url_plataforma": _URL_PLATAFORMA,
+        "url_plataforma": cfg.url_plataforma_email,
+        "url_login": cfg.url_login_email,
     }
 
 
@@ -43,20 +43,23 @@ def contexto_email_apareceu_busca_sem_registro(
     uf: str,
     segmento: str,
 ) -> dict[str, str]:
+    cfg = _cfg()
     return {
         "saudacao_nome": _saudacao_nome_ola(corpo),
         "uf": uf,
         "segmento": segmento,
-        "link_cadastro": _LINK_CADASTRO,
-        "url_plataforma": _URL_PLATAFORMA,
+        "url_plataforma": cfg.url_plataforma_email,
+        "url_login": cfg.url_login_email,
     }
 
 
 def contexto_sms_busca(*, uf: str, segmento: str) -> dict[str, str]:
+    cfg = _cfg()
     return {
         "uf": uf,
         "segmento": segmento,
-        "url_plataforma": _URL_PLATAFORMA,
+        "url_plataforma": cfg.url_plataforma_sms,
+        "url_login": cfg.url_login_sms,
     }
 
 
@@ -122,11 +125,20 @@ def montar_pedido_sms_consultado_sem_email(
     )
 
 
-def contexto_email_creditos(nome: str | None, link: str) -> dict[str, str]:
+def contexto_email_creditos(nome: str | None, url_login: str) -> dict[str, str]:
+    cfg = _cfg()
     return {
         "saudacao_nome": _saudacao_creditos_ola(nome),
-        "link_area_creditos": link,
-        "url_plataforma": _URL_PLATAFORMA,
+        "url_plataforma": cfg.url_plataforma_email,
+        "url_login": url_login,
+    }
+
+
+def contexto_sms_creditos(url_login: str) -> dict[str, str]:
+    cfg = _cfg()
+    return {
+        "url_plataforma": cfg.url_plataforma_sms,
+        "url_login": url_login,
     }
 
 
@@ -137,12 +149,12 @@ def montar_pedido_email_creditos_no_fim(
     cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
-    link_creditos: str,
+    url_login: str,
 ) -> PedidoEnvioEmail:
     return PedidoEnvioEmail(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.CREDITOS_NO_FIM,
-        contexto=contexto_email_creditos(nome_fantasia, link_creditos),
+        contexto=contexto_email_creditos(nome_fantasia, url_login),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
         cnpj_basico=cnpj_basico,
@@ -156,12 +168,12 @@ def montar_pedido_email_creditos_esgotados(
     cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
-    link_creditos: str,
+    url_login: str,
 ) -> PedidoEnvioEmail:
     return PedidoEnvioEmail(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS,
-        contexto=contexto_email_creditos(nome_fantasia, link_creditos),
+        contexto=contexto_email_creditos(nome_fantasia, url_login),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
         cnpj_basico=cnpj_basico,
@@ -175,12 +187,12 @@ def montar_pedido_sms_creditos_no_fim(
     cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
-    link_creditos: str,
+    url_login: str,
 ) -> PedidoEnvioSms:
     return PedidoEnvioSms(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.CREDITOS_NO_FIM,
-        contexto={},
+        contexto=contexto_sms_creditos(url_login),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
         cnpj_basico=cnpj_basico,
@@ -195,12 +207,12 @@ def montar_pedido_sms_creditos_esgotados(
     cnpj_basico: str,
     id_externo: str,
     nome_fantasia: str | None,
-    link_creditos: str,
+    url_login: str,
 ) -> PedidoEnvioSms:
     return PedidoEnvioSms(
         destinatario=destinatario,
         tipo_template=CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS,
-        contexto={},
+        contexto=contexto_sms_creditos(url_login),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
         cnpj_basico=cnpj_basico,

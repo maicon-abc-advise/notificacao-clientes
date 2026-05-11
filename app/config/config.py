@@ -86,10 +86,31 @@ class Configuracao(BaseSettings):
         validation_alias="LIMIAR_CREDITOS_NO_FIM",
         description="Job verificar-creditos: aviso 'no fim' quando 0 < créditos <= limiar; zerados usam template de esgotados.",
     )
-    link_area_creditos: str = Field(
-        default="https://buscafornecedor.com.br/creditos",
-        validation_alias="LINK_AREA_CREDITOS",
-        description="URL nos e-mails de alerta de créditos (orquestração).",
+    url_plataforma_email: str = Field(
+        default="https://buscafornecedor.com.br",
+        validation_alias="URL_PLATAFORMA_EMAIL",
+        description="URL base usada nos contextos de e-mail da orquestração.",
+    )
+    url_login_email: str = Field(
+        default="",
+        validation_alias=AliasChoices(
+            "URL_LOGIN_EMAIL",
+            "LINK_AREA_CONTA_EMAIL",
+            "LINK_CADASTRO_EMAIL",
+            "LINK_AREA_CREDITOS_EMAIL",
+            "LINK_AREA_CREDITOS",
+        ),
+        description="URL de login usada nos contextos de e-mail da orquestração.",
+    )
+    url_plataforma_sms: str = Field(
+        default="https://buscafornecedor.com.br",
+        validation_alias="URL_PLATAFORMA_SMS",
+        description="URL base usada nos contextos de SMS da orquestração.",
+    )
+    url_login_sms: str = Field(
+        default="",
+        validation_alias=AliasChoices("URL_LOGIN_SMS", "LINK_AREA_CREDITOS_SMS"),
+        description="URL de login usada nos contextos de SMS da orquestração.",
     )
 
     mensagens_provedor_email: ProvedorMensagem = Field(
@@ -186,6 +207,21 @@ class Configuracao(BaseSettings):
 
         wh = _strip(self.zenvia_webhook_secret_prod) or self.zenvia_webhook_secret_fallback
         object.__setattr__(self, "zenvia_webhook_secret", wh)
+
+        url_email = (_strip(self.url_plataforma_email) or "https://buscafornecedor.com.br").rstrip("/")
+        url_sms = (_strip(self.url_plataforma_sms) or "https://buscafornecedor.com.br").rstrip("/")
+        object.__setattr__(self, "url_plataforma_email", url_email)
+        object.__setattr__(self, "url_plataforma_sms", url_sms)
+        object.__setattr__(
+            self,
+            "url_login_email",
+            _strip(self.url_login_email) or f"{url_email}/login",
+        )
+        object.__setattr__(
+            self,
+            "url_login_sms",
+            _strip(self.url_login_sms) or f"{url_sms}/login",
+        )
 
         return self
 

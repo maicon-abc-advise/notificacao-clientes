@@ -70,7 +70,7 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
         Não deixe essa visibilidade passar em branco. Acesse sua área exclusiva para ver os detalhes dessa atividade e garantir que seu perfil se destaque da concorrência.
       </p>
       <p style="text-align:center;">
-        <a href="{{ link_area_conta }}" class="button" target="_blank">Aproveitar Oportunidade</a>
+        <a href="{{ url_login }}" class="button" target="_blank">Aproveitar Oportunidade</a>
       </p>
       <p style="font-size: 14px; color: #64748b; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
         <strong>Dica:</strong> Manter seus dados 100% atualizados aumenta drasticamente as chances de converter essas buscas em novos contratos reais.
@@ -119,7 +119,7 @@ EMAIL_APARECEU_BUSCA_SEM_REGISTRO = """<!DOCTYPE html>
         <strong>Não deixe essa oportunidade na mesa:</strong> finalize seu cadastro agora para ser encontrado com prioridade e receber propostas diretas.
       </p>
       <p style="text-align:center;">
-        <a href="{{ link_cadastro }}" class="button" target="_blank">Reivindicar meu Perfil</a>
+        <a href="{{ url_login }}" class="button" target="_blank">Reivindicar meu Perfil</a>
       </p>
       <p style="font-size: 14px; color: #64748b; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
         * Fornecedores com cadastro completo aparecem até 5x mais nos resultados de busca do que perfis básicos.
@@ -168,7 +168,7 @@ EMAIL_CREDITOS_NO_FIM = """<!DOCTYPE html>
         Acesse sua área de gestão para garantir a continuidade da sua visibilidade:
       </p>
       <p style="text-align:center;">
-        <a href="{{ link_area_creditos }}" class="button" target="_blank">Renovar meus créditos</a>
+        <a href="{{ url_login }}" class="button" target="_blank">Renovar meus créditos</a>
       </p>
     </div>
     <div class="footer">
@@ -214,7 +214,7 @@ EMAIL_LEMBRETE_CREDITOS = """<!DOCTYPE html>
         Regularize seus créditos agora e volte a aparecer no topo dos resultados de busca imediatamente.
       </p>
       <p style="text-align:center;">
-        <a href="{{ link_area_creditos }}" class="button" target="_blank">Reativar minha visibilidade</a>
+        <a href="{{ url_login }}" class="button" target="_blank">Reativar minha visibilidade</a>
       </p>
     </div>
     <div class="footer">

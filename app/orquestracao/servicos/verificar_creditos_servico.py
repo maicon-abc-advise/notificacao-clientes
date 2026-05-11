@@ -41,7 +41,8 @@ async def executar_verificar_creditos(
     config: Configuracao,
 ) -> RespostaVerificarCreditos:
     limiar = config.limiar_creditos_no_fim
-    link_creditos = config.link_area_creditos
+    url_login_email = config.url_login_email
+    url_login_sms = config.url_login_sms
     rows = await listar_fornecedores_alerta_creditos(pool, limiar=limiar)
     enfileirados = 0
     ignorados = 0
@@ -107,7 +108,7 @@ async def executar_verificar_creditos(
                     cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
-                    link_creditos=link_creditos,
+                    url_login=url_login_email,
                 )
                 ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
             elif sms_ok:
@@ -117,7 +118,7 @@ async def executar_verificar_creditos(
                     cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
-                    link_creditos=link_creditos,
+                    url_login=url_login_sms,
                 )
                 ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)
             if ok:
@@ -143,7 +144,7 @@ async def executar_verificar_creditos(
                     cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
-                    link_creditos=link_creditos,
+                    url_login=url_login_email,
                 )
                 ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
             elif sms_ok:
@@ -153,7 +154,7 @@ async def executar_verificar_creditos(
                     cnpj_basico=cnpj_basico,
                     id_externo=ext,
                     nome_fantasia=nome,
-                    link_creditos=link_creditos,
+                    url_login=url_login_sms,
                 )
                 ok = await enfileirar_sms_pendente(redis, pedido_s, id_externo=ext, origem=_ORIGEM)
             if ok:

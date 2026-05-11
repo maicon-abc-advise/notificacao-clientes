@@ -31,12 +31,22 @@ _log = logging.getLogger(__name__)
 
 TEMPLATE_SMS_EMAIL_INVALIDO = "CONSULTADO_SEM_EMAIL"
 
-def _contexto_sms_de_hash(campos: dict[str, str]) -> dict[str, str]:
+
+def _contexto_sms_de_hash(
+    campos: dict[str, str],
+    *,
+    url_plataforma_sms: str,
+    url_login_sms: str,
+) -> dict[str, str]:
     base = json.loads(campos.get("contexto_json") or "{}")
     if not isinstance(base, dict):
         base = {}
     out: dict[str, str] = {str(k): str(v) for k, v in base.items() if v is not None}
-    out.setdefault("url_plataforma", "https://plataforma.local")
+    out["url_plataforma"] = url_plataforma_sms
+    out["url_login"] = url_login_sms
+    out.pop("link_area_conta", None)
+    out.pop("link_cadastro", None)
+    out.pop("link_area_creditos", None)
     return out
 
 async def processar_webhook_status_email(
@@ -189,7 +199,11 @@ async def processar_webhook_status_email(
                 EngajamentoEmailEstado.EMAIL_NAO_EXISTE,
                 endereco=em_dest,
             )
-            ctx = _contexto_sms_de_hash(dados)
+            ctx = _contexto_sms_de_hash(
+                dados,
+                url_plataforma_sms=cfg.url_plataforma_sms,
+                url_login_sms=cfg.url_login_sms,
+            )
             sms_ext = f"{ext}:bounce_email:{uuid.uuid4().hex[:12]}"
             sms_redis = RepositorioSmsPendenteRedis()
             uid_sms = (dados.get("fornecedor_id") or dados.get("usuario_id") or "").strip() or None

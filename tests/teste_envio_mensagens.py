@@ -338,7 +338,7 @@ def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> No
                 json={
                     "destinatario": "5511987654321",
                     "tipo_template": "APARECEU_BUSCA",
-                    "contexto": {"link_area_conta": "https://exemplo.com"},
+                    "contexto": {"url_login": "https://exemplo.com/login"},
                     "cnpj_basico": "12345678",
                 },
             )

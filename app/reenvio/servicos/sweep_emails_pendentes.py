@@ -80,7 +80,11 @@ async def executar_sweep_emails_pendentes(
             continue
 
         sms_ext = f"{ext}:sweep:{uuid.uuid4().hex[:16]}"
-        ctx = _contexto_sms_de_hash(campos)
+        ctx = _contexto_sms_de_hash(
+            campos,
+            url_plataforma_sms=cfg.url_plataforma_sms,
+            url_login_sms=cfg.url_login_sms,
+        )
         uid_s = (campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip() or None
         cid = parse_consulta_id_hash(campos.get("consulta_id"))
         ok = await repo_s.criar(
