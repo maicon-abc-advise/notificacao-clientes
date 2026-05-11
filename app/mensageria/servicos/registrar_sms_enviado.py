@@ -1,5 +1,6 @@
-"""Após envio SMS com sucesso: tira da fila Redis (reenvio) e grava ``sms_enviados`` (Postgres).
+"""Após envio SMS com sucesso: grava ``sms_enviados`` (Postgres) e regista ``sms-esperando-confirmacao`` no Redis.
 
+A fila ``sms-pendente`` não é apagada aqui: o consumidor (ex.: n8n) remove após processar.
 A rota de envio vive em ``mensageria``; a persistência do registo de envio fica aqui também.
 """
 
@@ -15,7 +16,6 @@ from app.mensageria.api.dto.modelos import CanalMensagem, PedidoEnvioSms, Result
 from app.mensageria.repositorios.postgres_fornecedores import resolver_cnpj_basico_para_envio_mensagem
 from app.mensageria.repositorios.postgres_sms_enviados import inserir_ou_atualizar_apos_envio_api
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import RepositorioSmsEsperandoConfirmacaoRedis
-from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.engajamento_estado import EngajamentoSmsEstado
 from app.reenvio.servicos.engajamento_fornecedor import tocar_engajamento_sms
 
@@ -36,9 +36,6 @@ async def registrar_sms_enviado_apos_sucesso(
     if not msg_id or msg_id.startswith("(sem"):
         _log.warning("SMS sem id Zenvia; não gravado em sms_enviados. id_externo=%s", pedido.id_externo)
         return
-
-    repo = RepositorioSmsPendenteRedis()
-    await repo.remover(redis, pedido.id_externo)
 
     await inserir_ou_atualizar_apos_envio_api(
         pool,
