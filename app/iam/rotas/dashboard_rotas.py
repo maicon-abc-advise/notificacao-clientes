@@ -23,6 +23,13 @@ ConfigDashboard = Annotated[Configuracao, Depends(obter_configuracao)]
 router = APIRouter(prefix="/v1/dashboard", tags=["dashboard-auth"])
 
 
+def _cookie_policy(config: Configuracao) -> tuple[bool, str]:
+    if config.ambiente == Ambiente.PRODUCAO:
+        # Front e API em origens diferentes precisam de cookie cross-site.
+        return True, "none"
+    return False, "lax"
+
+
 @router.post("/login")
 async def login(
     payload: LoginPayload,
@@ -31,14 +38,14 @@ async def login(
     config: ConfigDashboard,
 ) -> dict[str, bool]:
     sessao_id = await autenticar(redis, payload.usuario, payload.senha)
-    cookie_secure = config.ambiente == Ambiente.PRODUCAO
+    cookie_secure, cookie_samesite = _cookie_policy(config)
 
     response.set_cookie(
         key=config.dashboard_cookie_name,
         value=sessao_id,
         httponly=True,
         secure=cookie_secure,
-        samesite="lax",
+        samesite=cookie_samesite,
         max_age=config.dashboard_session_ttl,
         path="/",
     )
@@ -53,10 +60,17 @@ async def logout(
     config: ConfigDashboard,
 ) -> dict[str, bool]:
     session_id = request.cookies.get(config.dashboard_cookie_name)
+    cookie_secure, cookie_samesite = _cookie_policy(config)
     if session_id:
         await destruir_sessao(redis, session_id)
 
-    response.delete_cookie(key=config.dashboard_cookie_name, path="/")
+    response.delete_cookie(
+        key=config.dashboard_cookie_name,
+        path="/",
+        secure=cookie_secure,
+        httponly=True,
+        samesite=cookie_samesite,
+    )
     return {"ok": True}
 
 
