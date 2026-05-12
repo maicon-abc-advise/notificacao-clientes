@@ -92,6 +92,24 @@ async def incrementar_aparicao_busca(
     )
 
 
+async def marcar_primeiro_contato_nao_cadastrado(
+    pool: asyncpg.Pool,
+    *,
+    cnpj_basico: str,
+) -> None:
+    p = obter_identificadores_postgres()
+    te = p.qual("engajamento_fornecedores")
+    await pool.execute(
+        f"""
+        UPDATE {te}
+        SET cadastrado_primeiro_contato = false
+        WHERE cnpj_basico = $1
+          AND cadastrado_primeiro_contato IS NULL
+        """,
+        cnpj_basico,
+    )
+
+
 async def carregar_por_cnpj_basico(
     pool: asyncpg.Pool,
     cnpj_basico: str,

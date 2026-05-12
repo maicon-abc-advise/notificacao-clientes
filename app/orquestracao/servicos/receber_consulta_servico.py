@@ -12,6 +12,7 @@ from app.orquestracao.repositorios.engajamento_consulta_repo import (
     carregar_por_cnpj_basico,
     garantir_linha_engajamento,
     incrementar_aparicao_busca,
+    marcar_primeiro_contato_nao_cadastrado,
 )
 from app.orquestracao.repositorios.fornecedores_repo import (
     buscar_usuario_fornecedor_por_cnpj_basico,
@@ -107,6 +108,10 @@ async def executar_receber_consulta(
         tel_f = tel_f or ((row_f["telefone"] or "").strip() or None)
     except LookupError:
         _log.info("[orquestracao] usuario_fornecedor ausente para cnpj=%s", cnpj_log)
+        await marcar_primeiro_contato_nao_cadastrado(
+            pool,
+            cnpj_basico=corpo.cnpj_basico,
+        )
 
     usuario_fornecedor_cadastrado = fid is not None
     uf_ctx, segmento_ctx = await resolver_uf_e_segmento_para_contexto(pool, corpo)
