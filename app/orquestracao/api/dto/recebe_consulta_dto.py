@@ -22,8 +22,12 @@ class RecebeConsultaCorpo(BaseModel):
     def _vazio_ou_omissao_para_none(cls, v: object) -> object:
         if v is None:
             return None
-        if isinstance(v, str) and not v.strip():
-            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            if s == "[email protected]":
+                return None
         return v
 
     @field_validator("cnpj_ordem", "cnpj_dv", mode="before")
