@@ -1,10 +1,8 @@
 """Endpoints de leitura para o dashboard (autenticação interna)."""
 
 from __future__ import annotations
-
 import math
 from typing import Annotated, Any
-
 from fastapi import APIRouter, Depends, Query
 
 from app.config.postgres_identificadores import obter_identificadores_postgres
@@ -16,7 +14,7 @@ from app.dashboard.servicos.exibicao import (
     enriquecer_redis_sms_pendente,
 )
 from app.dashboard.servicos.serializacao import decodificar_contexto_json_bruto, registo_para_json
-from app.iam.dependencias import verificar_chamada_interna
+from app.iam.rotas.dashboard_rotas import usuario_logado
 from app.orquestracao.api.dependencias import PoolOrquestracao, RedisOrquestracao
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import KEY_INDEX as IDX_EMAIL_PEND
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import chave_hash as chave_email_pend
@@ -30,15 +28,13 @@ from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_
 router = APIRouter(
     prefix="/v1/interno/dashboard",
     tags=["dashboard"],
-    dependencies=[Depends(verificar_chamada_interna)],
+    dependencies=[Depends(usuario_logado)],
 )
 
 PAGE_SIZE = 10
 
-
 def _page_clamped(page: int) -> int:
     return max(1, page)
-
 
 def _meta(total: int, page: int) -> dict[str, int]:
     return {
@@ -47,7 +43,6 @@ def _meta(total: int, page: int) -> dict[str, int]:
         "page_size": PAGE_SIZE,
         "total_pages": max(1, math.ceil(total / PAGE_SIZE)) if total else 1,
     }
-
 
 def _h(raw: dict[Any, Any], key: str) -> str | None:
     """Lê campo de hash Redis com chaves/valores str ou bytes."""
@@ -63,7 +58,6 @@ def _h(raw: dict[Any, Any], key: str) -> str | None:
             return rv.decode(errors="replace")
         return str(rv)
     return None
-
 
 @router.get("/emails/metricas")
 async def metricas_emails(
@@ -253,7 +247,6 @@ async def metricas_sms(
         ],
     }
 
-
 @router.get("/sms/postgres")
 async def lista_sms_postgres(
     pool: PoolOrquestracao,
@@ -273,7 +266,6 @@ async def lista_sms_postgres(
     )
     itens = [enriquecer_linha_postgres(registo_para_json(r), canal="sms") for r in rows]
     return {"origem": "postgres", "tabela_logica": "sms_enviados", "itens": itens, **_meta(total, page)}
-
 
 @router.get("/sms/redis-pendentes")
 async def lista_sms_redis_pendentes(
@@ -307,7 +299,6 @@ async def lista_sms_redis_pendentes(
         }
         itens.append(enriquecer_redis_sms_pendente(linha))
     return {"origem": "redis", "tabela_logica": "sms_pendentes", "itens": itens, **_meta(total, page)}
-
 
 @router.get("/sms/redis-esperando-confirmacao")
 async def lista_sms_redis_esperando(
@@ -348,7 +339,6 @@ async def lista_sms_redis_esperando(
         "itens": itens,
         **_meta(total, page),
     }
-
 
 @router.get("/engajamento/fornecedores")
 async def lista_engajamento_fornecedores(

@@ -9,6 +9,7 @@ def _strip(v: str | None) -> str:
     return (v or "").strip()
 
 class Configuracao(BaseSettings):
+
     model_config = SettingsConfigDict(env_file=".env", env_file_encoding="utf-8", extra="ignore")
 
     ambiente: Ambiente = Field(
@@ -31,6 +32,28 @@ class Configuracao(BaseSettings):
         description="true = envio simulado sem chamar a API Zenvia.",
     )
 
+    dashboard_login: str = Field(
+        validation_alias="DASHBOARD_LOGIN",
+        description="Login para acesso ao dashboard.",
+    )
+
+    dashboard_password: str = Field(
+        validation_alias="DASHBOARD_PASSWORD",
+        description="Senha para acesso ao dashboard.",
+    )
+
+    dashboard_session_ttl: int = Field(
+        default=3600,
+        ge=60,
+        validation_alias="DASHBOARD_SESSION_TTL",
+        description="Tempo de vida da sessão do dashboard em segundos.",
+    )
+
+    dashboard_cookie_name: str = Field(
+        default="dashboard_session",
+        validation_alias="DASHBOARD_COOKIE_NAME",
+        description="Nome do cookie para a sessão do dashboard.",
+    )
     
     redis_url_test: str | None = Field(default=None, validation_alias="REDIS_URL_TEST")
     redis_url_prod: str | None = Field(default=None, validation_alias="REDIS_URL_PROD")

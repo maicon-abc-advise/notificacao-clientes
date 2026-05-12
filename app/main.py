@@ -7,6 +7,7 @@ from fastapi.middleware.cors import CORSMiddleware
 from fastapi.responses import JSONResponse
 from app.config.config import obter_configuracao
 from app.iam.rotas import ping_autenticado
+from app.iam.rotas.dashboard_rotas import router as dashboard_auth_router
 from app.mensageria.api.rotas import diagnostico_fornecedores, envio_mensagens, saude
 from app.reenvio.api.rotas import (
     interno_n8n_router,
@@ -84,4 +85,5 @@ app.include_router(webhook_sms_router)
 app.include_router(interno_reenvio_router)
 app.include_router(interno_n8n_router)
 app.include_router(orquestracao_router)
+app.include_router(dashboard_auth_router)
 app.include_router(dashboard_router)
