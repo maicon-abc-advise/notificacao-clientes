@@ -51,8 +51,8 @@ class PedidoEnvioSms(BaseModel):
     destinatario: str = Field(
         ...,
         min_length=5,
-        max_length=20,
-        description="Destinatário no formato exigido pelo provedor (ex. E.164, sem espaços).",
+        max_length=15,
+        description="Destinatário no formato exigido pelo provedor (ex. E.164 BR, só dígitos, até 15).",
     )
     tipo_template: CodigoTipoTemplate = Field(
         ...,
@@ -92,7 +92,7 @@ class PedidoEmailProvedor(BaseModel):
     id_externo: str | None = Field(default=None, max_length=64)
 
 class PedidoSmsProvedor(BaseModel):
-    destinatario: str = Field(..., min_length=5, max_length=20)
+    destinatario: str = Field(..., min_length=5, max_length=15)
     texto: str = Field(..., min_length=1)
     remetente: str | None = Field(default=None, min_length=1, max_length=64)
     id_externo: str | None = Field(default=None, max_length=64)
