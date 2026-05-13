@@ -10,17 +10,26 @@ def _q_ident(ident: str) -> str:
     return '"' + ident.replace('"', '""') + '"'
 
 
+def _uf_coluna_normalizada(row: Any) -> str | None:
+    raw = row.get("uf")
+    if raw is None:
+        return None
+    s = str(raw).strip()
+    return s or None
+
+
 async def buscar_full_profile_por_cnpj_basico(
     pool: asyncpg.Pool,
     *,
     cnpj_basico: str,
-) -> dict[str, Any] | None:
+) -> tuple[dict[str, Any] | None, str | None]:
+    """``full_profile`` (JSON) e UF na coluna ``varchar`` ``uf``, quando existir na tabela."""
     p = obter_identificadores_postgres()
     qschema = _q_ident(p.schema)
     qtbl = _q_ident("company_profile")
     row = await pool.fetchrow(
         f"""
-        SELECT full_profile
+        SELECT full_profile, uf
         FROM {qschema}.{qtbl}
         WHERE cnpj = $1
         LIMIT 1
@@ -28,10 +37,11 @@ async def buscar_full_profile_por_cnpj_basico(
         cnpj_basico,
     )
     if row is None:
-        return None
+        return None, None
+    uf_col = _uf_coluna_normalizada(row)
     fp = row["full_profile"]
     if fp is None:
-        return None
+        return None, uf_col
     if isinstance(fp, dict):
-        return fp
-    return None
+        return fp, uf_col
+    return None, uf_col

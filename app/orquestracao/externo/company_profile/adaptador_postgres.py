@@ -9,7 +9,7 @@ class AdaptadorCompanyProfilePostgres:
         self._pool = pool
 
     async def enriquecer_por_cnpj_basico(self, cnpj_basico: str) -> ResultadoEnriquecimentoContato:
-        data = await buscar_full_profile_por_cnpj_basico(self._pool, cnpj_basico=cnpj_basico)
+        data, _ = await buscar_full_profile_por_cnpj_basico(self._pool, cnpj_basico=cnpj_basico)
         if not data:
             return ResultadoEnriquecimentoContato(email=None, telefone=None)
         emails_l, tels_l = extrair_todos_emails_telefones(data)
