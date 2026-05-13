@@ -24,6 +24,10 @@ from app.orquestracao.servicos.auxiliares.enfileirar_ou_enviar_interno import (
     enfileirar_sms_pendente,
 )
 from app.orquestracao.servicos.auxiliares.enriquecer_contato_fornecedor import enriquecer_retorno_completo
+from app.orquestracao.servicos.auxiliares.fragmentar_contatos_recebe_consulta import (
+    emails_do_payload,
+    telefones_normalizados_do_payload,
+)
 from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
     montar_pedido_email_apareceu_busca,
     montar_pedido_sms_consultado_sem_email,
@@ -38,8 +42,8 @@ from app.reenvio.servicos.engajamento_contatos import (
     agora_iso,
     contatos_iniciais_email,
     contatos_iniciais_sms,
-    escolher_email_efetivo,
-    escolher_telefone_efetivo,
+    escolher_email_prior_novos_engajamento,
+    escolher_telefone_prior_novos_engajamento,
     estado_granular_email,
     estado_granular_sms,
 )
@@ -72,7 +76,7 @@ async def executar_receber_consulta(
         raise ConsultaJaNotificadaError(f"{corpo.id_consulta}:{corpo.cnpj_basico}")
 
     fid: uuid.UUID | None = None
-    email_f = str(corpo.email_fornecedor).strip() if corpo.email_fornecedor else None
+    email_f = corpo.email_fornecedor.strip() if corpo.email_fornecedor else None
     tel_f = (corpo.telefone_fornecedor or "").strip() or None
     nome_nf = (corpo.nome_fantasia or "").strip() or None
     await garantir_linha_engajamento(
@@ -116,12 +120,16 @@ async def executar_receber_consulta(
     usuario_fornecedor_cadastrado = fid is not None
     uf_ctx, segmento_ctx = await resolver_uf_e_segmento_para_contexto(pool, corpo)
 
-    # Sempre: e-mail/telefone do payload entram nas listas (merge com perfil quando faltar dado).
+    emails_payload = emails_do_payload(email_f)
+    telefones_payload = telefones_normalizados_do_payload(tel_f)
+
+    snap_pre = await carregar_por_cnpj_basico(pool, corpo.cnpj_basico)
+
     r = await enriquecer_retorno_completo(
         porta_enriquecimento,
         cnpj_basico=corpo.cnpj_basico,
-        email_atual=email_f,
-        telefone_atual=tel_f,
+        emails_payload=emails_payload,
+        telefones_payload=telefones_payload,
     )
     now_iso = agora_iso()
     ce = contatos_iniciais_email(list(r.emails), now_iso=now_iso)
@@ -134,8 +142,16 @@ async def executar_receber_consulta(
         contatos_sms=cs,
     )
     snap = await carregar_por_cnpj_basico(pool, corpo.cnpj_basico)
-    email_e = escolher_email_efetivo(snap.contatos_email, email_f)
-    tel_e = escolher_telefone_efetivo(snap.contatos_sms, tel_f)
+    email_e = escolher_email_prior_novos_engajamento(
+        snap_pre.contatos_email,
+        snap.contatos_email,
+        emails_payload,
+    )
+    tel_e = escolher_telefone_prior_novos_engajamento(
+        snap_pre.contatos_sms,
+        snap.contatos_sms,
+        telefones_payload,
+    )
 
     _log.info(
         "[orquestracao] dados efetivos email=%s telefone=%s",

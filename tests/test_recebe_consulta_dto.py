@@ -79,3 +79,27 @@ def test_recebe_consulta_ordem_sem_dv_rejeita() -> None:
             cnpj_ordem="0001",
             cnpj_dv=None,
         )
+
+
+def test_recebe_consulta_multi_email_string_aceita() -> None:
+    m = RecebeConsultaCorpo(
+        id_consulta=uuid4(),
+        cnpj_basico="12345678",
+        cnpj_ordem="0001",
+        cnpj_dv="00",
+        email_fornecedor="a@b.co contato@outro.com",
+    )
+    assert "a@b.co" in (m.email_fornecedor or "")
+    assert "contato@outro.com" in (m.email_fornecedor or "")
+
+
+def test_recebe_consulta_uf_lista_todos_unidos() -> None:
+    m = RecebeConsultaCorpo(
+        id_consulta=uuid4(),
+        cnpj_basico="12345678",
+        cnpj_ordem="0001",
+        cnpj_dv="00",
+        uf=["GO", "SP", "MS"],
+    )
+    assert m.uf == "GO,SP,MS"
+

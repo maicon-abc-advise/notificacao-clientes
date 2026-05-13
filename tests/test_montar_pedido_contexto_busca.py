@@ -74,15 +74,31 @@ def test_pedido_sms_busca_contexto_minimo() -> None:
         cnpj_basico=c.cnpj_basico,
         id_externo="ext-2",
         tipo_template=CodigoTipoTemplate.CONSULTADO_SEM_EMAIL,
-        uf="sua região",
-        segmento="seu segmento",
+        uf="GO",
+        segmento="papel",
     )
     assert p.contexto == {
-        "uf": "sua região",
-        "segmento": "seu segmento",
+        "uf": "GO",
+        "segmento": "papel",
         "url_plataforma": "https://buscafornecedor.com.br",
         "url_login": "https://buscafornecedor.com.br/login",
     }
+
+
+def test_pedido_sms_uf_ou_segmento_longos_vao_vazio() -> None:
+    c = _corpo()
+    p = montar_pedido_sms_consultado_sem_email(
+        c,
+        destinatario="5511999999999",
+        fornecedor_id=None,
+        cnpj_basico=c.cnpj_basico,
+        id_externo="ext-long",
+        tipo_template=CodigoTipoTemplate.CONSULTADO_SEM_EMAIL,
+        uf="GO,SP,MS",
+        segmento="123456789",
+    )
+    assert p.contexto["uf"] == ""
+    assert p.contexto["segmento"] == ""
 
 
 @pytest.fixture(autouse=True)

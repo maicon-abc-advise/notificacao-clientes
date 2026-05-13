@@ -384,6 +384,37 @@ def escolher_telefone_efetivo(contatos: list[dict[str, Any]], preferencia: str |
     return None
 
 
+def escolher_email_prior_novos_engajamento(
+    contatos_antes: list[dict[str, Any]],
+    contatos_depois: list[dict[str, Any]],
+    candidatos_payload: tuple[str, ...],
+) -> str | None:
+    """Primeiro e-mail do payload que ainda não existia no engajamento; senão ``escolher_email_efetivo``."""
+    for e in candidatos_payload:
+        n = normalizar_email(e)
+        if not n:
+            continue
+        if not contatos_incluem_email(contatos_antes, n):
+            return n
+    pref = candidatos_payload[0] if candidatos_payload else None
+    return escolher_email_efetivo(contatos_depois, pref)
+
+
+def escolher_telefone_prior_novos_engajamento(
+    contatos_antes: list[dict[str, Any]],
+    contatos_depois: list[dict[str, Any]],
+    candidatos_payload: tuple[str, ...],
+) -> str | None:
+    for t in candidatos_payload:
+        n = normalizar_telefone(t)
+        if not n:
+            continue
+        if not contatos_incluem_telefone(contatos_antes, n):
+            return n
+    pref = candidatos_payload[0] if candidatos_payload else None
+    return escolher_telefone_efetivo(contatos_depois, pref)
+
+
 def proximo_email_tentavel_apos_contato(
     contatos: list[dict[str, Any]],
     email_atual: str | None,

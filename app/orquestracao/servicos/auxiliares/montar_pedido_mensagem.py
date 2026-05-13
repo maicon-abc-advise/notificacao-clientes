@@ -53,11 +53,21 @@ def contexto_email_apareceu_busca_sem_registro(
     }
 
 
+_UF_SMS_MAX_CHARS = 5
+_SEGMENTO_SMS_MAX_CHARS = 8
+
+
 def contexto_sms_busca(*, uf: str, segmento: str) -> dict[str, str]:
     cfg = _cfg()
+    u = (uf or "").strip()
+    if len(u) > _UF_SMS_MAX_CHARS:
+        u = ""
+    seg = (segmento or "").strip()
+    if len(seg) > _SEGMENTO_SMS_MAX_CHARS:
+        seg = ""
     return {
-        "uf": uf,
-        "segmento": segmento,
+        "uf": u,
+        "segmento": seg,
         "url_plataforma": cfg.url_plataforma_sms,
         "url_login": cfg.url_login_sms,
     }

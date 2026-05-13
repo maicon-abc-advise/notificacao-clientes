@@ -11,10 +11,20 @@ from app.reenvio.servicos.engajamento_contatos import normalizar_email, normaliz
 _log = logging.getLogger(__name__)
 
 
-def _merge_email_lists(primary: str | None, from_porta: tuple[str, ...]) -> tuple[str, ...]:
+def _tupla_um_email(email_atual: str | None) -> tuple[str, ...]:
+    n = normalizar_email(email_atual)
+    return (n,) if n else ()
+
+
+def _tupla_um_telefone(telefone_atual: str | None) -> tuple[str, ...]:
+    n = normalizar_telefone(telefone_atual)
+    return (n,) if n else ()
+
+
+def _merge_email_lists(primary_parts: tuple[str, ...], from_porta: tuple[str, ...]) -> tuple[str, ...]:
     seen: set[str] = set()
     out: list[str] = []
-    for e in ([primary] if primary else []) + list(from_porta):
+    for e in list(primary_parts) + list(from_porta):
         n = normalizar_email(e) if e else ""
         if n and n not in seen:
             seen.add(n)
@@ -22,10 +32,10 @@ def _merge_email_lists(primary: str | None, from_porta: tuple[str, ...]) -> tupl
     return tuple(out)
 
 
-def _merge_tel_lists(primary: str | None, from_porta: tuple[str, ...]) -> tuple[str, ...]:
+def _merge_tel_lists(primary_parts: tuple[str, ...], from_porta: tuple[str, ...]) -> tuple[str, ...]:
     seen: set[str] = set()
     out: list[str] = []
-    for e in ([primary] if primary else []) + list(from_porta):
+    for e in list(primary_parts) + list(from_porta):
         n = normalizar_telefone(e) if e else ""
         if n and n not in seen:
             seen.add(n)
@@ -44,8 +54,8 @@ async def enriquecer_se_necessario(
     r = await enriquecer_retorno_completo(
         porta,
         cnpj_basico=cnpj_basico,
-        email_atual=email_atual,
-        telefone_atual=telefone_atual,
+        emails_payload=_tupla_um_email(email_atual),
+        telefones_payload=_tupla_um_telefone(telefone_atual),
     )
     return r.email, r.telefone
 
@@ -54,16 +64,16 @@ async def enriquecer_retorno_completo(
     porta: PortaEnriquecimentoContato,
     *,
     cnpj_basico: str,
-    email_atual: str | None,
-    telefone_atual: str | None,
+    emails_payload: tuple[str, ...],
+    telefones_payload: tuple[str, ...],
 ) -> ResultadoEnriquecimentoContato:
     """Igual ao fluxo de enriquecimento, mas devolve também listas para ``engajamento_fornecedores``."""
-    email = (email_atual or "").strip() or None
-    telefone = (telefone_atual or "").strip() or None
-    if email and telefone:
+    tem_email = bool(emails_payload)
+    tem_tel = bool(telefones_payload)
+    if tem_email and tem_tel:
         _log.info("[orquestracao] enriquecimento: e-mail e telefone ja presentes — sem chamada a porta")
-        emails_m = _merge_email_lists(email, ())
-        tels_m = _merge_tel_lists(telefone, ())
+        emails_m = _merge_email_lists(emails_payload, ())
+        tels_m = _merge_tel_lists(telefones_payload, ())
         return ResultadoEnriquecimentoContato(
             email=emails_m[0] if emails_m else None,
             telefone=tels_m[0] if tels_m else None,
@@ -74,12 +84,12 @@ async def enriquecer_retorno_completo(
     _log.info(
         "[orquestracao] enriquecimento: chamando porta cnpj_basico=%s (faltava email=%s telefone=%s)",
         cnpj_basico,
-        not email,
-        not telefone,
+        not tem_email,
+        not tem_tel,
     )
     r = await porta.enriquecer_por_cnpj_basico(cnpj_basico)
-    emails_m = _merge_email_lists(email, r.emails)
-    tels_m = _merge_tel_lists(telefone, r.telefones)
+    emails_m = _merge_email_lists(emails_payload, r.emails)
+    tels_m = _merge_tel_lists(telefones_payload, r.telefones)
     pe = emails_m[0] if emails_m else None
     pt = tels_m[0] if tels_m else None
     _log.info("[orquestracao] enriquecimento: resultado email=%s telefone=%s listas=%s/%s", pe, pt, len(emails_m), len(tels_m))

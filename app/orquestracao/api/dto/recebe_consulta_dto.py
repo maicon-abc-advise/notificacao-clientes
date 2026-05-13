@@ -3,7 +3,7 @@ from __future__ import annotations
 import re
 from uuid import UUID
 
-from pydantic import BaseModel, EmailStr, Field, field_validator, model_validator
+from pydantic import BaseModel, Field, field_validator, model_validator
 
 
 class RecebeConsultaCorpo(BaseModel):
@@ -11,13 +11,45 @@ class RecebeConsultaCorpo(BaseModel):
     cnpj_basico: str = Field(..., min_length=8, max_length=8)
     cnpj_ordem: str | None = None
     cnpj_dv: str | None = None
-    email_fornecedor: EmailStr | None = None
+    email_fornecedor: str | None = Field(default=None, max_length=8192)
     telefone_fornecedor: str | None = None
     nome_fantasia: str | None = Field(default=None, max_length=256)
-    uf: str | None = Field(default=None, max_length=8)
+    uf: str | list[str] | None = Field(
+        default=None,
+        max_length=512,
+        description="String ou lista; lista é unida por vírgulas (sem validar formato de cada UF).",
+    )
     segmento: str | None = Field(default=None, max_length=256)
 
-    @field_validator("email_fornecedor", "telefone_fornecedor", "uf", "segmento", mode="before")
+    @field_validator("uf", mode="before")
+    @classmethod
+    def _uf_lista_ou_string(cls, v: object) -> object:
+        if v is None:
+            return None
+        if isinstance(v, str):
+            s = v.strip()
+            if not s:
+                return None
+            if s == "[email protected]":
+                return None
+            return v
+        if isinstance(v, list):
+            parts: list[str] = []
+            for item in v:
+                if item is None:
+                    continue
+                if isinstance(item, str):
+                    t = item.strip()
+                else:
+                    t = str(item).strip()
+                if t:
+                    parts.append(t)
+            if not parts:
+                return None
+            return ",".join(parts)
+        return v
+
+    @field_validator("email_fornecedor", "telefone_fornecedor", "segmento", mode="before")
     @classmethod
     def _vazio_ou_omissao_para_none(cls, v: object) -> object:
         if v is None:
