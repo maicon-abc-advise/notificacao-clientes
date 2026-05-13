@@ -15,7 +15,7 @@ from app.reenvio.api.rotas import (
     webhook_email_router,
     webhook_sms_router,
 )
-from app.dashboard.api import dashboard_router
+from app.dashboard.api import dashboard_mutacoes_router, dashboard_router
 from app.orquestracao.api.router import router as orquestracao_router
 from app.reenvio.redis_app import fechar_cliente_redis, obter_cliente_redis
 from app.templates.conexao import fechar_pool
@@ -87,3 +87,4 @@ app.include_router(interno_n8n_router)
 app.include_router(orquestracao_router)
 app.include_router(dashboard_auth_router)
 app.include_router(dashboard_router)
+app.include_router(dashboard_mutacoes_router)

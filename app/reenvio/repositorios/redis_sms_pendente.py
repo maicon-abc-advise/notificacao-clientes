@@ -111,6 +111,14 @@ class RepositorioSmsPendenteRedis:
             fase_pendente_sms(id_externo),
         )
 
+    async def atualizar_campos(self, redis: Redis, id_externo: str, campos: dict[str, str]) -> bool:
+        key = chave_hash(id_externo)
+        if not await redis.exists(key):
+            return False
+        if campos:
+            await redis.hset(key, mapping=campos)
+        return True
+
     async def listar_pendentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
         """Lista hashes de SMS pendentes (por ordem de entrada no índice)."""
         ids = await redis.zrange(KEY_INDEX, 0, limite - 1)
