@@ -103,3 +103,47 @@ def test_recebe_consulta_uf_lista_todos_unidos() -> None:
     )
     assert m.uf == "GO,SP,MS"
 
+
+def test_recebe_consulta_uf_string_json_array_vai_para_csv() -> None:
+    m = RecebeConsultaCorpo(
+        id_consulta=uuid4(),
+        cnpj_basico="12345678",
+        cnpj_ordem="0001",
+        cnpj_dv="00",
+        uf='["GO","SP","MS"]',
+    )
+    assert m.uf == "GO,SP,MS"
+
+
+def test_recebe_consulta_uf_string_json_array_com_espacos() -> None:
+    m = RecebeConsultaCorpo(
+        id_consulta=uuid4(),
+        cnpj_basico="12345678",
+        cnpj_ordem="0001",
+        cnpj_dv="00",
+        uf='  ["GO", "SP"]  ',
+    )
+    assert m.uf == "GO,SP"
+
+
+def test_recebe_consulta_uf_string_simples_inalterada() -> None:
+    m = RecebeConsultaCorpo(
+        id_consulta=uuid4(),
+        cnpj_basico="12345678",
+        cnpj_ordem="0001",
+        cnpj_dv="00",
+        uf="MG",
+    )
+    assert m.uf == "MG"
+
+
+def test_recebe_consulta_uf_string_json_array_vazio_none() -> None:
+    m = RecebeConsultaCorpo(
+        id_consulta=uuid4(),
+        cnpj_basico="12345678",
+        cnpj_ordem="0001",
+        cnpj_dv="00",
+        uf="[]",
+    )
+    assert m.uf is None
+

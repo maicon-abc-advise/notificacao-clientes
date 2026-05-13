@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import json
 import re
 from uuid import UUID
 
@@ -17,9 +18,40 @@ class RecebeConsultaCorpo(BaseModel):
     uf: str | list[str] | None = Field(
         default=None,
         max_length=512,
-        description="String ou lista; lista é unida por vírgulas (sem validar formato de cada UF).",
+        description="String, lista ou string JSON de array; listas são unidas por vírgulas.",
     )
     segmento: str | None = Field(default=None, max_length=256)
+
+    @staticmethod
+    def _uf_itens_para_csv(itens: list[object]) -> str | None:
+        parts: list[str] = []
+        for item in itens:
+            if item is None:
+                continue
+            if isinstance(item, str):
+                t = item.strip()
+            else:
+                t = str(item).strip()
+            if t:
+                parts.append(t)
+        if not parts:
+            return None
+        return ",".join(parts)
+
+    @classmethod
+    def _uf_string_se_json_array(cls, s: str) -> str | None | bool:
+        """Lista JSON em string → CSV. ``False`` = não era array JSON; ``None`` = array vazio."""
+        t = s.strip()
+        if len(t) < 2 or t[0] != "[" or t[-1] != "]":
+            return False
+        try:
+            raw = json.loads(t)
+        except json.JSONDecodeError:
+            return False
+        if not isinstance(raw, list):
+            return False
+        csv = cls._uf_itens_para_csv(raw)
+        return csv if csv is not None else None
 
     @field_validator("uf", mode="before")
     @classmethod
@@ -32,21 +64,12 @@ class RecebeConsultaCorpo(BaseModel):
                 return None
             if s == "[email protected]":
                 return None
+            parsed = cls._uf_string_se_json_array(s)
+            if parsed is not False:
+                return parsed
             return v
         if isinstance(v, list):
-            parts: list[str] = []
-            for item in v:
-                if item is None:
-                    continue
-                if isinstance(item, str):
-                    t = item.strip()
-                else:
-                    t = str(item).strip()
-                if t:
-                    parts.append(t)
-            if not parts:
-                return None
-            return ",".join(parts)
+            return cls._uf_itens_para_csv(v)
         return v
 
     @field_validator("email_fornecedor", "telefone_fornecedor", "segmento", mode="before")
