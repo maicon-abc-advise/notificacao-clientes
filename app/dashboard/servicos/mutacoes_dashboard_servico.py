@@ -67,6 +67,42 @@ async def _colunas_tabela(pool: asyncpg.Pool, schema: str, table: str) -> dict[s
     return {str(r["column_name"]): str(r["data_type"]) for r in rows}
 
 
+def _parse_iso_para_datetime(col: str, s: str) -> datetime:
+    t = s.strip()
+    if not t:
+        raise HTTPException(status_code=400, detail=f"Data/hora vazia em {col}")
+    if t.endswith("Z"):
+        t = t[:-1] + "+00:00"
+    try:
+        return datetime.fromisoformat(t)
+    except ValueError as e:
+        raise HTTPException(status_code=400, detail=f"Data/hora inválida em {col}: {s!r}") from e
+
+
+def _coerce_timestamp_sql(col: str, v: Any) -> datetime | None:
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v
+    if isinstance(v, date) and not isinstance(v, datetime):
+        return datetime(v.year, v.month, v.day)
+    if isinstance(v, str):
+        return _parse_iso_para_datetime(col, v)
+    raise HTTPException(status_code=400, detail=f"Tipo inválido para data/hora em {col}")
+
+
+def _coerce_date_sql(col: str, v: Any) -> date | None:
+    if v is None or v == "":
+        return None
+    if isinstance(v, datetime):
+        return v.date()
+    if isinstance(v, date) and not isinstance(v, datetime):
+        return v
+    if isinstance(v, str):
+        return _parse_iso_para_datetime(col, v).date()
+    raise HTTPException(status_code=400, detail=f"Tipo inválido para data em {col}")
+
+
 def _valor_sql_param(col: str, v: Any, data_type: str) -> Any:
     if data_type in ("jsonb", "json"):
         if isinstance(v, str):
@@ -87,10 +123,10 @@ def _valor_sql_param(col: str, v: Any, data_type: str) -> Any:
         if s in ("false", "0", "nao", "não", "no"):
             return False
         raise HTTPException(status_code=400, detail=f"Boolean inválido em {col}")
+    if data_type == "date":
+        return _coerce_date_sql(col, v)
     if data_type.startswith("timestamp"):
-        if isinstance(v, (datetime, date)):
-            return v
-        return v
+        return _coerce_timestamp_sql(col, v)
     return v
 
 
