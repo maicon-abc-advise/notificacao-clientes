@@ -669,9 +669,9 @@ async def metricas_sms(
         )
         or 0,
     )
-    lidos = int(
+    entregues = int(
         await pool.fetchval(
-            f"SELECT COUNT(*) FROM {ts} WHERE status_ultimo = 'lido'",
+            f"SELECT COUNT(*) FROM {ts} WHERE status_ultimo IN ('enviado', 'lido', 'clicado')",
         )
         or 0,
     )
@@ -688,14 +688,14 @@ async def metricas_sms(
         "sms_pendentes_fila": pendentes,
         "sms_esperando_confirmacao": esperando,
         "sms_falha_definitiva": falhas,
-        "sms_lidos": lidos,
+        "sms_entregues": entregues,
         "sms_clicados": clicados,
         "cartoes": [
             _cartao("enviados", total, "SMS registados"),
             _cartao("pendentes", pendentes, "Na fila a enviar"),
             _cartao("esperando_feedback", esperando, "Esperando confirmação"),
             _cartao("recusados", falhas, "Falha definitiva"),
-            _cartao("abertos", lidos, "SMS lidos"),
+            _cartao("entregues", entregues, "SMS entregues"),
             _cartao("cliques", clicados, "Link clicado (SMS)"),
         ],
     }

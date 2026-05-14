@@ -72,13 +72,14 @@ async def processar_webhook_status_sms(
     telefone = row["telefone"]
     _cf = obter_identificadores_postgres().col_fornecedor_id
     fid: uuid.UUID | None = row[_cf]
-    cnpj_basico = _cnpj_basico_de_row(row)
+    repo_esp = RepositorioSmsEsperandoConfirmacaoRedis()
+    dados_esp = await repo_esp.obter(redis, mid_z)
+    raw_cnpj = (dados_esp.get("cnpj_basico") or "").strip() if dados_esp else ""
+    cnpj_basico = raw_cnpj or _cnpj_basico_de_row(row)
     tentativas = int(row["tentativas_reprocessar"] or 0)
     code = payload.messageStatus.code
     texto_falha = payload.texto_para_classificacao_falha()
     motivo = (texto_falha[:2000] if texto_falha else None)
-
-    repo_esp = RepositorioSmsEsperandoConfirmacaoRedis()
 
     if code == "READ":
         await atualizar_status_por_id_interno(
