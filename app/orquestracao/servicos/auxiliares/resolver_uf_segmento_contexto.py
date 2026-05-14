@@ -5,9 +5,7 @@ import asyncpg
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo
 from app.orquestracao.externo.company_profile.extrair_uf import extrair_uf_de_company_profile
 from app.orquestracao.repositorios.company_profile_repo import buscar_full_profile_por_cnpj_basico
-
-SEGMENTO_GENERICO = "seu segmento"
-UF_GENERICO = "sua região"
+from app.templates.contexto_genericos import SEGMENTO_GENERICO, UF_GENERICO
 
 
 async def resolver_uf_e_segmento_para_contexto(

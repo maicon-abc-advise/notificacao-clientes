@@ -5,6 +5,7 @@ from app.mensageria.api.dto.modelos import (
     PedidoSmsProvedor,
 )
 from app.templates.assunto_email import assunto_email_para_tipo
+from app.templates.contexto_genericos import contexto_para_render
 from app.templates.porta import PortaTemplates
 from app.templates.render import renderizar_template
 
@@ -20,7 +21,7 @@ async def materializar_email(
     if not registo.email:
         msg = f"O tipo {pedido.tipo_template.value} não possui template de e-mail."
         raise ValueError(msg)
-    corpo = renderizar_template(registo.email, pedido.contexto)
+    corpo = renderizar_template(registo.email, contexto_para_render(pedido.contexto))
     assunto = assunto_email_para_tipo(pedido.tipo_template)
     return PedidoEmailProvedor(
         destinatario=pedido.destinatario,
@@ -39,7 +40,7 @@ async def materializar_sms(
     if registo is None:
         msg = f"Template desconhecido: {pedido.tipo_template.value}"
         raise ValueError(msg)
-    texto = renderizar_template(registo.sms, pedido.contexto)
+    texto = renderizar_template(registo.sms, contexto_para_render(pedido.contexto))
     return PedidoSmsProvedor(
         destinatario=pedido.destinatario,
         texto=texto,
