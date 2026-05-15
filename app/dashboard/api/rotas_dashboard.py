@@ -264,12 +264,12 @@ async def _conversoes_por_canal(
                 EXISTS (
                     SELECT 1
                     FROM {tem} AS em
-                    WHERE COALESCE(em.contexto->>'cnpj_basico', '') = e.cnpj_basico
+                    WHERE COALESCE(NULLIF(trim(coalesce(em.cnpj_basico, '')), ''), em.contexto->>'cnpj_basico', '') = e.cnpj_basico
                 ) AS tem_email,
                 EXISTS (
                     SELECT 1
                     FROM {tsm} AS sm
-                    WHERE COALESCE(sm.contexto->>'cnpj_basico', '') = e.cnpj_basico
+                    WHERE COALESCE(NULLIF(trim(coalesce(sm.cnpj_basico, '')), ''), sm.contexto->>'cnpj_basico', '') = e.cnpj_basico
                 ) AS tem_sms
             FROM {te} AS e
             INNER JOIN {tf} AS f ON f.cnpj_basico = e.cnpj_basico
@@ -551,7 +551,9 @@ async def lista_emails_postgres(
     if status_f:
         filtros.append(f"status_ultimo = {_append_param(params, status_f)}")
     if cnpj_f:
-        filtros.append(f"COALESCE(contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}")
+        filtros.append(
+            f"COALESCE(NULLIF(trim(coalesce(cnpj_basico, '')), ''), contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}"
+        )
     where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
     total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {te} {where_sql}", *params) or 0)
@@ -559,7 +561,11 @@ async def lista_emails_postgres(
         f"""
         SELECT
             *,
-            COALESCE(contexto->>'cnpj_basico', NULL) AS cnpj_basico_dashboard
+            COALESCE(
+                NULLIF(trim(coalesce(cnpj_basico, '')), ''),
+                contexto->>'cnpj_basico',
+                NULL
+            ) AS cnpj_basico_dashboard
         FROM {te}
         {where_sql}
         ORDER BY criado_em DESC NULLS LAST, id DESC
@@ -720,7 +726,9 @@ async def lista_sms_postgres(
     if status_f:
         filtros.append(f"status_ultimo = {_append_param(params, status_f)}")
     if cnpj_f:
-        filtros.append(f"COALESCE(contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}")
+        filtros.append(
+            f"COALESCE(NULLIF(trim(coalesce(cnpj_basico, '')), ''), contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}"
+        )
     where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
     total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {ts} {where_sql}", *params) or 0)
@@ -728,7 +736,11 @@ async def lista_sms_postgres(
         f"""
         SELECT
             *,
-            COALESCE(contexto->>'cnpj_basico', NULL) AS cnpj_basico_dashboard
+            COALESCE(
+                NULLIF(trim(coalesce(cnpj_basico, '')), ''),
+                contexto->>'cnpj_basico',
+                NULL
+            ) AS cnpj_basico_dashboard
         FROM {ts}
         {where_sql}
         ORDER BY criado_em DESC NULLS LAST, id DESC

@@ -39,6 +39,14 @@ def _contexto_de_row(row: asyncpg.Record) -> dict[str, str]:
 
 
 def _cnpj_basico_de_row(row: asyncpg.Record) -> str | None:
+    try:
+        col = row["cnpj_basico"]
+    except KeyError:
+        col = None
+    if col is not None:
+        s = str(col).strip()
+        if s:
+            return s
     ctx = _contexto_de_row(row)
     cnpj_basico = (ctx.get("cnpj_basico") or "").strip()
     return cnpj_basico or None

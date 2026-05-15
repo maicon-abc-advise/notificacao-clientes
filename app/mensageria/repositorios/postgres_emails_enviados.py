@@ -18,7 +18,7 @@ async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.
     return await pool.fetchrow(
         f"""
         SELECT id_externo, id_mensagem_zenvia, email_destinatario, tipo_template, contexto,
-               remetente, {cf}, status_ultimo
+               remetente, {cf}, cnpj_basico, status_ultimo
         FROM {te}
         WHERE id_externo = $1
         LIMIT 1
@@ -54,6 +54,7 @@ async def inserir_ou_atualizar_apos_envio_api(
     remetente: str | None,
     id_mensagem_zenvia: str,
     fornecedor_id: uuid.UUID | None,
+    cnpj_basico: str | None,
 ) -> None:
     """Chamado após ``POST /v1/mensagens/email`` com sucesso."""
     p = obter_identificadores_postgres()
@@ -63,9 +64,9 @@ async def inserir_ou_atualizar_apos_envio_api(
         f"""
         INSERT INTO {te} (
             id_externo, email_destinatario, tipo_template, contexto, remetente,
-            id_mensagem_zenvia, {cf}, status_ultimo
+            id_mensagem_zenvia, {cf}, cnpj_basico, status_ultimo
         )
-        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, 'processando')
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, 'processando')
         ON CONFLICT (id_externo) DO UPDATE SET
             id_mensagem_zenvia = EXCLUDED.id_mensagem_zenvia,
             email_destinatario = EXCLUDED.email_destinatario,
@@ -73,6 +74,7 @@ async def inserir_ou_atualizar_apos_envio_api(
             contexto = EXCLUDED.contexto,
             remetente = EXCLUDED.remetente,
             {cf} = COALESCE(EXCLUDED.{cf}, {te}.{cf}),
+            cnpj_basico = COALESCE(EXCLUDED.cnpj_basico, {te}.cnpj_basico),
             status_ultimo = 'processando',
             atualizado_em = now()
         """,
@@ -83,4 +85,5 @@ async def inserir_ou_atualizar_apos_envio_api(
         remetente,
         id_mensagem_zenvia,
         fornecedor_id,
+        cnpj_basico,
     )

@@ -120,7 +120,9 @@ async def post_enviar_email(
         materializado = await materializar_email(pedido, templates)
         resultado = porta.enviar_email(materializado)
         await enfileirar_email_enviado_apos_sucesso(pedido, resultado)
-        await registrar_email_enviado_apos_sucesso(pool, pedido, resultado)
+        await registrar_email_enviado_apos_sucesso(
+            pool, pedido, resultado, cnpj_basico_resolvido=cnpj_eng
+        )
         await tocar_engajamento_email(
             pool,
             pedido.fornecedor_id,

@@ -37,6 +37,11 @@ async def registrar_sms_enviado_apos_sucesso(
         _log.warning("SMS sem id Zenvia; não gravado em sms_enviados. id_externo=%s", pedido.id_externo)
         return
 
+    cnpj_eng = await resolver_cnpj_basico_para_envio_mensagem(
+        pool,
+        cnpj_basico=pedido.cnpj_basico,
+        fornecedor_id=pedido.fornecedor_id,
+    )
     await inserir_ou_atualizar_apos_envio_api(
         pool,
         id_externo=pedido.id_externo,
@@ -46,11 +51,7 @@ async def registrar_sms_enviado_apos_sucesso(
         remetente=pedido.remetente,
         id_mensagem_zenvia=msg_id,
         fornecedor_id=pedido.fornecedor_id,
-    )
-    cnpj_eng = await resolver_cnpj_basico_para_envio_mensagem(
-        pool,
-        cnpj_basico=pedido.cnpj_basico,
-        fornecedor_id=pedido.fornecedor_id,
+        cnpj_basico=cnpj_eng,
     )
     await tocar_engajamento_sms(
         pool,
@@ -75,7 +76,7 @@ async def registrar_sms_enviado_apos_sucesso(
             remetente=pedido.remetente,
             sweep_score_ts=sweep_ts,
             fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
-            cnpj_basico=pedido.cnpj_basico,
+            cnpj_basico=cnpj_eng if cnpj_eng else pedido.cnpj_basico,
             consulta_id=pedido.consulta_id,
         )
     except Exception:
