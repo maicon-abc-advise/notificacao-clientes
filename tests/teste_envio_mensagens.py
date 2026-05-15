@@ -320,6 +320,14 @@ def test_post_sms_400_telefone_fixo_nao_chama_provedor_grava_falha(monkeypatch: 
     async def _noop(*_a, **_k) -> None:
         return None
 
+    async def _sem_replay(*_a, **_k):
+        return None
+
+    async def _sem_fallback(*_a, **_k):
+        return None
+
+    monkeypatch.setattr(envio_mensagens, "ler_replay_idempotencia", _sem_replay)
+    monkeypatch.setattr(envio_mensagens, "tentar_reenfileirar_apos_sms_invalido", _sem_fallback)
     monkeypatch.setattr(envio_mensagens, "exigir_destinatario_no_engajamento_sms", _noop)
     monkeypatch.setattr(envio_mensagens, "tocar_engajamento_sms", _noop)
     monkeypatch.setattr(envio_mensagens, "inserir_ou_atualizar_falha_validacao_telefone_sms", _captura_falha)

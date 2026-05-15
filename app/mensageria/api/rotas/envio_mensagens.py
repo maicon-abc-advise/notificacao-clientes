@@ -40,6 +40,12 @@ from app.reenvio.servicos.validacao_telefone_sms_br import (
     MOTIVO_FALHA_SMS_TELEFONE_INVALIDO,
     normalizar_telefone_movel_br_para_sms,
 )
+from app.mensageria.servicos.fallback_sms_invalido import (
+    gravar_idempotencia_fallback,
+    ler_replay_idempotencia,
+    resultado_reenfileirado,
+    tentar_reenfileirar_apos_sms_invalido,
+)
 from app.mensageria.servicos.registrar_email_enviado import registrar_email_enviado_apos_sucesso
 from app.mensageria.servicos.registrar_sms_enviado import registrar_sms_enviado_apos_sucesso
 from app.templates.conexao import obter_pool
@@ -159,10 +165,10 @@ async def post_enviar_sms(
                     (existente.get("motivo_ultimo_evento") or "").strip()
                     == MOTIVO_FALHA_SMS_TELEFONE_INVALIDO
                 ):
-                    raise HTTPException(
-                        status_code=status.HTTP_400_BAD_REQUEST,
-                        detail=MOTIVO_FALHA_SMS_TELEFONE_INVALIDO,
-                    )
+                    if pedido.id_externo:
+                        replay = await ler_replay_idempotencia(redis, pedido.id_externo)
+                        if replay:
+                            return replay
         await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id, pedido.cnpj_basico)
         cnpj_eng = await resolver_cnpj_basico_para_envio_mensagem(
             pool,
@@ -188,6 +194,24 @@ async def post_enviar_sms(
                     fornecedor_id=pedido.fornecedor_id,
                     cnpj_basico=cnpj_eng,
                     motivo=MOTIVO_FALHA_SMS_TELEFONE_INVALIDO,
+                )
+                replay = await ler_replay_idempotencia(redis, pedido.id_externo)
+                if replay:
+                    return replay
+            fb = await tentar_reenfileirar_apos_sms_invalido(pool, redis, pedido, cnpj_eng=cnpj_eng)
+            if fb:
+                canal_e, id_novo = fb
+                if pedido.id_externo:
+                    await gravar_idempotencia_fallback(
+                        redis,
+                        pedido.id_externo,
+                        canal_efetivo=canal_e,
+                        id_externo_novo=id_novo,
+                    )
+                return resultado_reenfileirado(
+                    canal_efetivo=canal_e,
+                    id_externo_pedido_original=pedido.id_externo,
+                    id_externo_novo=id_novo,
                 )
             raise HTTPException(
                 status_code=status.HTTP_400_BAD_REQUEST,
