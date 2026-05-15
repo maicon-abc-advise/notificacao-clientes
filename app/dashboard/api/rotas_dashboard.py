@@ -502,7 +502,7 @@ async def metricas_emails(
     )
     lidos = int(
         await pool.fetchval(
-            f"SELECT COUNT(*) FROM {te} WHERE status_ultimo = 'lido'",
+            f"SELECT COUNT(*) FROM {te} WHERE status_ultimo IN ('lido', 'clicado')",
         )
         or 0,
     )
@@ -526,7 +526,7 @@ async def metricas_emails(
             _cartao("pendentes", pendentes, "Na fila pré-envio"),
             _cartao("recusados", falhas, "Falha definitiva"),
             _cartao("esperando_feedback", esperando, "Esperando confirmação"),
-            _cartao("abertos", lidos, "E-mails lidos"),
+            _cartao("abertos", lidos, "Lidos (abertura ou clique no link)"),
             _cartao("cliques", clicados, "Link clicado (e-mail)"),
         ],
     }
