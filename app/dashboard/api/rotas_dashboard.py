@@ -223,16 +223,68 @@ async def _resumo_engajamento(pool: PoolOrquestracao) -> dict[str, int]:
                       FROM {tf} AS f
                       WHERE f.cnpj_basico = e.cnpj_basico
                   )
-            ) AS usuarios_convertidos
+            ) AS usuarios_convertidos,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_email, '[]'::jsonb)) = 0
+            ) AS email_sem_lista,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_email, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_email::text, ''))) = 'ativo'
+            ) AS email_agg_ativo,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_email, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_email::text, ''))) = 'em_analise'
+            ) AS email_agg_em_analise,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_email, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_email::text, ''))) = 'inativo'
+            ) AS email_agg_inativo,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_email, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_email::text, ''))) NOT IN (
+                      'ativo', 'em_analise', 'inativo'
+                  )
+            ) AS email_agg_outros,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) = 0
+            ) AS sms_sem_lista,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) = 'ativo'
+            ) AS sms_agg_ativo,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) = 'em_analise'
+            ) AS sms_agg_em_analise,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) = 'inativo'
+            ) AS sms_agg_inativo,
+            COUNT(*) FILTER (
+                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                  AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) NOT IN (
+                      'ativo', 'em_analise', 'inativo'
+                  )
+            ) AS sms_agg_outros
         FROM {te} AS e
         """,
     )
+    email_outros = int(row["email_agg_outros"] or 0)
+    sms_outros = int(row["sms_agg_outros"] or 0)
     return {
         "total_monitorados": int(row["total_monitorados"] or 0),
         "usuarios_com_email": int(row["usuarios_com_email"] or 0),
         "usuarios_com_telefone": int(row["usuarios_com_telefone"] or 0),
         "usuarios_com_algum_contato": int(row["usuarios_com_algum_contato"] or 0),
         "usuarios_convertidos": int(row["usuarios_convertidos"] or 0),
+        "email_sem_lista": int(row["email_sem_lista"] or 0),
+        "email_agg_ativo": int(row["email_agg_ativo"] or 0),
+        "email_agg_em_analise": int(row["email_agg_em_analise"] or 0) + email_outros,
+        "email_agg_inativo": int(row["email_agg_inativo"] or 0),
+        "sms_sem_lista": int(row["sms_sem_lista"] or 0),
+        "sms_agg_ativo": int(row["sms_agg_ativo"] or 0),
+        "sms_agg_em_analise": int(row["sms_agg_em_analise"] or 0) + sms_outros,
+        "sms_agg_inativo": int(row["sms_agg_inativo"] or 0),
     }
 
 
@@ -839,11 +891,18 @@ async def lista_sms_redis_esperando(
 async def metricas_engajamento(pool: PoolOrquestracao) -> dict[str, Any]:
     resumo = await _resumo_engajamento(pool)
     total = resumo["total_monitorados"]
-    sem_email = max(total - resumo["usuarios_com_email"], 0)
-    sem_telefone = max(total - resumo["usuarios_com_telefone"], 0)
     sem_contato = max(total - resumo["usuarios_com_algum_contato"], 0)
     nao_convertidos = max(total - resumo["usuarios_convertidos"], 0)
     canais = await _conversoes_por_canal(pool)
+
+    email_com_lista = (
+        resumo["email_agg_ativo"]
+        + resumo["email_agg_em_analise"]
+        + resumo["email_agg_inativo"]
+    )
+    sms_com_lista = (
+        resumo["sms_agg_ativo"] + resumo["sms_agg_em_analise"] + resumo["sms_agg_inativo"]
+    )
 
     return {
         "cartoes": [
@@ -859,22 +918,26 @@ async def metricas_engajamento(pool: PoolOrquestracao) -> dict[str, Any]:
             ),
             _cartao(
                 "usuarios_email",
-                resumo["usuarios_com_email"],
-                "Usuários com e-mail",
+                email_com_lista,
+                "Engajamento e-mail",
                 total=total,
                 segmentos=[
-                    _segmento("Com e-mail", resumo["usuarios_com_email"], "info"),
-                    _segmento("Sem e-mail", sem_email, "neutral"),
+                    _segmento("Ativo", resumo["email_agg_ativo"], "success"),
+                    _segmento("Em análise", resumo["email_agg_em_analise"], "info"),
+                    _segmento("Inativo", resumo["email_agg_inativo"], "danger"),
+                    _segmento("Sem e-mail", resumo["email_sem_lista"], "neutral"),
                 ],
             ),
             _cartao(
                 "usuarios_telefone",
-                resumo["usuarios_com_telefone"],
-                "Usuários com telefone",
+                sms_com_lista,
+                "Engajamento SMS",
                 total=total,
                 segmentos=[
-                    _segmento("Com telefone", resumo["usuarios_com_telefone"], "warning"),
-                    _segmento("Sem telefone", sem_telefone, "neutral"),
+                    _segmento("Ativo", resumo["sms_agg_ativo"], "success"),
+                    _segmento("Em análise", resumo["sms_agg_em_analise"], "info"),
+                    _segmento("Inativo", resumo["sms_agg_inativo"], "danger"),
+                    _segmento("Sem telefone", resumo["sms_sem_lista"], "neutral"),
                 ],
             ),
             _cartao(
