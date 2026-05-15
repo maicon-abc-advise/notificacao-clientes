@@ -20,6 +20,10 @@ from app.orquestracao.servicos.auxiliares.enfileirar_ou_enviar_interno import (
     enfileirar_email_pendente,
     enfileirar_sms_pendente,
 )
+from app.reenvio.repositorios.redis_consulta_notificacao import (
+    fase_pendente_sms,
+    liberar_trava_se_fase,
+)
 from app.reenvio.servicos.engajamento_contatos import (
     agregado_canal_bloqueado,
     estado_granular_email,
@@ -135,6 +139,17 @@ async def tentar_reenfileirar_apos_sms_invalido(
     cnpj_eng: str,
 ) -> tuple[Literal["email", "sms"], str] | None:
     snap = await carregar_por_cnpj_basico(pool, cnpj_eng)
+
+   
+    if pedido.id_externo and pedido.consulta_id:
+        cnpj_lo = (pedido.cnpj_basico or "").strip()
+        if len(cnpj_lo) == 8:
+            await liberar_trava_se_fase(
+                redis,
+                pedido.consulta_id,
+                cnpj_lo,
+                fase_pendente_sms(pedido.id_externo),
+            )
 
     if not agregado_canal_bloqueado(snap.engajamento_email):
         em = proximo_email_tentavel_apos_contato(snap.contatos_email, None)
