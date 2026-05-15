@@ -526,7 +526,7 @@ async def metricas_emails(
             _cartao("pendentes", pendentes, "Na fila pré-envio"),
             _cartao("recusados", falhas, "Falha definitiva"),
             _cartao("esperando_feedback", esperando, "Esperando confirmação"),
-            _cartao("abertos", lidos, "Lidos),
+            _cartao("abertos", lidos, "Lidos"),
             _cartao("cliques", clicados, "Link clicado (e-mail)"),
         ],
     }
