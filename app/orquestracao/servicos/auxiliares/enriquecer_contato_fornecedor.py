@@ -6,7 +6,8 @@ from app.orquestracao.servicos.auxiliares.porta_enriquecimento_contato import (
     PortaEnriquecimentoContato,
     ResultadoEnriquecimentoContato,
 )
-from app.reenvio.servicos.engajamento_contatos import normalizar_email, normalizar_telefone
+from app.reenvio.servicos.engajamento_contatos import normalizar_email
+from app.reenvio.servicos.validacao_telefone_sms_br import normalizar_telefone_movel_br_para_sms
 
 _log = logging.getLogger(__name__)
 
@@ -17,7 +18,7 @@ def _tupla_um_email(email_atual: str | None) -> tuple[str, ...]:
 
 
 def _tupla_um_telefone(telefone_atual: str | None) -> tuple[str, ...]:
-    n = normalizar_telefone(telefone_atual)
+    n = normalizar_telefone_movel_br_para_sms(telefone_atual)
     return (n,) if n else ()
 
 
@@ -36,10 +37,10 @@ def _merge_tel_lists(primary_parts: tuple[str, ...], from_porta: tuple[str, ...]
     seen: set[str] = set()
     out: list[str] = []
     for e in list(primary_parts) + list(from_porta):
-        n = normalizar_telefone(e) if e else ""
-        if n and n not in seen:
-            seen.add(n)
-            out.append(n)
+        canon = normalizar_telefone_movel_br_para_sms(e)
+        if canon and canon not in seen:
+            seen.add(canon)
+            out.append(canon)
     return tuple(out)
 
 

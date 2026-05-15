@@ -7,6 +7,7 @@ from app.reenvio.servicos.engajamento_contatos import (
     email_granular_bloqueia_notificacao,
     sms_granular_bloqueia_notificacao,
 )
+from app.reenvio.servicos.validacao_telefone_sms_br import validar_telefone_para_sms_br
 from app.templates.modelo import CodigoTipoTemplate
 
 
@@ -40,9 +41,11 @@ def email_usavel_para_notificacao(
 
 
 def telefone_usavel_para_sms(telefone: str | None, estado_granular: str) -> bool:
-    """Telefone não vazio e estado granular SMS permite envio."""
+    """Telefone não vazio, móvel BR válido para SMS e estado granular permite envio."""
     t = (telefone or "").strip()
-    return bool(t) and not sms_granular_bloqueia_notificacao(estado_granular)
+    if not t or sms_granular_bloqueia_notificacao(estado_granular):
+        return False
+    return validar_telefone_para_sms_br(t)
 
 
 def decidir_canal_e_cadencia(

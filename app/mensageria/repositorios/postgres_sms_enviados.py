@@ -19,7 +19,7 @@ async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.
     return await pool.fetchrow(
         f"""
         SELECT id_externo, id_mensagem_zenvia, telefone, tipo_template, contexto,
-               remetente, {cf}, cnpj_basico, status_ultimo
+               remetente, {cf}, cnpj_basico, status_ultimo, motivo_ultimo_evento
         FROM {ts}
         WHERE id_externo = $1
         LIMIT 1
@@ -70,6 +70,52 @@ async def inserir_ou_atualizar_apos_envio_api(
         id_mensagem_zenvia,
         fornecedor_id,
         cnpj_basico,
+    )
+
+
+async def inserir_ou_atualizar_falha_validacao_telefone_sms(
+    pool: asyncpg.Pool,
+    *,
+    id_externo: str,
+    telefone: str,
+    tipo_template: str,
+    contexto: dict[str, Any],
+    remetente: str | None,
+    fornecedor_id: uuid.UUID | None,
+    cnpj_basico: str | None,
+    motivo: str,
+) -> None:
+    """Registo de falha local (sem chamada ao provedor): ``id_mensagem_zenvia`` nulo, status definitivo."""
+    p = obter_identificadores_postgres()
+    ts = p.qual("sms_enviados")
+    cf = p.col_fornecedor_id
+    await pool.execute(
+        f"""
+        INSERT INTO {ts} (
+            id_externo, telefone, tipo_template, contexto, remetente,
+            id_mensagem_zenvia, {cf}, cnpj_basico, status_ultimo, motivo_ultimo_evento
+        )
+        VALUES ($1, $2, $3, $4::jsonb, $5, NULL, $6, $7, 'falha_definitiva', $8)
+        ON CONFLICT (id_externo) DO UPDATE SET
+            telefone = EXCLUDED.telefone,
+            tipo_template = EXCLUDED.tipo_template,
+            contexto = EXCLUDED.contexto,
+            remetente = EXCLUDED.remetente,
+            id_mensagem_zenvia = NULL,
+            {cf} = COALESCE(EXCLUDED.{cf}, {ts}.{cf}),
+            cnpj_basico = COALESCE(EXCLUDED.cnpj_basico, {ts}.cnpj_basico),
+            status_ultimo = 'falha_definitiva',
+            motivo_ultimo_evento = EXCLUDED.motivo_ultimo_evento,
+            atualizado_em = now()
+        """,
+        id_externo,
+        telefone,
+        tipo_template,
+        json.dumps(contexto),
+        remetente,
+        fornecedor_id,
+        cnpj_basico,
+        motivo,
     )
 
 

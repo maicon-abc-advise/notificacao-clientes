@@ -19,17 +19,26 @@ from app.mensageria.repositorios.postgres_fornecedores import (
     fornecedor_id_existe,
     resolver_cnpj_basico_para_envio_mensagem,
 )
-from app.mensageria.repositorios.postgres_sms_enviados import buscar_por_id_externo as buscar_sms_por_id_externo
+from app.mensageria.repositorios.postgres_sms_enviados import (
+    buscar_por_id_externo as buscar_sms_por_id_externo,
+    inserir_ou_atualizar_falha_validacao_telefone_sms,
+)
 from app.mensageria.excecoes.erro import ErroEnvioZenvia
 from app.mensageria.servicos.materializar import materializar_email, materializar_sms
 from app.mensageria.servicos.porta import PortaEnvioMensagem
 from app.reenvio.redis_app import obter_cliente_redis
 from app.reenvio.servicos.enfileirar_apos_envio_email import enfileirar_email_enviado_apos_sucesso
-from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado
+from app.reenvio.servicos.engajamento_contatos import normalizar_telefone
+from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, EngajamentoSmsEstado
 from app.reenvio.servicos.engajamento_fornecedor import (
     exigir_destinatario_no_engajamento_email,
     exigir_destinatario_no_engajamento_sms,
     tocar_engajamento_email,
+    tocar_engajamento_sms,
+)
+from app.reenvio.servicos.validacao_telefone_sms_br import (
+    MOTIVO_FALHA_SMS_TELEFONE_INVALIDO,
+    normalizar_telefone_movel_br_para_sms,
 )
 from app.mensageria.servicos.registrar_email_enviado import registrar_email_enviado_apos_sucesso
 from app.mensageria.servicos.registrar_sms_enviado import registrar_sms_enviado_apos_sucesso
@@ -77,20 +86,6 @@ async def _validar_engajamento_antes_envio_email(pool: asyncpg.Pool, pedido: Ped
         fornecedor_id=pedido.fornecedor_id,
     )
     await exigir_destinatario_no_engajamento_email(
-        pool,
-        cnpj_basico=cnpj,
-        destinatario=pedido.destinatario,
-    )
-    return cnpj
-
-
-async def _validar_engajamento_antes_envio_sms(pool: asyncpg.Pool, pedido: PedidoEnvioSms) -> str:
-    cnpj = await resolver_cnpj_basico_para_envio_mensagem(
-        pool,
-        cnpj_basico=pedido.cnpj_basico,
-        fornecedor_id=pedido.fornecedor_id,
-    )
-    await exigir_destinatario_no_engajamento_sms(
         pool,
         cnpj_basico=cnpj,
         destinatario=pedido.destinatario,
@@ -152,15 +147,57 @@ async def post_enviar_sms(
     try:
         if pedido.id_externo:
             existente = await buscar_sms_por_id_externo(pool, pedido.id_externo)
-            zid = existente["id_mensagem_zenvia"] if existente else None
-            if _id_provedor_valido_para_idempotencia(zid):
-                return ResultadoEnvioMensagem(
-                    id_provedor=str(zid),
-                    canal=CanalMensagem.SMS,
-                    resposta_parcial={"idempotente": True},
-                )
+            if existente:
+                zid = existente["id_mensagem_zenvia"]
+                if _id_provedor_valido_para_idempotencia(zid):
+                    return ResultadoEnvioMensagem(
+                        id_provedor=str(zid),
+                        canal=CanalMensagem.SMS,
+                        resposta_parcial={"idempotente": True},
+                    )
+                if (existente["status_ultimo"] or "").strip() == "falha_definitiva" and (
+                    (existente.get("motivo_ultimo_evento") or "").strip()
+                    == MOTIVO_FALHA_SMS_TELEFONE_INVALIDO
+                ):
+                    raise HTTPException(
+                        status_code=status.HTTP_400_BAD_REQUEST,
+                        detail=MOTIVO_FALHA_SMS_TELEFONE_INVALIDO,
+                    )
         await _garantir_fornecedor_cadastrado(pool, pedido.fornecedor_id, pedido.cnpj_basico)
-        await _validar_engajamento_antes_envio_sms(pool, pedido)
+        cnpj_eng = await resolver_cnpj_basico_para_envio_mensagem(
+            pool,
+            cnpj_basico=pedido.cnpj_basico,
+            fornecedor_id=pedido.fornecedor_id,
+        )
+        if normalizar_telefone_movel_br_para_sms(pedido.destinatario) is None:
+            await tocar_engajamento_sms(
+                pool,
+                pedido.fornecedor_id,
+                cnpj_eng,
+                EngajamentoSmsEstado.SMS_NUMERO_INVALIDO,
+                endereco=pedido.destinatario,
+            )
+            if pedido.id_externo:
+                await inserir_ou_atualizar_falha_validacao_telefone_sms(
+                    pool,
+                    id_externo=pedido.id_externo,
+                    telefone=normalizar_telefone(pedido.destinatario) or (pedido.destinatario or "")[:500],
+                    tipo_template=pedido.tipo_template.value,
+                    contexto=dict(pedido.contexto),
+                    remetente=pedido.remetente,
+                    fornecedor_id=pedido.fornecedor_id,
+                    cnpj_basico=cnpj_eng,
+                    motivo=MOTIVO_FALHA_SMS_TELEFONE_INVALIDO,
+                )
+            raise HTTPException(
+                status_code=status.HTTP_400_BAD_REQUEST,
+                detail=MOTIVO_FALHA_SMS_TELEFONE_INVALIDO,
+            )
+        await exigir_destinatario_no_engajamento_sms(
+            pool,
+            cnpj_basico=cnpj_eng,
+            destinatario=pedido.destinatario,
+        )
         materializado = await materializar_sms(pedido, templates)
         resultado = porta.enviar_sms(materializado)
         await registrar_sms_enviado_apos_sucesso(pool, redis, pedido, resultado)

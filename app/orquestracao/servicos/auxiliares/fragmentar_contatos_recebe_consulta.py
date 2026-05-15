@@ -9,6 +9,10 @@ from __future__ import annotations
 import re
 
 from app.reenvio.servicos.engajamento_contatos import normalizar_email
+from app.reenvio.servicos.validacao_telefone_sms_br import (
+    filtrar_telefones_normalizados_validos_sms_br,
+    garantir_prefixo_55_digitos,
+)
 
 _EMAIL_TOKEN = re.compile(r"[a-zA-Z0-9._%+-]+@[a-zA-Z0-9.-]+\.[a-zA-Z]{2,}")
 
@@ -236,15 +240,6 @@ def extrair_telefones_br_do_texto(raw: str | None) -> list[str]:
     return out_ord
 
 
-def garantir_prefixo_55_digitos(digitos: str) -> str:
-    """Prefixo internacional 55 quando ainda não estiver presente (somente dígitos na entrada)."""
-    if not digitos:
-        return ""
-    if digitos.startswith("55"):
-        return digitos
-    return "55" + digitos
-
-
 def _prioridade_sms(d: str) -> tuple[int, int]:
     """Menor tupla = mais prioritário: móvel BR (11 dígitos nacionais após 55 com 9 na posição 2)."""
     if not d.startswith("55") or len(d) < 12:
@@ -260,7 +255,10 @@ def _prioridade_sms(d: str) -> tuple[int, int]:
 
 
 def telefones_normalizados_do_payload(s: str | None) -> tuple[str, ...]:
-    """Lista deduplicada, só dígitos, prefixo ``55`` quando faltava; ordenada (móvel > fixo > serviço)."""
+    """Lista deduplicada, só dígitos, prefixo ``55`` quando faltava; ordenada (móvel > fixo > serviço).
+
+    Apenas **móveis BR** aceitáveis para SMS permanecem (fixos, serviço e inválidos são descartados).
+    """
     brutos = extrair_telefones_br_do_texto(s)
     vistos: set[str] = set()
     com55_list: list[str] = []
@@ -274,4 +272,4 @@ def telefones_normalizados_do_payload(s: str | None) -> tuple[str, ...]:
             vistos.add(com55)
             com55_list.append(com55)
     com55_list.sort(key=_prioridade_sms)
-    return tuple(com55_list)
+    return filtrar_telefones_normalizados_validos_sms_br(com55_list)

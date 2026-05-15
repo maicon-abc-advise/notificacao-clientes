@@ -19,6 +19,7 @@ from app.mensageria.api.externo.zenvia.adaptador_envio import AdaptadorEnvioZenv
 from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
 from app.config.dependencias import obter_porta_envio_mensagem
 from app.templates.modelo import TemplateNotificacao
+from app.reenvio.servicos.validacao_telefone_sms_br import MOTIVO_FALHA_SMS_TELEFONE_INVALIDO
 
 
 def _cliente_mensagem_200() -> httpx.Client:
@@ -150,8 +151,8 @@ async def _validar_engajamento_email_sem_db(*_a, **_k) -> str:
     return "12345678"
 
 
-async def _validar_engajamento_sms_sem_db(*_a, **_k) -> str:
-    return "12345678"
+async def _exigir_engajamento_sms_noop(*_a, **_k) -> None:
+    return None
 
 
 async def _tocar_engajamento_noop(*_a, **_k) -> None:
@@ -310,14 +311,59 @@ def test_post_sms_idempotente_nao_chama_provedor() -> None:
     assert body["resposta_parcial"].get("idempotente") is True
 
 
+def test_post_sms_400_telefone_fixo_nao_chama_provedor_grava_falha(monkeypatch: pytest.MonkeyPatch) -> None:
+    falhas: list[dict] = []
+
+    async def _captura_falha(pool, **kw: object) -> None:
+        falhas.append(kw)
+
+    async def _noop(*_a, **_k) -> None:
+        return None
+
+    monkeypatch.setattr(envio_mensagens, "exigir_destinatario_no_engajamento_sms", _noop)
+    monkeypatch.setattr(envio_mensagens, "tocar_engajamento_sms", _noop)
+    monkeypatch.setattr(envio_mensagens, "inserir_ou_atualizar_falha_validacao_telefone_sms", _captura_falha)
+
+    class PortaNaoChama:
+        def enviar_sms(self, *_a, **_k) -> ResultadoEnvioMensagem:
+            raise AssertionError("provedor não deve ser chamado")
+
+    async def _fake_dep() -> object:
+        return await _templates_fixos()
+
+    app.dependency_overrides[obter_porta_envio_mensagem] = lambda: PortaNaoChama()
+    app.dependency_overrides[obter_porta_templates] = _fake_dep
+    app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep_sem_postgres
+    try:
+        with TestClient(app) as client:
+            r = client.post(
+                "/v1/mensagens/sms",
+                headers={"Authorization": "Bearer test-api-key-unit"},
+                json={
+                    "destinatario": "551132321010",
+                    "tipo_template": "APARECEU_BUSCA",
+                    "contexto": {},
+                    "cnpj_basico": "12345678",
+                    "id_externo": "invalid-phone-1",
+                },
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r.status_code == 400
+    assert r.json()["detail"] == MOTIVO_FALHA_SMS_TELEFONE_INVALIDO
+    assert len(falhas) == 1
+    assert falhas[0]["motivo"] == MOTIVO_FALHA_SMS_TELEFONE_INVALIDO
+
+
 def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> None:
     from app.mensageria.api.externo.zenvia.parametros import obter_parametros_zenvia
     from app.config.config import obter_configuracao
 
     monkeypatch.setattr(
         envio_mensagens,
-        "_validar_engajamento_antes_envio_sms",
-        _validar_engajamento_sms_sem_db,
+        "exigir_destinatario_no_engajamento_sms",
+        _exigir_engajamento_sms_noop,
     )
 
     async def _fake_dep() -> object:

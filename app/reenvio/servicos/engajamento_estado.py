@@ -28,6 +28,7 @@ class EngajamentoEmailEstado(enum.StrEnum):
 
 class EngajamentoSmsEstado(enum.StrEnum):
     ATIVO = "ativo"
+    SMS_NUMERO_INVALIDO = "sms_numero_invalido"
     SMS_ENVIADO_API = "sms_enviado_api"
     SMS_ENTREGUE = "sms_entregue"
     SMS_WEBHOOK_SENT = "sms_webhook_sent"

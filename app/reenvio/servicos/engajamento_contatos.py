@@ -37,6 +37,7 @@ _SMS_BLOQUEIA_ENVIO = frozenset(
         EngajamentoSmsEstado.SMS_FALHA_NUMERO.value,
         EngajamentoSmsEstado.SMS_FALHA_LIMITE.value,
         EngajamentoSmsEstado.SMS_NAO_EXISTE.value,
+        EngajamentoSmsEstado.SMS_NUMERO_INVALIDO.value,
         EngajamentoSmsEstado.SMS_ENVIADO_API.value,
         EngajamentoSmsEstado.SMS_WEBHOOK_SENT.value,
         EngajamentoSmsEstado.SMS_REPROCESSAR_FILA.value,
@@ -92,6 +93,7 @@ _SMS_TERMINAL_INATIVO = frozenset(
         EngajamentoSmsEstado.SMS_FALHA_NUMERO.value,
         EngajamentoSmsEstado.SMS_FALHA_LIMITE.value,
         EngajamentoSmsEstado.SMS_NAO_EXISTE.value,
+        EngajamentoSmsEstado.SMS_NUMERO_INVALIDO.value,
     }
 )
 
@@ -462,10 +464,12 @@ def proximo_telefone_tentavel_apos_contato(
 
 
 def contatos_iniciais_sms(enderecos: list[str], *, now_iso: str) -> list[dict[str, Any]]:
+    from app.reenvio.servicos.validacao_telefone_sms_br import normalizar_telefone_movel_br_para_sms
+
     seen: set[str] = set()
     out: list[dict[str, Any]] = []
     for e in enderecos:
-        n = normalizar_telefone(e)
+        n = normalizar_telefone_movel_br_para_sms(e)
         if not n or n in seen:
             continue
         seen.add(n)

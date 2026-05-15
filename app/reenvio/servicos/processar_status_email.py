@@ -23,6 +23,7 @@ from app.reenvio.servicos.engajamento_contatos import escolher_telefone_efetivo
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, engajamento_falha_recuperavel_email
 from app.reenvio.servicos.engajamento_fornecedor import parse_fornecedor_id, tocar_engajamento_email
 from app.reenvio.servicos.enfileirar_proximo_email_de_esperando import tentar_enfileirar_proximo_email_engajamento
+from app.reenvio.servicos.validacao_telefone_sms_br import validar_telefone_para_sms_br
 from app.mensageria.repositorios.postgres_emails_enviados import (
     atualizar_status_por_id_mensagem_zenvia,
 )
@@ -169,7 +170,7 @@ async def processar_webhook_status_email(
             else:
                 tel = None
             tel = (tel or "").strip()
-            if not tel:
+            if not tel or not validar_telefone_para_sms_br(tel):
                 _log.error(
                     "Hard bounce sem próximo e-mail e sem telefone no engajamento. id_externo=%s",
                     ext,
