@@ -2,16 +2,6 @@ from typing import Literal
 
 from pydantic import BaseModel, ConfigDict, Field
 
-CodigoStatusMensagem = Literal[
-    "SENT",
-    "REJECTED",
-    "DELIVERED",
-    "NOT_DELIVERED",
-    "READ",
-    "DELETED",
-    "CLICKED",
-    "VERIFIED",
-]
 TipoEventoWebhook = Literal["MESSAGE_STATUS"]
 
 
@@ -88,7 +78,7 @@ class CorpoMessageStatusZenvia(BaseModel):
 
     timestamp: str = Field(..., min_length=1)
     channel: str | None = None
-    code: CodigoStatusMensagem
+    code: str = Field(..., min_length=1, description="Status Zenvia (ex.: SENT, DELIVERED); aceita códigos novos.")
     description: str | None = None
     causes: list[ZenviaWebhookCausa] = Field(default_factory=list)
     context: ZenviaContextoWebhook | None = None

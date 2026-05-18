@@ -20,6 +20,12 @@ from app.orquestracao.api.router import router as orquestracao_router
 from app.reenvio.redis_app import fechar_cliente_redis, obter_cliente_redis
 from app.templates.conexao import fechar_pool
 
+_log = logging.getLogger(__name__)
+
+_WEBHOOK_PREFIX = "/v1/webhooks/notificacao"
+_MAX_LOG_BODY_WEBHOOK = 8000
+
+
 def _configurar_logging() -> None:
     """Sem isto, loggers da app ficam no nível WARNING do root e INFO não aparece no terminal."""
     cfg = obter_configuracao()
@@ -53,10 +59,37 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
+async def _corpo_webhook_para_log(request: Request, exc: RequestValidationError) -> str | None:
+    bruto = exc.body
+    if bruto is None:
+        try:
+            bruto = await request.body()
+        except Exception:
+            return None
+        if not bruto:
+            return None
+    if isinstance(bruto, bytes):
+        texto = bruto.decode("utf-8", errors="replace")
+    elif isinstance(bruto, str):
+        texto = bruto
+    else:
+        texto = str(bruto)
+    if len(texto) > _MAX_LOG_BODY_WEBHOOK:
+        return f"{texto[:_MAX_LOG_BODY_WEBHOOK]}…(truncado)"
+    return texto
+
+
 @app.exception_handler(RequestValidationError)
 async def _validacao_mensagens_email_400(request: Request, exc: RequestValidationError) -> JSONResponse:
     """Payload inválido em POST /v1/mensagens/email (ex.: campo ``telefone_sms_fallback`` removido) → 400."""
     path = request.url.path.rstrip("/")
+    if _WEBHOOK_PREFIX in path:
+        _log.warning(
+            "Webhook validação 422 path=%s detail=%s body=%s",
+            path,
+            exc.errors(),
+            await _corpo_webhook_para_log(request, exc),
+        )
     if path.endswith("/v1/mensagens/email"):
         return JSONResponse(status_code=400, content={"detail": exc.errors()})
     return JSONResponse(status_code=422, content={"detail": exc.errors()})

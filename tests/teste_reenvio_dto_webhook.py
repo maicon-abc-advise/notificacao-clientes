@@ -95,3 +95,8 @@ def test_webhook_rejeita_type_invalido() -> None:
     p["type"] = "OTHER"
     with pytest.raises(ValidationError):
         WebhookMessageStatusZenvia.model_validate(p)
+
+
+def test_webhook_aceita_code_desconhecido() -> None:
+    m = WebhookMessageStatusZenvia.model_validate(_payload_valido_v2(code="NOVO_STATUS_ZENVIA"))
+    assert m.messageStatus.code == "NOVO_STATUS_ZENVIA"
