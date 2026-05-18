@@ -22,6 +22,7 @@ class EngajamentoEmailEstado(enum.StrEnum):
     EMAIL_FALHA_RECUPERAVEL_MAILBOX_FULL = "email_falha_recuperavel_mailbox_full"
     EMAIL_FALHA_RECUPERAVEL_TEMPORARY = "email_falha_recuperavel_temporary"
     EMAIL_FALHA_RECUPERAVEL_UNKNOWN = "email_falha_recuperavel_unknown"
+    EMAIL_SWEEP_PROXIMO_EMAIL = "email_sweep_proximo_email"
     EMAIL_SWEEP_LEMBRETE_SMS = "email_sweep_lembrete_sms"
     EMAIL_NAO_EXISTE = "email_nao_existe"
     EMAIL_LINK_CLICADO = "email_link_clicado"

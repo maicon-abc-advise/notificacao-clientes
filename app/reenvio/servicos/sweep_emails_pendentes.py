@@ -59,7 +59,7 @@ async def executar_sweep_emails_pendentes(
                     pool,
                     parse_fornecedor_id((campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip()),
                     cnpj_basico,
-                    EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS,
+                    EngajamentoEmailEstado.EMAIL_SWEEP_PROXIMO_EMAIL,
                     endereco=em_cur,
                 )
                 continue

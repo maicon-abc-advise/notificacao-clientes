@@ -28,6 +28,7 @@ _EMAIL_BLOQUEIA_ENVIO = frozenset(
         EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_UNKNOWN.value,
         EngajamentoEmailEstado.EMAIL_ENVIADO_API.value,
         EngajamentoEmailEstado.EMAIL_WEBHOOK_SENT.value,
+        EngajamentoEmailEstado.EMAIL_SWEEP_PROXIMO_EMAIL.value,
         EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS.value,
     }
 )
@@ -57,6 +58,7 @@ _EMAIL_PENDING_AGG = frozenset(
     {
         EngajamentoEmailEstado.EMAIL_ENVIADO_API.value,
         EngajamentoEmailEstado.EMAIL_WEBHOOK_SENT.value,
+        EngajamentoEmailEstado.EMAIL_SWEEP_PROXIMO_EMAIL.value,
         EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS.value,
         EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_MAILBOX_FULL.value,
         EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_TEMPORARY.value,
