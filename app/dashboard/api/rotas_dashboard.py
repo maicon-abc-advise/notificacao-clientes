@@ -3,7 +3,7 @@
 from __future__ import annotations
 
 import math
-from datetime import date, timedelta
+from datetime import date, datetime, timedelta
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query
@@ -81,6 +81,114 @@ def _busca_cnpj(v: str | None) -> str | None:
 def _append_param(params: list[Any], value: Any) -> str:
     params.append(value)
     return f"${len(params)}"
+
+
+def _validar_periodo_metricas(
+    periodo_inicio: datetime | None,
+    periodo_fim: datetime | None,
+) -> tuple[datetime, datetime] | None:
+    if periodo_inicio is None and periodo_fim is None:
+        return None
+    if periodo_inicio is None or periodo_fim is None:
+        raise HTTPException(
+            status_code=400,
+            detail="Informe periodo_inicio e periodo_fim juntos, ou omita ambos.",
+        )
+    if periodo_inicio > periodo_fim:
+        raise HTTPException(
+            status_code=400,
+            detail="periodo_inicio não pode ser maior que periodo_fim",
+        )
+    return periodo_inicio, periodo_fim
+
+
+def _where_com_periodo(
+    params: list[Any],
+    periodo: tuple[datetime, datetime] | None,
+    condicao: str = "",
+) -> str:
+    partes: list[str] = []
+    if condicao:
+        partes.append(condicao)
+    if periodo:
+        p_ini = _append_param(params, periodo[0])
+        p_fim = _append_param(params, periodo[1])
+        partes.append(f"criado_em >= {p_ini} AND criado_em <= {p_fim}")
+    if not partes:
+        return ""
+    return " WHERE " + " AND ".join(partes)
+
+
+async def _pg_count_periodo(
+    pool: PoolOrquestracao,
+    tabela: str,
+    periodo: tuple[datetime, datetime] | None,
+    condicao: str = "",
+) -> int:
+    params: list[Any] = []
+    where = _where_com_periodo(params, periodo, condicao)
+    return int(await pool.fetchval(f"SELECT COUNT(*) FROM {tabela}{where}", *params) or 0)
+
+
+async def _redis_count_pendentes(
+    redis: RedisOrquestracao,
+    idx_key: str,
+    periodo: tuple[datetime, datetime] | None,
+) -> int:
+    if not periodo:
+        return int(await redis.zcard(idx_key) or 0)
+    return int(
+        await redis.zcount(
+            idx_key,
+            periodo[0].timestamp(),
+            periodo[1].timestamp(),
+        )
+        or 0,
+    )
+
+
+def _epoch_criado_em_hash(raw: dict[Any, Any]) -> float | None:
+    criado = _h(raw, "criado_em")
+    if not criado:
+        return None
+    try:
+        return float(criado)
+    except ValueError:
+        return None
+
+
+async def _redis_count_esperando(
+    redis: RedisOrquestracao,
+    idx_key: str,
+    chave_hash_fn,
+    periodo: tuple[datetime, datetime] | None,
+) -> int:
+    if not periodo:
+        return int(await redis.zcard(idx_key) or 0)
+    min_ts = periodo[0].timestamp()
+    max_ts = periodo[1].timestamp()
+    ids_raw = await redis.zrange(idx_key, 0, -1)
+    total = 0
+    for mid in ids_raw:
+        mid_s = mid.decode() if isinstance(mid, bytes) else str(mid)
+        raw = await redis.hgetall(chave_hash_fn(mid_s))
+        if not raw:
+            continue
+        ts = _epoch_criado_em_hash(raw)
+        if ts is not None and min_ts <= ts <= max_ts:
+            total += 1
+    return total
+
+
+def _meta_periodo_metricas(periodo: tuple[datetime, datetime] | None) -> dict[str, Any]:
+    if not periodo:
+        return {"periodo": None}
+    return {
+        "periodo": {
+            "inicio": periodo[0].isoformat(),
+            "fim": periodo[1].isoformat(),
+        },
+    }
 
 
 def _normalizar_periodo(
@@ -542,31 +650,25 @@ async def resumo_home_dashboard(
 async def metricas_emails(
     pool: PoolOrquestracao,
     redis: RedisOrquestracao,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     p = obter_identificadores_postgres()
     te = p.qual("emails_enviados")
-    total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {te}") or 0)
-    falhas = int(
-        await pool.fetchval(
-            f"SELECT COUNT(*) FROM {te} WHERE status_ultimo = 'falha_definitiva'",
-        )
-        or 0,
+    total = await _pg_count_periodo(pool, te, periodo)
+    falhas = await _pg_count_periodo(pool, te, periodo, "status_ultimo = 'falha_definitiva'")
+    lidos = await _pg_count_periodo(
+        pool,
+        te,
+        periodo,
+        "status_ultimo IN ('lido', 'clicado')",
     )
-    lidos = int(
-        await pool.fetchval(
-            f"SELECT COUNT(*) FROM {te} WHERE status_ultimo IN ('lido', 'clicado')",
-        )
-        or 0,
-    )
-    clicados = int(
-        await pool.fetchval(
-            f"SELECT COUNT(*) FROM {te} WHERE status_ultimo = 'clicado'",
-        )
-        or 0,
-    )
-    pendentes = int(await redis.zcard(IDX_EMAIL_PEND) or 0)
-    esperando = int(await redis.zcard(IDX_EMAIL_CONF) or 0)
+    clicados = await _pg_count_periodo(pool, te, periodo, "status_ultimo = 'clicado'")
+    pendentes = await _redis_count_pendentes(redis, IDX_EMAIL_PEND, periodo)
+    esperando = await _redis_count_esperando(redis, IDX_EMAIL_CONF, chave_email_conf, periodo)
     return {
+        **_meta_periodo_metricas(periodo),
         "emails_enviados_total": total,
         "emails_pendentes_pre_envio": pendentes,
         "emails_esperando_confirmacao": esperando,
@@ -717,31 +819,25 @@ async def lista_emails_redis_esperando(
 async def metricas_sms(
     pool: PoolOrquestracao,
     redis: RedisOrquestracao,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     p = obter_identificadores_postgres()
     ts = p.qual("sms_enviados")
-    total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {ts}") or 0)
-    falhas = int(
-        await pool.fetchval(
-            f"SELECT COUNT(*) FROM {ts} WHERE status_ultimo = 'falha_definitiva'",
-        )
-        or 0,
+    total = await _pg_count_periodo(pool, ts, periodo)
+    falhas = await _pg_count_periodo(pool, ts, periodo, "status_ultimo = 'falha_definitiva'")
+    entregues = await _pg_count_periodo(
+        pool,
+        ts,
+        periodo,
+        "status_ultimo IN ('enviado', 'lido', 'clicado')",
     )
-    entregues = int(
-        await pool.fetchval(
-            f"SELECT COUNT(*) FROM {ts} WHERE status_ultimo IN ('enviado', 'lido', 'clicado')",
-        )
-        or 0,
-    )
-    clicados = int(
-        await pool.fetchval(
-            f"SELECT COUNT(*) FROM {ts} WHERE status_ultimo = 'clicado'",
-        )
-        or 0,
-    )
-    pendentes = int(await redis.zcard(IDX_SMS_PEND) or 0)
-    esperando = int(await redis.zcard(IDX_SMS_CONF) or 0)
+    clicados = await _pg_count_periodo(pool, ts, periodo, "status_ultimo = 'clicado'")
+    pendentes = await _redis_count_pendentes(redis, IDX_SMS_PEND, periodo)
+    esperando = await _redis_count_esperando(redis, IDX_SMS_CONF, chave_sms_conf, periodo)
     return {
+        **_meta_periodo_metricas(periodo),
         "sms_enviados_total": total,
         "sms_pendentes_fila": pendentes,
         "sms_esperando_confirmacao": esperando,
