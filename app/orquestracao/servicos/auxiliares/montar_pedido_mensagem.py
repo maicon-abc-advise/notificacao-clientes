@@ -1,4 +1,4 @@
-EUfrom __future__ import annotations
+from __future__ import annotations
 import uuid
 from app.clique.token_clique import gerar_token_clique
 from app.config.config import obter_configuracao
