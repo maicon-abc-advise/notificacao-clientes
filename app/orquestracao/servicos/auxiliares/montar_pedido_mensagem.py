@@ -1,5 +1,6 @@
-from __future__ import annotations
+EUfrom __future__ import annotations
 import uuid
+from app.clique.token_clique import gerar_token_clique
 from app.config.config import obter_configuracao
 from app.mensageria.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo
@@ -21,11 +22,18 @@ def _cfg():
     return obter_configuracao()
 
 
+def _url_clique(id_externo: str) -> str:
+    cfg = _cfg()
+    token = gerar_token_clique(id_externo, cfg.link_clique_secret)
+    return f"{cfg.url_base_clique}/{token}"
+
+
 def contexto_email_apareceu_busca_logado(
     corpo: RecebeConsultaCorpo,
     *,
     uf: str,
     segmento: str,
+    id_externo: str,
 ) -> dict[str, str]:
     cfg = _cfg()
     return {
@@ -34,6 +42,7 @@ def contexto_email_apareceu_busca_logado(
         "segmento": segmento,
         "url_plataforma": cfg.url_plataforma_email,
         "url_login": cfg.url_login_email,
+        "url_clique": _url_clique(id_externo),
     }
 
 
@@ -42,6 +51,7 @@ def contexto_email_apareceu_busca_sem_registro(
     *,
     uf: str,
     segmento: str,
+    id_externo: str,
 ) -> dict[str, str]:
     cfg = _cfg()
     return {
@@ -50,6 +60,7 @@ def contexto_email_apareceu_busca_sem_registro(
         "segmento": segmento,
         "url_plataforma": cfg.url_plataforma_email,
         "url_login": cfg.url_login_email,
+        "url_clique": _url_clique(id_externo),
     }
 
 
@@ -57,7 +68,7 @@ _UF_SMS_MAX_CHARS = 5
 _SEGMENTO_SMS_MAX_CHARS = 8
 
 
-def contexto_sms_busca(*, uf: str, segmento: str) -> dict[str, str]:
+def contexto_sms_busca(*, uf: str, segmento: str, id_externo: str) -> dict[str, str]:
     cfg = _cfg()
     u = (uf or "").strip()
     if len(u) > _UF_SMS_MAX_CHARS:
@@ -70,6 +81,7 @@ def contexto_sms_busca(*, uf: str, segmento: str) -> dict[str, str]:
         "segmento": seg,
         "url_plataforma": cfg.url_plataforma_sms,
         "url_login": cfg.url_login_sms,
+        "url_clique": _url_clique(id_externo),
     }
 
 
@@ -92,9 +104,13 @@ def montar_pedido_email_apareceu_busca(
     if tipo_template not in _TIPOS_EMAIL_BUSCA:
         raise ValueError(f"tipo_template de e-mail inválido para busca: {tipo_template!r}")
     if tipo_template == CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO:
-        ctx = contexto_email_apareceu_busca_sem_registro(corpo, uf=uf, segmento=segmento)
+        ctx = contexto_email_apareceu_busca_sem_registro(
+            corpo, uf=uf, segmento=segmento, id_externo=id_externo
+        )
     else:
-        ctx = contexto_email_apareceu_busca_logado(corpo, uf=uf, segmento=segmento)
+        ctx = contexto_email_apareceu_busca_logado(
+            corpo, uf=uf, segmento=segmento, id_externo=id_externo
+        )
     return PedidoEnvioEmail(
         destinatario=destinatario,
         tipo_template=tipo_template,
@@ -127,7 +143,7 @@ def montar_pedido_sms_consultado_sem_email(
     return PedidoEnvioSms(
         destinatario=destinatario,
         tipo_template=tipo_template,
-        contexto=contexto_sms_busca(uf=uf, segmento=segmento),
+        contexto=contexto_sms_busca(uf=uf, segmento=segmento, id_externo=id_externo),
         id_externo=id_externo,
         fornecedor_id=fornecedor_id,
         cnpj_basico=cnpj_basico,

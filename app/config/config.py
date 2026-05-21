@@ -136,6 +136,23 @@ class Configuracao(BaseSettings):
         description="URL de login usada nos contextos de SMS da orquestração.",
     )
 
+    url_base_clique_test: str | None = Field(default=None, validation_alias="URL_BASE_CLIQUE_TEST")
+    url_base_clique_prod: str | None = Field(default=None, validation_alias="URL_BASE_CLIQUE_PROD")
+    url_base_clique_fallback: str | None = Field(default=None, validation_alias="URL_BASE_CLIQUE")
+    url_base_clique: str = ""
+
+    url_landing_info_consulta: str = Field(
+        default="https://buscafornecedor.com.br/info-consulta",
+        validation_alias="URL_LANDING_INFO_CONSULTA",
+        description="Landing Lovable após clique (query: segmento, uf, nome_empresa).",
+    )
+
+    link_clique_secret: str = Field(
+        default="dev-link-clique-secret-change-me",
+        validation_alias="LINK_CLIQUE_SECRET",
+        description="Segredo HMAC dos tokens de clique (não é URL).",
+    )
+
     mensagens_provedor_email: ProvedorMensagem = Field(
         default=ProvedorMensagem.ZENVIA,
         validation_alias="MENSAGENS_PROVEDOR_EMAIL",
@@ -245,6 +262,19 @@ class Configuracao(BaseSettings):
             "url_login_sms",
             _strip(self.url_login_sms) or f"{url_sms}/login",
         )
+
+        c_test = _strip(self.url_base_clique_test)
+        c_prod = _strip(self.url_base_clique_prod)
+        c_fb = _strip(self.url_base_clique_fallback)
+        pick_clique = (c_test if local else c_prod) or c_fb or "http://127.0.0.1:8000/v1/clique"
+        object.__setattr__(self, "url_base_clique", pick_clique.rstrip("/"))
+
+        object.__setattr__(
+            self,
+            "url_landing_info_consulta",
+            (_strip(self.url_landing_info_consulta) or "https://buscafornecedor.com.br/info-consulta").rstrip("/"),
+        )
+        object.__setattr__(self, "link_clique_secret", _strip(self.link_clique_secret) or "dev-link-clique-secret-change-me")
 
         return self
 

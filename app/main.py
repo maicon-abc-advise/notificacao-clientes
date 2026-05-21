@@ -16,6 +16,7 @@ from app.reenvio.api.rotas import (
     webhook_sms_router,
 )
 from app.dashboard.api import dashboard_mutacoes_router, dashboard_router
+from app.clique.api.rotas_clique import router as clique_router
 from app.orquestracao.api.router import router as orquestracao_router
 from app.reenvio.redis_app import fechar_cliente_redis, obter_cliente_redis
 from app.templates.conexao import fechar_pool
@@ -110,6 +111,7 @@ async def _sem_tabela_postgres(_request: Request, _exc: asyncpg.exceptions.Undef
 
 
 app.include_router(saude.router, tags=["saúde"])
+app.include_router(clique_router)
 app.include_router(ping_autenticado.router, tags=["autenticação"])
 app.include_router(envio_mensagens.router, tags=["envio"])
 app.include_router(diagnostico_fornecedores.router, tags=["diagnóstico"])

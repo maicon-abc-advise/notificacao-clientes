@@ -2,6 +2,7 @@ from uuid import uuid4
 
 import pytest
 
+from app.clique.token_clique import extrair_id_externo_do_token
 from app.config.config import obter_configuracao
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo
 from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
@@ -35,13 +36,15 @@ def test_pedido_email_apareceu_busca_contexto_minimo_logado() -> None:
         uf="MG",
         segmento="alimentícios",
     )
-    assert p.contexto == {
-        "saudacao_nome": "ACME",
-        "uf": "MG",
-        "segmento": "alimentícios",
-        "url_plataforma": "https://buscafornecedor.com.br",
-        "url_login": "https://buscafornecedor.com.br/login",
-    }
+    assert p.contexto["saudacao_nome"] == "ACME"
+    assert p.contexto["uf"] == "MG"
+    assert p.contexto["segmento"] == "alimentícios"
+    assert p.contexto["url_plataforma"] == "https://buscafornecedor.com.br"
+    assert p.contexto["url_login"] == "https://buscafornecedor.com.br/login"
+    assert extrair_id_externo_do_token(
+        p.contexto["url_clique"].rsplit("/", 1)[-1],
+        obter_configuracao().link_clique_secret,
+    ) == "ext-1"
 
 
 def test_pedido_email_sem_registro_contexto_minimo() -> None:
@@ -56,13 +59,8 @@ def test_pedido_email_sem_registro_contexto_minimo() -> None:
         uf="MG",
         segmento="alimentícios",
     )
-    assert p.contexto == {
-        "saudacao_nome": "ACME",
-        "uf": "MG",
-        "segmento": "alimentícios",
-        "url_plataforma": "https://buscafornecedor.com.br",
-        "url_login": "https://buscafornecedor.com.br/login",
-    }
+    assert "url_clique" in p.contexto
+    assert p.contexto["saudacao_nome"] == "ACME"
 
 
 def test_pedido_sms_busca_contexto_minimo() -> None:
@@ -77,12 +75,13 @@ def test_pedido_sms_busca_contexto_minimo() -> None:
         uf="GO",
         segmento="papel",
     )
-    assert p.contexto == {
-        "uf": "GO",
-        "segmento": "papel",
-        "url_plataforma": "https://buscafornecedor.com.br",
-        "url_login": "https://buscafornecedor.com.br/login",
-    }
+    assert p.contexto["uf"] == "GO"
+    assert p.contexto["segmento"] == "papel"
+    assert "url_clique" in p.contexto
+    assert extrair_id_externo_do_token(
+        p.contexto["url_clique"].rsplit("/", 1)[-1],
+        obter_configuracao().link_clique_secret,
+    ) == "ext-2"
 
 
 def test_pedido_sms_uf_ou_segmento_longos_vao_vazio() -> None:
@@ -113,6 +112,7 @@ def test_contexto_busca_usa_urls_distintas_por_canal(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("URL_LOGIN_EMAIL", "https://email.exemplo.com/login")
     monkeypatch.setenv("URL_PLATAFORMA_SMS", "https://sms.exemplo.com")
     monkeypatch.setenv("URL_LOGIN_SMS", "https://sms.exemplo.com/login")
+    monkeypatch.setenv("URL_BASE_CLIQUE", "https://api.exemplo.com/v1/clique")
     obter_configuracao.cache_clear()
 
     c = _corpo()
@@ -139,8 +139,10 @@ def test_contexto_busca_usa_urls_distintas_por_canal(monkeypatch: pytest.MonkeyP
 
     assert pedido_email.contexto["url_plataforma"] == "https://email.exemplo.com"
     assert pedido_email.contexto["url_login"] == "https://email.exemplo.com/login"
+    assert pedido_email.contexto["url_clique"].startswith("https://api.exemplo.com/v1/clique/")
     assert pedido_sms.contexto["url_plataforma"] == "https://sms.exemplo.com"
     assert pedido_sms.contexto["url_login"] == "https://sms.exemplo.com/login"
+    assert pedido_sms.contexto["url_clique"].startswith("https://api.exemplo.com/v1/clique/")
 
 
 def test_contexto_creditos_usa_links_distintos_por_canal(monkeypatch: pytest.MonkeyPatch) -> None:

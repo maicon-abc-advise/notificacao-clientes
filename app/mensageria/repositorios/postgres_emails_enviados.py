@@ -27,6 +27,22 @@ async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.
     )
 
 
+async def atualizar_status_por_id_externo(
+    pool: asyncpg.Pool, *, id_externo: str, status_ultimo: str
+) -> None:
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
+    await pool.execute(
+        f"""
+        UPDATE {te}
+        SET status_ultimo = $2, atualizado_em = now()
+        WHERE id_externo = $1
+        """,
+        id_externo,
+        status_ultimo,
+    )
+
+
 async def atualizar_status_por_id_mensagem_zenvia(
     pool: asyncpg.Pool, *, id_mensagem_zenvia: str, status_ultimo: str
 ) -> None:

@@ -18,7 +18,7 @@ async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.
     cf = p.col_fornecedor_id
     return await pool.fetchrow(
         f"""
-        SELECT id_externo, id_mensagem_zenvia, telefone, tipo_template, contexto,
+        SELECT id, id_externo, id_mensagem_zenvia, telefone, tipo_template, contexto,
                remetente, {cf}, cnpj_basico, status_ultimo, motivo_ultimo_evento
         FROM {ts}
         WHERE id_externo = $1
@@ -135,6 +135,22 @@ async def buscar_por_id_mensagem_zenvia(
         LIMIT 1
         """,
         id_mensagem,
+    )
+
+
+async def atualizar_status_por_id_externo(
+    pool: asyncpg.Pool, *, id_externo: str, status_ultimo: str
+) -> None:
+    p = obter_identificadores_postgres()
+    ts = p.qual("sms_enviados")
+    await pool.execute(
+        f"""
+        UPDATE {ts}
+        SET status_ultimo = $2, atualizado_em = now()
+        WHERE id_externo = $1
+        """,
+        id_externo,
+        status_ultimo,
     )
 
 

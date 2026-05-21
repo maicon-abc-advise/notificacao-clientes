@@ -24,6 +24,7 @@ from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, enga
 from app.reenvio.servicos.engajamento_fornecedor import parse_fornecedor_id, tocar_engajamento_email
 from app.reenvio.servicos.enfileirar_proximo_email_de_esperando import tentar_enfileirar_proximo_email_engajamento
 from app.reenvio.servicos.validacao_telefone_sms_br import validar_telefone_para_sms_br
+from app.clique.servicos.registrar_clique import registrar_primeiro_clique_por_id_externo
 from app.mensageria.repositorios.postgres_emails_enviados import (
     atualizar_status_por_id_mensagem_zenvia,
 )
@@ -99,16 +100,22 @@ async def processar_webhook_status_email(
         return {"acao": "removido_fila", "message_id": message_id, "code": code}
 
     if code == "CLICKED":
-        await atualizar_status_por_id_mensagem_zenvia(
-            pool,
-            id_mensagem_zenvia=message_id,
-            status_ultimo="clicado",
-        )
-        await tocar_engajamento_email(
-            pool, fid, cnpj_basico, EngajamentoEmailEstado.EMAIL_LINK_CLICADO, endereco=em_dest
-        )
-        await repo.remover(redis, message_id)
-        return {"acao": "removido_fila", "message_id": message_id, "code": code}
+        ext = (dados.get("id_externo") or dados.get("external_id") or "").strip()
+        if ext:
+            await registrar_primeiro_clique_por_id_externo(
+                pool, redis, ext, message_id_zenvia=message_id
+            )
+        else:
+            await atualizar_status_por_id_mensagem_zenvia(
+                pool,
+                id_mensagem_zenvia=message_id,
+                status_ultimo="clicado",
+            )
+            await tocar_engajamento_email(
+                pool, fid, cnpj_basico, EngajamentoEmailEstado.EMAIL_LINK_CLICADO, endereco=em_dest
+            )
+            await repo.remover(redis, message_id)
+        return {"acao": "clique_processado", "message_id": message_id, "code": code}
 
     if code == "SENT":
         await atualizar_status_por_id_mensagem_zenvia(

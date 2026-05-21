@@ -9,6 +9,7 @@ from redis.asyncio import Redis
 from app.config.config import Configuracao
 from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.reenvio.api.dto.webhook_zenvia import WebhookMessageStatusZenvia
+from app.clique.servicos.registrar_clique import registrar_primeiro_clique_por_id_externo
 from app.mensageria.repositorios.postgres_sms_enviados import (
     atualizar_status_por_id_interno,
     buscar_por_id_mensagem_zenvia,
@@ -103,21 +104,27 @@ async def processar_webhook_status_sms(
         return {"acao": "sms_lido", "id": str(id_interno), "code": code}
 
     if code == "CLICKED":
-        await atualizar_status_por_id_interno(
-            pool,
-            id_interno=id_interno,
-            status_ultimo="clicado",
-            motivo=motivo,
-        )
-        await tocar_engajamento_sms(
-            pool,
-            fid,
-            cnpj_basico,
-            EngajamentoSmsEstado.SMS_LINK_CLICADO,
-            endereco=str(telefone) if telefone else None,
-        )
-        await repo_esp.remover(redis, mid_z)
-        return {"acao": "sms_clicado", "id": str(id_interno), "code": code}
+        ext = (row["id_externo"] or "").strip()
+        if ext:
+            await registrar_primeiro_clique_por_id_externo(
+                pool, redis, ext, message_id_zenvia=mid_z
+            )
+        else:
+            await atualizar_status_por_id_interno(
+                pool,
+                id_interno=id_interno,
+                status_ultimo="clicado",
+                motivo=motivo,
+            )
+            await tocar_engajamento_sms(
+                pool,
+                fid,
+                cnpj_basico,
+                EngajamentoSmsEstado.SMS_LINK_CLICADO,
+                endereco=str(telefone) if telefone else None,
+            )
+            await repo_esp.remover(redis, mid_z)
+        return {"acao": "sms_clique_processado", "id": str(id_interno), "code": code}
 
     if code == "DELIVERED":
         await atualizar_status_por_id_interno(

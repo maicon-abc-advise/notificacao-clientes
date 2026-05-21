@@ -10,6 +10,7 @@ os.environ["MOCK_COMPANY_PROFILE_ENRIQUECIMENTO"] = "true"
 os.environ["MENSAGENS_PROVEDOR_EMAIL"] = "zenvia"
 os.environ["MENSAGENS_PROVEDOR_SMS"] = "zenvia"
 os.environ["ZENVIA_API_TOKEN"] = "test-zenvia-token-somente-para-testes"
+os.environ["LINK_CLIQUE_SECRET"] = "test-link-clique-secret"
 
 os.environ["REDIS_URL_TEST"] = "redis://localhost:6379/0"
 os.environ["DATABASE_URL_TEST"] = "postgresql://notificacao:notificacao_dev@127.0.0.1:5433/notificacao"

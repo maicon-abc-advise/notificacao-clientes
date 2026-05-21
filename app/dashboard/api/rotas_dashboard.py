@@ -1,13 +1,8 @@
-"""Endpoints de leitura para o dashboard (autenticação interna)."""
-
 from __future__ import annotations
-
 import math
 from datetime import date, datetime, timedelta
 from typing import Annotated, Any
-
 from fastapi import APIRouter, Depends, HTTPException, Query
-
 from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.dashboard.servicos.exibicao import (
     enriquecer_linha_postgres,
