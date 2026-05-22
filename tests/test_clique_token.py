@@ -1,23 +1,30 @@
 import pytest
 
-from app.clique.token_clique import extrair_id_externo_do_token, gerar_token_clique
-from app.config.config import obter_configuracao
+from app.clique.token_clique import (
+    TAMANHO_ID_EXTERNO,
+    TAMANHO_TOKEN_URL,
+    cifrar_id_para_url,
+    decifrar_url_para_id,
+    gerar_id_externo,
+)
 
 
-@pytest.fixture(autouse=True)
-def _limpar_cache() -> None:
-    obter_configuracao.cache_clear()
-    yield
-    obter_configuracao.cache_clear()
+def test_gerar_id_externo_tamanho_e_alfabeto() -> None:
+    id_externo = gerar_id_externo()
+    assert len(id_externo) == TAMANHO_ID_EXTERNO
+    assert id_externo.isalnum()
 
 
-def test_token_roundtrip() -> None:
+def test_cifra_decifra_roundtrip() -> None:
     secret = "test-secret-clique"
-    id_externo = "550e8400-e29b-41d4-a716-446655440000"
-    token = gerar_token_clique(id_externo, secret)
-    assert extrair_id_externo_do_token(token, secret) == id_externo
+    id_externo = gerar_id_externo()
+    token = cifrar_id_para_url(id_externo, secret)
+    assert len(token) == TAMANHO_TOKEN_URL
+    assert decifrar_url_para_id(token, secret) == id_externo
 
 
 def test_token_invalido() -> None:
-    assert extrair_id_externo_do_token("invalido", "secret") is None
-    assert extrair_id_externo_do_token("", "secret") is None
+    secret = "test-secret-clique"
+    assert decifrar_url_para_id("curto", secret) is None
+    assert decifrar_url_para_id("x" * 20, secret) is None
+    assert decifrar_url_para_id("", secret) is None

@@ -1,12 +1,11 @@
 """GET /v1/clique/{token} — JSON e CORS."""
 
-import asyncio
 from unittest.mock import AsyncMock, MagicMock, patch
 
 import pytest
 from fastapi.testclient import TestClient
 
-from app.clique.token_clique import gerar_token_clique
+from app.clique.token_clique import cifrar_id_para_url, gerar_id_externo
 from app.config.config import obter_configuracao
 from app.main import app
 
@@ -26,7 +25,8 @@ def test_clique_token_invalido_retorna_404() -> None:
 
 def test_clique_token_valido_sem_envio_retorna_404() -> None:
     secret = obter_configuracao().link_clique_secret
-    token = gerar_token_clique("id-que-nao-existe-no-banco", secret)
+    id_externo = gerar_id_externo()
+    token = cifrar_id_para_url(id_externo, secret)
     pool = MagicMock()
     with (
         patch("app.clique.api.rotas_clique.obter_pool", new_callable=AsyncMock, return_value=pool),
@@ -43,7 +43,8 @@ def test_clique_token_valido_sem_envio_retorna_404() -> None:
 
 def test_clique_json_ok() -> None:
     secret = obter_configuracao().link_clique_secret
-    token = gerar_token_clique("ext-teste-json", secret)
+    id_externo = gerar_id_externo()
+    token = cifrar_id_para_url(id_externo, secret)
     pool = MagicMock()
     with (
         patch("app.clique.api.rotas_clique.obter_pool", new_callable=AsyncMock, return_value=pool),

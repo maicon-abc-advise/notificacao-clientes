@@ -28,6 +28,7 @@ from app.orquestracao.servicos.auxiliares.fragmentar_contatos_recebe_consulta im
     emails_do_payload,
     telefones_normalizados_do_payload,
 )
+from app.clique.token_clique import gerar_id_externo
 from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
     montar_pedido_email_apareceu_busca,
     montar_pedido_sms_consultado_sem_email,
@@ -195,7 +196,7 @@ async def executar_receber_consulta(
             motivo=decisao.motivo,
         )
 
-    ext = str(uuid.uuid4())
+    ext = gerar_id_externo()
     if decisao.canal == "email":
         pedido = montar_pedido_email_apareceu_busca(
             corpo,

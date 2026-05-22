@@ -1,6 +1,6 @@
 from __future__ import annotations
 import uuid
-from app.clique.token_clique import gerar_token_clique
+from app.clique.token_clique import cifrar_id_para_url
 from app.config.config import obter_configuracao
 from app.mensageria.api.dto.modelos import PedidoEnvioEmail, PedidoEnvioSms
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo
@@ -22,9 +22,10 @@ def _cfg():
     return obter_configuracao()
 
 
-def _url_clique(id_externo: str) -> str:
+def url_login_rastreado_para_id(id_externo: str) -> str:
+    """Link ``/c/{token12}`` para templates de busca (exportado para reenfileiramento)."""
     cfg = _cfg()
-    token = gerar_token_clique(id_externo, cfg.link_clique_secret)
+    token = cifrar_id_para_url(id_externo, cfg.link_clique_secret)
     return f"{cfg.url_base_clique}/{token}"
 
 
@@ -41,8 +42,7 @@ def contexto_email_apareceu_busca_logado(
         "uf": uf,
         "segmento": segmento,
         "url_plataforma": cfg.url_plataforma_email,
-        "url_login": cfg.url_login_email,
-        "url_clique": _url_clique(id_externo),
+        "url_login": url_login_rastreado_para_id(id_externo),
     }
 
 
@@ -59,8 +59,7 @@ def contexto_email_apareceu_busca_sem_registro(
         "uf": uf,
         "segmento": segmento,
         "url_plataforma": cfg.url_plataforma_email,
-        "url_login": cfg.url_login_email,
-        "url_clique": _url_clique(id_externo),
+        "url_login": url_login_rastreado_para_id(id_externo),
     }
 
 
@@ -80,8 +79,7 @@ def contexto_sms_busca(*, uf: str, segmento: str, id_externo: str) -> dict[str, 
         "uf": u,
         "segmento": seg,
         "url_plataforma": cfg.url_plataforma_sms,
-        "url_login": cfg.url_login_sms,
-        "url_clique": _url_clique(id_externo),
+        "url_login": url_login_rastreado_para_id(id_externo),
     }
 
 

@@ -12,12 +12,12 @@ IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
 
 SMS_APARECEU_BUSCA = (
     "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}. "
-    "Sua empresa apareceu! Veja agora em: {{ url_clique }}."
+    "Sua empresa apareceu! Veja agora em: {{ url_login }}."
 )
 
 SMS_APARECEU_BUSCA_SEM_REGISTRO = (
     "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}. "
-    "Sua empresa apareceu! Veja agora em: {{ url_clique }}."
+    "Sua empresa apareceu! Veja agora em: {{ url_login }}."
 )
 
 SMS_CREDITOS_NO_FIM = (
@@ -32,7 +32,7 @@ SMS_LEMBRETE_CREDITOS = (
 
 SMS_CONSULTADO_SEM_EMAIL = (
     "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}, mas você está sem e-mail de contato. "
-    "Não perca vendas, resolva em: {{ url_clique }}."
+    "Não perca vendas, resolva em: {{ url_login }}."
 )
 
 EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
@@ -70,7 +70,7 @@ EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
         Não deixe essa visibilidade passar em branco. Acesse sua área exclusiva para ver os detalhes dessa atividade e garantir que seu perfil se destaque da concorrência.
       </p>
       <p style="text-align:center;">
-        <a href="{{ url_clique }}" class="button" target="_blank">Aproveitar Oportunidade</a>
+        <a href="{{ url_login }}" class="button" target="_blank">Aproveitar Oportunidade</a>
       </p>
       <p style="font-size: 14px; color: #64748b; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
         <strong>Dica:</strong> Manter seus dados 100% atualizados aumenta drasticamente as chances de converter essas buscas em novos contratos reais.
@@ -119,7 +119,7 @@ EMAIL_APARECEU_BUSCA_SEM_REGISTRO = """<!DOCTYPE html>
         <strong>Não deixe essa oportunidade na mesa:</strong> finalize seu cadastro agora para ser encontrado com prioridade e receber propostas diretas.
       </p>
       <p style="text-align:center;">
-        <a href="{{ url_clique }}" class="button" target="_blank">Reivindicar meu Perfil</a>
+        <a href="{{ url_login }}" class="button" target="_blank">Reivindicar meu Perfil</a>
       </p>
       <p style="font-size: 14px; color: #64748b; margin-top: 30px; border-top: 1px solid #f1f5f9; padding-top: 15px;">
         * Fornecedores com cadastro completo aparecem até 5x mais nos resultados de busca do que perfis básicos.

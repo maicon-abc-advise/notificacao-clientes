@@ -17,6 +17,6 @@ def test_consultado_sem_email_sem_corpo_html() -> None:
             assert email is None
             assert "{{ uf }}" in sms
             assert "{{ segmento }}" in sms
-            assert "{{ url_clique }}" in sms
+            assert "{{ url_login }}" in sms
             return
     raise AssertionError("tipo CONSULTADO_SEM_EMAIL ausente")

@@ -13,7 +13,7 @@ from app.clique.servicos.registrar_clique import (
     montar_redirect_para_id_externo,
     processar_clique_api,
 )
-from app.clique.token_clique import extrair_id_externo_do_token
+from app.clique.token_clique import TAMANHO_TOKEN_URL, decifrar_url_para_id
 from app.config.config import Configuracao, obter_configuracao
 from app.reenvio.redis_app import obter_cliente_redis
 from app.templates.conexao import obter_pool
@@ -41,7 +41,9 @@ async def get_clique_dados(
         ),
     ] = False,
 ) -> DadosCliqueResposta | RedirectResponse:
-    id_externo = extrair_id_externo_do_token(token, config.link_clique_secret)
+    if len(token) != TAMANHO_TOKEN_URL:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link inválido ou expirado")
+    id_externo = decifrar_url_para_id(token, config.link_clique_secret)
     if not id_externo:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Link inválido ou expirado")
 

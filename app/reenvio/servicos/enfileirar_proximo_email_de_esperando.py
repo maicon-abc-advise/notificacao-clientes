@@ -8,7 +8,9 @@ import uuid
 
 from redis.asyncio import Redis
 
+from app.clique.token_clique import TAMANHO_ID_EXTERNO, gerar_id_externo
 from app.mensageria.api.dto.modelos import PedidoEnvioEmail
+from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import url_login_rastreado_para_id
 from app.orquestracao.repositorios.engajamento_consulta_repo import SnapshotEngajamentoOrquestracao
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import RepositorioEmailsPendenteRedis
 from app.reenvio.repositorios.redis_consulta_notificacao import parse_consulta_id_hash
@@ -36,6 +38,11 @@ def pedido_envio_email_de_metadados_redis(
     ctx = {str(k): str(v) for k, v in base.items() if v is not None}
     tipo_s = (dados.get("tipo_template") or "").strip()
     tipo = CodigoTipoTemplate(tipo_s)
+    if len(novo_id_externo) == TAMANHO_ID_EXTERNO and tipo in (
+        CodigoTipoTemplate.APARECEU_BUSCA,
+        CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO,
+    ):
+        ctx["url_login"] = url_login_rastreado_para_id(novo_id_externo)
     uid = parse_fornecedor_id((dados.get("fornecedor_id") or dados.get("usuario_id") or "").strip())
     cnpj = (dados.get("cnpj_basico") or "").strip() or None
     cid = parse_consulta_id_hash(dados.get("consulta_id"))
@@ -73,7 +80,7 @@ async def tentar_enfileirar_proximo_email_engajamento(
         return None
     if message_id_esperando:
         await RepositorioEmailsEsperandoConfirmacaoRedis().remover(redis, message_id_esperando)
-    novo = str(uuid.uuid4())
+    novo = gerar_id_externo()
     pedido = pedido_envio_email_de_metadados_redis(dados, destinatario=prox, novo_id_externo=novo)
     repo = RepositorioEmailsPendenteRedis()
     ok = await repo.criar(

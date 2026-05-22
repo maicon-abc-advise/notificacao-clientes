@@ -10,6 +10,7 @@ from typing import Any, Literal
 import asyncpg
 from redis.asyncio import Redis
 
+from app.clique.token_clique import gerar_id_externo
 from app.mensageria.api.dto.modelos import CanalMensagem, PedidoEnvioEmail, PedidoEnvioSms, ResultadoEnvioMensagem
 from app.orquestracao.repositorios.engajamento_consulta_repo import carregar_por_cnpj_basico
 from app.orquestracao.servicos.auxiliares.decidir_canal_e_cadencia import (
@@ -161,11 +162,11 @@ async def tentar_reenfileirar_apos_sms_invalido(
                     if pedido.fornecedor_id
                     else CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO
                 )
-                base_ext = pedido.id_externo or str(uuid.uuid4())
+                base_ext = pedido.id_externo or gerar_id_externo()
                 novo = (
                     f"{base_ext}:fallback_email:{uuid.uuid4().hex[:12]}"
                     if pedido.id_externo
-                    else str(uuid.uuid4())
+                    else gerar_id_externo()
                 )
                 pedido_e = PedidoEnvioEmail(
                     destinatario=em,
@@ -189,11 +190,11 @@ async def tentar_reenfileirar_apos_sms_invalido(
         tel_ctx = normalizar_telefone(pedido.destinatario) or None
         prox_c = _proximo_sms_valido_engajamento(snap.contatos_sms, tel_ctx)
         if prox_c:
-            base_ext = pedido.id_externo or str(uuid.uuid4())
+            base_ext = pedido.id_externo or gerar_id_externo()
             novo = (
                 f"{base_ext}:fallback_sms:{uuid.uuid4().hex[:12]}"
                 if pedido.id_externo
-                else str(uuid.uuid4())
+                else gerar_id_externo()
             )
             pedido_s = PedidoEnvioSms(
                 destinatario=prox_c,

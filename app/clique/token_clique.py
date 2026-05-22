@@ -1,33 +1,59 @@
-"""Token assinado (HMAC) para links de clique — sem Redis nem tabela extra."""
+"""Id externo (12 chars) e token de URL (12 chars) com cifra simples via ``LINK_CLIQUE_SECRET``."""
 
 from __future__ import annotations
 
-import base64
 import hashlib
-import hmac
+import secrets
+import string
+
+TAMANHO_ID_EXTERNO = 12
+TAMANHO_TOKEN_URL = 12
+
+_ALFABETO = string.ascii_letters + string.digits
 
 
-def _assinatura(id_externo: str, secret: str) -> str:
-    return hmac.new(secret.encode("utf-8"), id_externo.encode("utf-8"), hashlib.sha256).hexdigest()[:16]
+def gerar_id_externo() -> str:
+    """Gera ``id_externo`` aleatório de 12 caracteres (A–Z, a–z, 0–9)."""
+    return "".join(secrets.choice(_ALFABETO) for _ in range(TAMANHO_ID_EXTERNO))
 
-def gerar_token_clique(id_externo: str, secret: str) -> str:
-    """Gera token URL-safe: ``base64url(id_externo + '.' + sig)``."""
-    payload = f"{id_externo}.{_assinatura(id_externo, secret)}"
-    return base64.urlsafe_b64encode(payload.encode("utf-8")).decode("ascii").rstrip("=")
 
-def extrair_id_externo_do_token(token: str, secret: str) -> str | None:
-    """Valida assinatura e devolve ``id_externo`` ou ``None``."""
-    if not token or not secret:
+def _indices_chave(secret: str) -> list[int]:
+    digest = hashlib.sha256(secret.encode("utf-8")).digest()
+    return [digest[i] % len(_ALFABETO) for i in range(TAMANHO_TOKEN_URL)]
+
+
+def _validar_id_12(id_externo: str) -> None:
+    if len(id_externo) != TAMANHO_ID_EXTERNO:
+        raise ValueError(f"id_externo deve ter {TAMANHO_ID_EXTERNO} caracteres")
+    for c in id_externo:
+        if c not in _ALFABETO:
+            raise ValueError(f"caractere inválido em id_externo: {c!r}")
+
+
+def cifrar_id_para_url(id_externo: str, secret: str) -> str:
+    """Cifra ``id_externo`` (12) → token de URL (12), reversível com o mesmo secret."""
+    _validar_id_12(id_externo)
+    if not secret:
+        raise ValueError("secret vazio")
+    chave = _indices_chave(secret)
+    return "".join(
+        _ALFABETO[(_ALFABETO.index(c) + chave[i]) % len(_ALFABETO)]
+        for i, c in enumerate(id_externo)
+    )
+
+
+def decifrar_url_para_id(token: str, secret: str) -> str | None:
+    """Decifra token de URL (12) → ``id_externo`` ou ``None`` se inválido."""
+    if len(token) != TAMANHO_TOKEN_URL or not secret:
         return None
+    chave = _indices_chave(secret)
     try:
-        pad = "=" * (-len(token) % 4)
-        raw = base64.urlsafe_b64decode((token + pad).encode("ascii")).decode("utf-8")
-        id_externo, sig = raw.rsplit(".", 1)
-        if not id_externo:
-            return None
-        esperado = _assinatura(id_externo, secret)
-        if hmac.compare_digest(sig, esperado):
-            return id_externo
-    except (ValueError, UnicodeDecodeError):
+        out = "".join(
+            _ALFABETO[(_ALFABETO.index(c) - chave[i]) % len(_ALFABETO)]
+            for i, c in enumerate(token)
+        )
+    except ValueError:
         return None
-    return None
+    if len(out) != TAMANHO_ID_EXTERNO:
+        return None
+    return out

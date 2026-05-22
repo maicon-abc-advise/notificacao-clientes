@@ -20,6 +20,7 @@ from app.reenvio.servicos.engajamento_contatos import (
     estado_granular_email,
     estado_granular_sms,
 )
+from app.clique.token_clique import gerar_id_externo
 from app.orquestracao.servicos.auxiliares.enfileirar_ou_enviar_interno import (
     enfileirar_email_pendente,
     enfileirar_sms_pendente,
@@ -91,7 +92,7 @@ async def executar_verificar_creditos(
                 ignorados += 1
                 continue
 
-        ext = str(uuid.uuid4())
+        ext = gerar_id_externo()
 
         if creditos_restantes == 0:
             tpl = CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS

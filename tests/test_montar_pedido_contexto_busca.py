@@ -2,7 +2,11 @@ from uuid import uuid4
 
 import pytest
 
-from app.clique.token_clique import extrair_id_externo_do_token
+from app.clique.token_clique import (
+    TAMANHO_TOKEN_URL,
+    decifrar_url_para_id,
+    gerar_id_externo,
+)
 from app.config.config import obter_configuracao
 from app.orquestracao.api.dto.recebe_consulta_dto import RecebeConsultaCorpo
 from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
@@ -26,25 +30,28 @@ def _corpo() -> RecebeConsultaCorpo:
 
 def test_pedido_email_apareceu_busca_contexto_minimo_logado() -> None:
     c = _corpo()
+    id_externo = gerar_id_externo()
     p = montar_pedido_email_apareceu_busca(
         c,
         destinatario="a@b.co",
         fornecedor_id=None,
         cnpj_basico=c.cnpj_basico,
-        id_externo="ext-1",
+        id_externo=id_externo,
         tipo_template=CodigoTipoTemplate.APARECEU_BUSCA,
         uf="MG",
         segmento="alimentícios",
     )
+    cfg = obter_configuracao()
     assert p.contexto["saudacao_nome"] == "ACME"
     assert p.contexto["uf"] == "MG"
     assert p.contexto["segmento"] == "alimentícios"
     assert p.contexto["url_plataforma"] == "https://buscafornecedor.com.br"
-    assert p.contexto["url_login"] == "https://buscafornecedor.com.br/login"
-    assert extrair_id_externo_do_token(
-        p.contexto["url_clique"].rsplit("/", 1)[-1],
-        obter_configuracao().link_clique_secret,
-    ) == "ext-1"
+    assert "url_clique" not in p.contexto
+    url_login = p.contexto["url_login"]
+    assert url_login.startswith(f"{cfg.url_base_clique}/")
+    token = url_login.rsplit("/", 1)[-1]
+    assert len(token) == TAMANHO_TOKEN_URL
+    assert decifrar_url_para_id(token, cfg.link_clique_secret) == id_externo
 
 
 def test_pedido_email_sem_registro_contexto_minimo() -> None:
@@ -54,34 +61,36 @@ def test_pedido_email_sem_registro_contexto_minimo() -> None:
         destinatario="a@b.co",
         fornecedor_id=None,
         cnpj_basico=c.cnpj_basico,
-        id_externo="ext-1",
+        id_externo=gerar_id_externo(),
         tipo_template=CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO,
         uf="MG",
         segmento="alimentícios",
     )
-    assert "url_clique" in p.contexto
+    assert "url_clique" not in p.contexto
     assert p.contexto["saudacao_nome"] == "ACME"
+    assert p.contexto["url_login"].startswith(obter_configuracao().url_base_clique)
 
 
 def test_pedido_sms_busca_contexto_minimo() -> None:
     c = _corpo()
+    id_externo = gerar_id_externo()
     p = montar_pedido_sms_consultado_sem_email(
         c,
         destinatario="5511999999999",
         fornecedor_id=None,
         cnpj_basico=c.cnpj_basico,
-        id_externo="ext-2",
+        id_externo=id_externo,
         tipo_template=CodigoTipoTemplate.CONSULTADO_SEM_EMAIL,
         uf="GO",
         segmento="papel",
     )
+    cfg = obter_configuracao()
     assert p.contexto["uf"] == "GO"
     assert p.contexto["segmento"] == "papel"
-    assert "url_clique" in p.contexto
-    assert extrair_id_externo_do_token(
-        p.contexto["url_clique"].rsplit("/", 1)[-1],
-        obter_configuracao().link_clique_secret,
-    ) == "ext-2"
+    assert "url_clique" not in p.contexto
+    token = p.contexto["url_login"].rsplit("/", 1)[-1]
+    assert len(token) == TAMANHO_TOKEN_URL
+    assert decifrar_url_para_id(token, cfg.link_clique_secret) == id_externo
 
 
 def test_pedido_sms_uf_ou_segmento_longos_vao_vazio() -> None:
@@ -91,7 +100,7 @@ def test_pedido_sms_uf_ou_segmento_longos_vao_vazio() -> None:
         destinatario="5511999999999",
         fornecedor_id=None,
         cnpj_basico=c.cnpj_basico,
-        id_externo="ext-long",
+        id_externo=gerar_id_externo(),
         tipo_template=CodigoTipoTemplate.CONSULTADO_SEM_EMAIL,
         uf="GO,SP,MS",
         segmento="123456789",
@@ -112,16 +121,18 @@ def test_contexto_busca_usa_urls_distintas_por_canal(monkeypatch: pytest.MonkeyP
     monkeypatch.setenv("URL_LOGIN_EMAIL", "https://email.exemplo.com/login")
     monkeypatch.setenv("URL_PLATAFORMA_SMS", "https://sms.exemplo.com")
     monkeypatch.setenv("URL_LOGIN_SMS", "https://sms.exemplo.com/login")
-    monkeypatch.setenv("URL_BASE_CLIQUE", "https://api.exemplo.com/v1/clique")
+    monkeypatch.setenv("URL_BASE_CLIQUE", "https://buscafornecedor.com.br/c")
     obter_configuracao.cache_clear()
 
     c = _corpo()
+    id_email = gerar_id_externo()
+    id_sms = gerar_id_externo()
     pedido_email = montar_pedido_email_apareceu_busca(
         c,
         destinatario="a@b.co",
         fornecedor_id=None,
         cnpj_basico=c.cnpj_basico,
-        id_externo="ext-email",
+        id_externo=id_email,
         tipo_template=CodigoTipoTemplate.APARECEU_BUSCA,
         uf="MG",
         segmento="alimentícios",
@@ -131,18 +142,18 @@ def test_contexto_busca_usa_urls_distintas_por_canal(monkeypatch: pytest.MonkeyP
         destinatario="5511999999999",
         fornecedor_id=None,
         cnpj_basico=c.cnpj_basico,
-        id_externo="ext-sms",
+        id_externo=id_sms,
         tipo_template=CodigoTipoTemplate.CONSULTADO_SEM_EMAIL,
         uf="MG",
         segmento="alimentícios",
     )
 
     assert pedido_email.contexto["url_plataforma"] == "https://email.exemplo.com"
-    assert pedido_email.contexto["url_login"] == "https://email.exemplo.com/login"
-    assert pedido_email.contexto["url_clique"].startswith("https://api.exemplo.com/v1/clique/")
+    assert pedido_email.contexto["url_login"].startswith("https://buscafornecedor.com.br/c/")
+    assert len(pedido_email.contexto["url_login"].rsplit("/", 1)[-1]) == TAMANHO_TOKEN_URL
     assert pedido_sms.contexto["url_plataforma"] == "https://sms.exemplo.com"
-    assert pedido_sms.contexto["url_login"] == "https://sms.exemplo.com/login"
-    assert pedido_sms.contexto["url_clique"].startswith("https://api.exemplo.com/v1/clique/")
+    assert pedido_sms.contexto["url_login"].startswith("https://buscafornecedor.com.br/c/")
+    assert len(pedido_sms.contexto["url_login"].rsplit("/", 1)[-1]) == TAMANHO_TOKEN_URL
 
 
 def test_contexto_creditos_usa_links_distintos_por_canal(monkeypatch: pytest.MonkeyPatch) -> None:
@@ -156,7 +167,7 @@ def test_contexto_creditos_usa_links_distintos_por_canal(monkeypatch: pytest.Mon
         destinatario="a@b.co",
         fornecedor_id=uuid4(),
         cnpj_basico="12345678",
-        id_externo="cred-email",
+        id_externo=gerar_id_externo(),
         nome_fantasia="ACME",
         url_login="https://painel.exemplo.com/login",
     )
@@ -164,7 +175,7 @@ def test_contexto_creditos_usa_links_distintos_por_canal(monkeypatch: pytest.Mon
         destinatario="5511999999999",
         fornecedor_id=uuid4(),
         cnpj_basico="12345678",
-        id_externo="cred-sms",
+        id_externo=gerar_id_externo(),
         nome_fantasia="ACME",
         url_login="https://app.exemplo.com/login",
     )
