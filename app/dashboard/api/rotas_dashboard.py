@@ -448,6 +448,160 @@ async def _conversoes_por_canal(
     }
 
 
+def _expr_cnpj_mensagem(alias: str) -> str:
+    return f"""COALESCE(
+        NULLIF(trim(coalesce({alias}.cnpj_basico, '')), ''),
+        {alias}.contexto->>'cnpj_basico',
+        ''
+    )"""
+
+
+def _etapa_funil(chave: str, rotulo: str, valor: int, escopo: str) -> dict[str, Any]:
+    return {
+        "chave": chave,
+        "rotulo": rotulo,
+        "valor": int(valor),
+        "escopo": escopo,
+    }
+
+
+def _funil_canal(canal: str, titulo: str, etapas: list[dict[str, Any]]) -> dict[str, Any]:
+    return {"canal": canal, "titulo": titulo, "etapas": etapas}
+
+
+async def _count_cnpj_distintos_periodo(
+    pool: PoolOrquestracao,
+    *,
+    tabela: str,
+    alias: str,
+    inicio: date,
+    fim: date,
+    condicao_extra: str = "",
+) -> int:
+    cnpj = _expr_cnpj_mensagem(alias)
+    extra = f" AND ({condicao_extra})" if condicao_extra else ""
+    return int(
+        await pool.fetchval(
+            f"""
+            SELECT COUNT(DISTINCT {cnpj})
+            FROM {tabela} AS {alias}
+            WHERE {alias}.criado_em::date BETWEEN $1 AND $2
+              AND {cnpj} <> ''
+            {extra}
+            """,
+            inicio,
+            fim,
+        )
+        or 0
+    )
+
+
+async def _funis_home(
+    pool: PoolOrquestracao,
+    *,
+    inicio: date,
+    fim: date,
+    resumo_eng: dict[str, int],
+    canais: dict[str, int],
+) -> dict[str, Any]:
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
+    ts = p.qual("sms_enviados")
+
+    monitorados = int(resumo_eng["total_monitorados"] or 0)
+    com_email = int(resumo_eng["usuarios_com_email"] or 0)
+    com_telefone = int(resumo_eng["usuarios_com_telefone"] or 0)
+
+    email_receberam = await _count_cnpj_distintos_periodo(
+        pool, tabela=te, alias="m", inicio=inicio, fim=fim
+    )
+    email_lidos = await _count_cnpj_distintos_periodo(
+        pool,
+        tabela=te,
+        alias="m",
+        inicio=inicio,
+        fim=fim,
+        condicao_extra="m.status_ultimo IN ('lido', 'clicado')",
+    )
+    email_clicados = await _count_cnpj_distintos_periodo(
+        pool,
+        tabela=te,
+        alias="m",
+        inicio=inicio,
+        fim=fim,
+        condicao_extra="m.status_ultimo = 'clicado'",
+    )
+    convertidos_email = int(canais.get("so_email") or 0) + int(canais.get("ambos") or 0)
+
+    sms_receberam = await _count_cnpj_distintos_periodo(
+        pool, tabela=ts, alias="m", inicio=inicio, fim=fim
+    )
+    sms_entregues = await _count_cnpj_distintos_periodo(
+        pool,
+        tabela=ts,
+        alias="m",
+        inicio=inicio,
+        fim=fim,
+        condicao_extra="m.status_ultimo IN ('enviado', 'lido', 'clicado')",
+    )
+    sms_clicados = await _count_cnpj_distintos_periodo(
+        pool,
+        tabela=ts,
+        alias="m",
+        inicio=inicio,
+        fim=fim,
+        condicao_extra="m.status_ultimo = 'clicado'",
+    )
+    convertidos_sms = int(canais.get("so_sms") or 0) + int(canais.get("ambos") or 0)
+
+    return {
+        "email": _funil_canal(
+            "email",
+            "Funil de e-mail",
+            [
+                _etapa_funil("monitorados", "Usuários monitorados", monitorados, "estoque"),
+                _etapa_funil("com_contato", "Com e-mail cadastrado", com_email, "estoque"),
+                _etapa_funil(
+                    "receberam",
+                    "Receberam e-mail no período",
+                    email_receberam,
+                    "periodo",
+                ),
+                _etapa_funil("lidos", "Abriram o e-mail", email_lidos, "periodo"),
+                _etapa_funil("clicados", "Clicaram no link", email_clicados, "periodo"),
+                _etapa_funil(
+                    "convertidos",
+                    "Convertidos (histórico e-mail)",
+                    convertidos_email,
+                    "periodo",
+                ),
+            ],
+        ),
+        "sms": _funil_canal(
+            "sms",
+            "Funil de SMS",
+            [
+                _etapa_funil("monitorados", "Usuários monitorados", monitorados, "estoque"),
+                _etapa_funil("com_contato", "Com telefone cadastrado", com_telefone, "estoque"),
+                _etapa_funil(
+                    "receberam",
+                    "Receberam SMS no período",
+                    sms_receberam,
+                    "periodo",
+                ),
+                _etapa_funil("entregues", "SMS entregues", sms_entregues, "periodo"),
+                _etapa_funil("clicados", "Clicaram no link", sms_clicados, "periodo"),
+                _etapa_funil(
+                    "convertidos",
+                    "Convertidos (histórico SMS)",
+                    convertidos_sms,
+                    "periodo",
+                ),
+            ],
+        ),
+    }
+
+
 def _normalizar_linha_postgres_mensagem(item: dict[str, Any], *, canal: str) -> dict[str, Any]:
     cnpj_ctx = item.pop("cnpj_basico_dashboard", None)
     if not item.get("cnpj_basico") and cnpj_ctx:
@@ -584,6 +738,13 @@ async def resumo_home_dashboard(
     sms_pendentes = max(total_sms - sms_entregues, 0)
     canais = await _conversoes_por_canal(pool, inicio=inicio, fim=fim)
     total_canais = sum(canais.values())
+    funis = await _funis_home(
+        pool,
+        inicio=inicio,
+        fim=fim,
+        resumo_eng=resumo_eng,
+        canais=canais,
+    )
 
     return {
         "periodo": {
@@ -638,6 +799,7 @@ async def resumo_home_dashboard(
             },
         ],
         "resumo_engajamento": resumo_eng,
+        "funis": funis,
     }
 
 
