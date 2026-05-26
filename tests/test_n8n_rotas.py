@@ -8,7 +8,7 @@ from fastapi.testclient import TestClient
 from app.main import app
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import RepositorioEmailsPendenteRedis
 import app.reenvio.api.rotas.interno_n8n as interno_n8n
-from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
+from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as KEY_INDEX_SMS, RepositorioSmsPendenteRedis
 
 
 class _FakeRedisPipeline:
@@ -137,10 +137,25 @@ class _FakeRedis:
             self._zsets.pop(key, None)
         return removidos
 
-    async def zrange(self, key: str, inicio: int, fim: int) -> list[str]:
+    def _membros_ordenados(self, key: str, *, reverso: bool) -> list[str]:
         self._purge(key)
         atual = self._zsets.get(key, {})
-        ordenados = [m for m, _s in sorted(atual.items(), key=lambda item: (item[1], item[0]))]
+        if reverso:
+            chave = lambda item: (-item[1], item[0])
+        else:
+            chave = lambda item: (item[1], item[0])
+        return [m for m, _s in sorted(atual.items(), key=chave)]
+
+    async def zrange(self, key: str, inicio: int, fim: int) -> list[str]:
+        ordenados = self._membros_ordenados(key, reverso=False)
+        if not ordenados:
+            return []
+        if fim < 0:
+            fim = len(ordenados) + fim
+        return ordenados[inicio : fim + 1]
+
+    async def zrevrange(self, key: str, inicio: int, fim: int) -> list[str]:
+        ordenados = self._membros_ordenados(key, reverso=True)
         if not ordenados:
             return []
         if fim < 0:
@@ -236,6 +251,56 @@ def test_claim_sms_reserva_item_uma_unica_vez() -> None:
 
     assert r2.status_code == 200
     assert r2.json()["total"] == 0
+
+
+def test_claim_sms_recentes_prioriza_mais_novo() -> None:
+    fake = _FakeRedis()
+    app.dependency_overrides[interno_n8n._redis] = lambda: fake
+    try:
+        repo = RepositorioSmsPendenteRedis()
+
+        for ext in ("sms-antigo", "sms-novo"):
+            asyncio.run(
+                repo.criar(
+                    fake,
+                    id_externo=ext,
+                    telefone="5511999999999",
+                    tipo_template="APARECEU_BUSCA",
+                    contexto={},
+                    remetente="abc",
+                    origem="teste",
+                    fornecedor_id=None,
+                    cnpj_basico=None,
+                    consulta_id=None,
+                ),
+            )
+        asyncio.run(
+            fake.zadd(
+                KEY_INDEX_SMS,
+                {"sms-antigo": 100.0, "sms-novo": 200.0},
+            ),
+        )
+        with TestClient(app) as client:
+            r_recente = client.post(
+                "/v1/interno/n8n/sms-pendentes/claim-recentes",
+                headers={"Authorization": "Bearer test-api-key-unit"},
+                json={"limite": 1},
+            )
+            r_antigo = client.post(
+                "/v1/interno/n8n/sms-pendentes/claim",
+                headers={"Authorization": "Bearer test-api-key-unit"},
+                json={"limite": 1},
+            )
+    finally:
+        app.dependency_overrides.clear()
+
+    assert r_recente.status_code == 200
+    assert r_recente.json()["total"] == 1
+    assert r_recente.json()["itens"][0]["id_externo"] == "sms-novo"
+
+    assert r_antigo.status_code == 200
+    assert r_antigo.json()["total"] == 1
+    assert r_antigo.json()["itens"][0]["id_externo"] == "sms-antigo"
 
 
 def test_confirmar_consumo_sms_remove_eh_idempotente() -> None:

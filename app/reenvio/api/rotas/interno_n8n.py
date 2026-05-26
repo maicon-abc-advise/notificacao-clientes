@@ -154,7 +154,7 @@ async def get_sms_pendentes_n8n(
     "/emails-pendentes/claim",
     response_model=RespostaClaimN8N,
     status_code=status.HTTP_200_OK,
-    summary="Reserva temporariamente e-mails pendentes para o n8n",
+    summary="Reserva temporariamente e-mails pendentes para o n8n (mais antigos primeiro)",
 )
 async def post_claim_emails_pendentes_n8n(
     pedido: PedidoClaimN8N,
@@ -172,10 +172,31 @@ async def post_claim_emails_pendentes_n8n(
 
 
 @router.post(
+    "/emails-pendentes/claim-recentes",
+    response_model=RespostaClaimN8N,
+    status_code=status.HTTP_200_OK,
+    summary="Reserva temporariamente e-mails pendentes para o n8n (mais recentes primeiro)",
+)
+async def post_claim_emails_pendentes_recentes_n8n(
+    pedido: PedidoClaimN8N,
+    redis: Annotated[Redis, Depends(_redis)],
+) -> RespostaClaimN8N:
+    repo = RepositorioEmailsPendenteRedis()
+    itens = await repo.listar_pendentes_recentes(redis, limite=_limitar_lote(pedido.limite * 5))
+    serializados = [_serializar_item_email(item) for item in itens]
+    claimados = await _claim_itens(redis, canal="email", itens=serializados, limite=pedido.limite)
+    return RespostaClaimN8N(
+        total=len(claimados),
+        itens=claimados,
+        ttl_claim_segundos=CLAIM_TTL_PADRAO_SEGUNDOS,
+    )
+
+
+@router.post(
     "/sms-pendentes/claim",
     response_model=RespostaClaimN8N,
     status_code=status.HTTP_200_OK,
-    summary="Reserva temporariamente SMS pendentes para o n8n",
+    summary="Reserva temporariamente SMS pendentes para o n8n (mais antigos primeiro)",
 )
 async def post_claim_sms_pendentes_n8n(
     pedido: PedidoClaimN8N,
@@ -183,6 +204,27 @@ async def post_claim_sms_pendentes_n8n(
 ) -> RespostaClaimN8N:
     repo = RepositorioSmsPendenteRedis()
     itens = await repo.listar_pendentes(redis, limite=_limitar_lote(pedido.limite * 5))
+    serializados = [_serializar_item_sms(item) for item in itens]
+    claimados = await _claim_itens(redis, canal="sms", itens=serializados, limite=pedido.limite)
+    return RespostaClaimN8N(
+        total=len(claimados),
+        itens=claimados,
+        ttl_claim_segundos=CLAIM_TTL_PADRAO_SEGUNDOS,
+    )
+
+
+@router.post(
+    "/sms-pendentes/claim-recentes",
+    response_model=RespostaClaimN8N,
+    status_code=status.HTTP_200_OK,
+    summary="Reserva temporariamente SMS pendentes para o n8n (mais recentes primeiro)",
+)
+async def post_claim_sms_pendentes_recentes_n8n(
+    pedido: PedidoClaimN8N,
+    redis: Annotated[Redis, Depends(_redis)],
+) -> RespostaClaimN8N:
+    repo = RepositorioSmsPendenteRedis()
+    itens = await repo.listar_pendentes_recentes(redis, limite=_limitar_lote(pedido.limite * 5))
     serializados = [_serializar_item_sms(item) for item in itens]
     claimados = await _claim_itens(redis, canal="sms", itens=serializados, limite=pedido.limite)
     return RespostaClaimN8N(

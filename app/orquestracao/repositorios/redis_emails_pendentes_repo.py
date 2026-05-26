@@ -108,6 +108,13 @@ class RepositorioEmailsPendenteRedis:
 
     async def listar_pendentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
         ids = await redis.zrange(KEY_INDEX, 0, limite - 1)
+        return await self._carregar_itens_por_ids(redis, ids)
+
+    async def listar_pendentes_recentes(self, redis: Redis, *, limite: int = 200) -> list[dict[str, Any]]:
+        ids = await redis.zrevrange(KEY_INDEX, 0, limite - 1)
+        return await self._carregar_itens_por_ids(redis, ids)
+
+    async def _carregar_itens_por_ids(self, redis: Redis, ids: list[str]) -> list[dict[str, Any]]:
         saida: list[dict[str, Any]] = []
         for ext in ids:
             raw = await redis.hgetall(chave_hash(ext))
