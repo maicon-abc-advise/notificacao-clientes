@@ -79,6 +79,12 @@ class Configuracao(BaseSettings):
         description="Sufixo em consultas e usuario_fornecedor; FKs para usuario_fornecedor usam coluna fornecedor_id + sufixo (ex.: _teste).",
     )
 
+    purge_incidente_enabled: bool = Field(
+        default=False,
+        validation_alias="PURGE_INCIDENTE_ENABLED",
+        description="true = habilita GET/POST /v1/interno/dashboard/purge/* (também liberado em AMBIENTE=local).",
+    )
+
     api_key: str = Field(validation_alias="API_KEY")
     log_level: str = Field(default="INFO", validation_alias="LOG_LEVEL")
 
