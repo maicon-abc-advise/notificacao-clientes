@@ -108,6 +108,13 @@ class WebhookMessageStatusZenvia(BaseModel):
         root = (self.messageId or "").strip()
         return root or None
 
+    def abertura_por_maquina(self) -> bool:
+        """``channelData.email.clientInfo.machineOpen`` — abertura automática (antispam / prefetch)."""
+        cd = self.messageStatus.channelData
+        if cd is None or cd.email is None or cd.email.clientInfo is None:
+            return False
+        return cd.email.clientInfo.machineOpen is True
+
     def texto_para_classificacao_falha(self) -> str | None:
         """Texto único para heurísticas (cause/description + itens de ``causes``)."""
         parts: list[str] = []

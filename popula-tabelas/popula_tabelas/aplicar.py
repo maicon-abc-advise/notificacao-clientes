@@ -76,10 +76,13 @@ async def _migrar_status_ultimo_lido_e_limpar_zenvia(conn: asyncpg.Connection) -
         t = p.qual(base)
         await conn.execute(f"ALTER TABLE {t} DROP COLUMN IF EXISTS zenvia_ultimo_code")
         await conn.execute(f"ALTER TABLE {t} DROP CONSTRAINT IF EXISTS {chk}")
+        valores = (
+            "('processando', 'enviado', 'lido', 'lido_maquina', 'clicado', 'falha_definitiva', 'reprocessar')"
+            if base == "emails_enviados"
+            else "('processando', 'enviado', 'lido', 'clicado', 'falha_definitiva', 'reprocessar')"
+        )
         await conn.execute(
-            f"""ALTER TABLE {t} ADD CONSTRAINT {chk} CHECK (
-                status_ultimo IN ('processando', 'enviado', 'lido', 'clicado', 'falha_definitiva', 'reprocessar')
-            )""",
+            f"ALTER TABLE {t} ADD CONSTRAINT {chk} CHECK (status_ultimo IN {valores})",
         )
 
 

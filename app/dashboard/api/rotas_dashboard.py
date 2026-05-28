@@ -241,13 +241,22 @@ def _cartao(
     *,
     total: int | None = None,
     segmentos: list[dict[str, Any]] | None = None,
+    detalhe: str | None = None,
 ) -> dict[str, Any]:
     out: dict[str, Any] = {"chave": chave, "valor": int(valor), "legenda": legenda}
     if total is not None:
         out["total"] = int(total)
     if segmentos:
         out["segmentos"] = segmentos
+    if detalhe:
+        out["detalhe"] = detalhe
     return out
+
+
+def _detalhe_lidos_maquina(qtd: int) -> str | None:
+    if qtd <= 0:
+        return None
+    return f"({qtd} abertos por máquina)"
 
 
 def _taxa_percentual(parte: int, total: int) -> int:
@@ -647,6 +656,20 @@ async def resumo_home_dashboard(
         )
         or 0
     )
+    emails_lidos_maquina = int(
+        await pool.fetchval(
+            f"""
+            SELECT COUNT(*)
+            FROM {te}
+            WHERE criado_em::date BETWEEN $1 AND $2
+              AND status_ultimo = 'lido_maquina'
+            """,
+            inicio,
+            fim,
+        )
+        or 0
+    )
+    emails_aberturas_total = emails_lidos + emails_lidos_maquina
 
     total_sms = int(
         await pool.fetchval(
@@ -734,7 +757,7 @@ async def resumo_home_dashboard(
         """,
     )
 
-    emails_nao_lidos = max(total_emails - emails_lidos, 0)
+    emails_nao_lidos = max(total_emails - emails_aberturas_total, 0)
     sms_pendentes = max(total_sms - sms_entregues, 0)
     canais = await _conversoes_por_canal(pool, inicio=inicio, fim=fim)
     total_canais = sum(canais.values())
@@ -752,6 +775,7 @@ async def resumo_home_dashboard(
             "data_fim": fim.isoformat(),
             "total_dias": len(_datas_periodo(inicio, fim)),
         },
+        "emails_lidos_maquina": emails_lidos_maquina,
         "cartoes": [
             _cartao("emails_periodo", total_emails, "E-mails no período"),
             _cartao("sms_periodo", total_sms, "SMS no período"),
@@ -768,10 +792,11 @@ async def resumo_home_dashboard(
             {
                 "chave": "emails_leitura",
                 "titulo": "E-mails lidos vs não lidos",
-                "valor": emails_lidos,
+                "valor": emails_aberturas_total,
                 "total": total_emails,
+                "detalhe": _detalhe_lidos_maquina(emails_lidos_maquina),
                 "segmentos": [
-                    _segmento("Lidos", emails_lidos, "success"),
+                    _segmento("Lidos", emails_aberturas_total, "success"),
                     _segmento("Não lidos", emails_nao_lidos, "neutral"),
                 ],
             },
@@ -821,6 +846,13 @@ async def metricas_emails(
         periodo,
         "status_ultimo IN ('lido', 'clicado')",
     )
+    lidos_maquina = await _pg_count_periodo(
+        pool,
+        te,
+        periodo,
+        "status_ultimo = 'lido_maquina'",
+    )
+    aberturas_total = lidos + lidos_maquina
     clicados = await _pg_count_periodo(pool, te, periodo, "status_ultimo = 'clicado'")
     pendentes = await _redis_count_pendentes(redis, IDX_EMAIL_PEND, periodo)
     esperando = await _redis_count_esperando(redis, IDX_EMAIL_CONF, chave_email_conf, periodo)
@@ -831,13 +863,19 @@ async def metricas_emails(
         "emails_esperando_confirmacao": esperando,
         "emails_falha_definitiva": falhas,
         "emails_lidos": lidos,
+        "emails_lidos_maquina": lidos_maquina,
         "emails_clicados": clicados,
         "cartoes": [
             _cartao("enviados", total, "E-mails registados"),
             _cartao("pendentes", pendentes, "Na fila pré-envio"),
             _cartao("recusados", falhas, "Falha definitiva"),
             _cartao("esperando_feedback", esperando, "Esperando confirmação"),
-            _cartao("abertos", lidos, "Lidos"),
+            _cartao(
+                "abertos",
+                aberturas_total,
+                "Lidos",
+                detalhe=_detalhe_lidos_maquina(lidos_maquina),
+            ),
             _cartao("cliques", clicados, "Link clicado (e-mail)"),
         ],
     }

@@ -90,6 +90,17 @@ def test_webhook_campos_extra_na_raiz_sao_ignorados() -> None:
     assert m.id == "evt-1"
 
 
+def test_webhook_abertura_por_maquina() -> None:
+    p = _payload_valido_v2()
+    p["messageStatus"]["channelData"]["email"]["clientInfo"]["machineOpen"] = True
+    m = WebhookMessageStatusZenvia.model_validate(p)
+    assert m.abertura_por_maquina() is True
+
+    p["messageStatus"]["channelData"]["email"]["clientInfo"]["machineOpen"] = False
+    m = WebhookMessageStatusZenvia.model_validate(p)
+    assert m.abertura_por_maquina() is False
+
+
 def test_webhook_rejeita_type_invalido() -> None:
     p = _payload_valido_v2()
     p["type"] = "OTHER"

@@ -27,6 +27,7 @@ from app.reenvio.servicos.validacao_telefone_sms_br import validar_telefone_para
 from app.clique.servicos.registrar_clique import registrar_primeiro_clique_por_id_externo
 from app.mensageria.repositorios.postgres_emails_enviados import (
     atualizar_status_por_id_mensagem_zenvia,
+    buscar_status_por_id_mensagem_zenvia,
 )
 
 _log = logging.getLogger(__name__)
@@ -88,6 +89,23 @@ async def processar_webhook_status_email(
     em_dest = (dados.get("email_destinatario") or "").strip() or None
 
     if code == "READ":
+        status_atual = await buscar_status_por_id_mensagem_zenvia(
+            pool, id_mensagem_zenvia=message_id
+        )
+        if status_atual in ("lido", "clicado"):
+            return {
+                "acao": "read_ignorado_estado_terminal",
+                "message_id": message_id,
+                "code": code,
+                "status_ultimo": status_atual,
+            }
+        if payload.abertura_por_maquina():
+            await atualizar_status_por_id_mensagem_zenvia(
+                pool,
+                id_mensagem_zenvia=message_id,
+                status_ultimo="lido_maquina",
+            )
+            return {"acao": "lido_maquina", "message_id": message_id, "code": code}
         await atualizar_status_por_id_mensagem_zenvia(
             pool,
             id_mensagem_zenvia=message_id,

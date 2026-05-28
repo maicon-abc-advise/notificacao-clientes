@@ -43,6 +43,18 @@ async def atualizar_status_por_id_externo(
     )
 
 
+async def buscar_status_por_id_mensagem_zenvia(
+    pool: asyncpg.Pool, *, id_mensagem_zenvia: str
+) -> str | None:
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
+    row = await pool.fetchval(
+        f"SELECT status_ultimo FROM {te} WHERE id_mensagem_zenvia = $1 LIMIT 1",
+        id_mensagem_zenvia,
+    )
+    return str(row).strip() if row else None
+
+
 async def atualizar_status_por_id_mensagem_zenvia(
     pool: asyncpg.Pool, *, id_mensagem_zenvia: str, status_ultimo: str
 ) -> None:
