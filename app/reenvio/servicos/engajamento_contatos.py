@@ -59,7 +59,6 @@ _EMAIL_PENDING_AGG = frozenset(
         EngajamentoEmailEstado.EMAIL_ENVIADO_API.value,
         EngajamentoEmailEstado.EMAIL_WEBHOOK_SENT.value,
         EngajamentoEmailEstado.EMAIL_SWEEP_PROXIMO_EMAIL.value,
-        EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS.value,
         EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_MAILBOX_FULL.value,
         EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_TEMPORARY.value,
         EngajamentoEmailEstado.EMAIL_FALHA_RECUPERAVEL_UNKNOWN.value,
@@ -71,6 +70,7 @@ _EMAIL_TERMINAL_INATIVO = frozenset(
         EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SEM_SMS.value,
         EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SMS_FILA.value,
         EngajamentoEmailEstado.EMAIL_NAO_EXISTE.value,
+        EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS.value,
     }
 )
 
@@ -275,6 +275,24 @@ def algum_sms_ainda_tentavel(contatos: list[dict[str, Any]]) -> bool:
     return False
 
 
+def algum_email_disponivel_para_envio(contatos: list[dict[str, Any]]) -> bool:
+    """True se ainda existe e-mail utilizável para novo envio neste canal."""
+    for c in contatos:
+        st = str(c.get("estado") or "")
+        if not email_granular_bloqueia_notificacao(st):
+            return True
+    return False
+
+
+def algum_sms_disponivel_para_envio(contatos: list[dict[str, Any]]) -> bool:
+    """True se ainda existe telefone utilizável para novo envio neste canal."""
+    for c in contatos:
+        st = str(c.get("estado") or "")
+        if not sms_granular_bloqueia_notificacao(st):
+            return True
+    return False
+
+
 def rollup_engajamento_email(
     contatos: list[dict[str, Any]],
     ultimo_envio_endereco: str | None,
@@ -291,10 +309,12 @@ def rollup_engajamento_email(
     st = estado_granular_email(contatos, ultimo)
     if st in _EMAIL_GOOD_AGG:
         return EngajamentoCanalAgregado.ATIVO
+    if st == EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS.value:
+        return EngajamentoCanalAgregado.INATIVO
     if st in _EMAIL_TERMINAL_INATIVO:
         return (
             EngajamentoCanalAgregado.EM_ANALISE
-            if algum_email_ainda_tentavel(contatos)
+            if algum_email_disponivel_para_envio(contatos)
             else EngajamentoCanalAgregado.INATIVO
         )
     if st in _EMAIL_PENDING_AGG:
@@ -321,7 +341,7 @@ def rollup_engajamento_sms(
     if st in _SMS_TERMINAL_INATIVO:
         return (
             EngajamentoCanalAgregado.EM_ANALISE
-            if algum_sms_ainda_tentavel(contatos)
+            if algum_sms_disponivel_para_envio(contatos)
             else EngajamentoCanalAgregado.INATIVO
         )
     if st in _SMS_PENDING_AGG:
