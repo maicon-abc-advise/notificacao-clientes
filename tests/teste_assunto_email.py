@@ -16,3 +16,9 @@ def test_assunto_apareceu_busca_sem_registro() -> None:
 def test_consultado_sem_email_sem_assunto_definido() -> None:
     with pytest.raises(ValueError, match="CONSULTADO_SEM_EMAIL"):
         assunto_email_para_tipo(CodigoTipoTemplate.CONSULTADO_SEM_EMAIL)
+
+
+def test_assunto_apresentacao() -> None:
+    a = assunto_email_para_tipo(CodigoTipoTemplate.APRESENTACAO)
+    assert "compradores" in a.lower()
+    assert "fornecedores" in a.lower()

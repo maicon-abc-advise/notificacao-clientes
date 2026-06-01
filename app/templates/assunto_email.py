@@ -5,6 +5,7 @@ _MAPA: dict[CodigoTipoTemplate, str] = {
     CodigoTipoTemplate.APARECEU_BUSCA_SEM_REGISTRO: "Sua empresa apareceu em buscas por fornecedores em sua região",
     CodigoTipoTemplate.CREDITOS_NO_FIM: "Seus créditos mensais estão no fim",
     CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS: "Lembre-se! Seus créditos mensais acabaram",
+    CodigoTipoTemplate.APRESENTACAO: "Compradores estão procurando fornecedores como você",
 }
 
 def assunto_email_para_tipo(tipo: CodigoTipoTemplate) -> str:

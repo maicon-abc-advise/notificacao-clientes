@@ -8,6 +8,7 @@ IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
     CodigoTipoTemplate.CREDITOS_NO_FIM: "b2c3d4e5-f6a7-4890-b123-456789abcdef",
     CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS: "c3d4e5f6-a7b8-4901-c234-56789abcdef0",
     CodigoTipoTemplate.CONSULTADO_SEM_EMAIL: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
+    CodigoTipoTemplate.APRESENTACAO: "f1a2b3c4-d5e6-4789-a012-345678abcdef",
 }
 
 SMS_APARECEU_BUSCA = (
@@ -34,6 +35,8 @@ SMS_CONSULTADO_SEM_EMAIL = (
     "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}, mas você está sem e-mail de contato. "
     "Não perca vendas, resolva em: {{ url_login }}."
 )
+
+SMS_APRESENTACAO = "BuscaFornecedor: conheça a plataforma em {{ url_plataforma }}."
 
 EMAIL_APARECEU_BUSCA = """<!DOCTYPE html>
 <html lang="pt-BR">
@@ -226,6 +229,53 @@ EMAIL_LEMBRETE_CREDITOS = """<!DOCTYPE html>
 </html>"""
 
 
+EMAIL_APRESENTACAO = """<!DOCTYPE html>
+<html lang="pt-BR">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>Conheça o BuscaFornecedor</title>
+  <style>
+    body { margin: 0; padding: 0; background-color: #f9fafb; font-family: "Inter", Arial, sans-serif; color: #0f172a; }
+    .container { max-width: 500px; margin: 40px auto; background: #ffffff; border-radius: 16px; box-shadow: 0 2px 8px rgba(0,0,0,0.05); overflow: hidden; }
+    .header { background: linear-gradient(90deg, #0f172a, #00c38a); color: #fff; text-align: center; padding: 24px; font-size: 22px; font-weight: 600; }
+    .content { padding: 32px 24px; line-height: 1.6; }
+    .content h1 { font-size: 22px; color: #0f172a; margin-bottom: 20px; text-align: left; letter-spacing: -0.5px; font-weight: 700; }
+    .content p { font-size: 15px; color: #475569; margin-bottom: 16px; }
+    .highlight { background: #f0fdf4; padding: 20px; border-radius: 10px; border-left: 4px solid #00c38a; margin-bottom: 24px; font-size: 15px; color: #1e293b; }
+    .button { display: inline-block; background: #00c38a; color: #fff !important; text-decoration: none; padding: 14px 30px; border-radius: 8px; font-weight: 700; text-transform: uppercase; font-size: 14px; }
+    .footer { text-align: center; font-size: 13px; color: #94a3b8; padding: 32px 24px; border-top: 1px solid #f1f5f9; background-color: #f9fafb; }
+    @media (max-width: 600px) { .content { padding: 24px 16px; } }
+  </style>
+</head>
+<body>
+  <div class="container">
+    <div class="header">BuscaFornecedor</div>
+    <div class="content">
+      <h1>Já ouviu falar do BuscaFornecedor?</h1>
+      <div class="highlight">
+        Olá, {{ saudacao_nome }}!<br><br>
+        Nós somos o <strong>BuscaFornecedor</strong>, uma plataforma prática onde compradores de várias empresas buscam ativamente novos parceiros para cotar produtos e serviços.
+      </div>
+      <p>
+        Estar cadastrado aqui significa colocar o seu negócio direto no radar de quem decide as compras, aparecendo no momento exato em que eles precisam exatamente do que você vende.
+      </p>
+      <p>
+        Como resultado, você passa a receber mais pedidos de orçamento na sua mesa, cria conexões reais com o mercado B2B e aumenta o seu faturamento sem complicação.
+      </p>
+      <p style="text-align:center; margin-top: 28px;">
+        <a href="{{ link_plataforma }}" class="button" target="_blank">Acessar a Plataforma</a>
+      </p>
+    </div>
+    <div class="footer">
+      © BuscaFornecedor — Todos os direitos reservados.<br/>
+      <a href="{{ url_plataforma }}" style="color:#00c38a; text-decoration:none;">buscafornecedor.com.br</a>
+    </div>
+  </div>
+</body>
+</html>"""
+
+
 def linhas_seed() -> list[tuple[str, str, str | None, str]]:
     """Tuplas (id, tipo, email, sms) na ordem de inserção."""
     return [
@@ -258,5 +308,11 @@ def linhas_seed() -> list[tuple[str, str, str | None, str]]:
             CodigoTipoTemplate.CONSULTADO_SEM_EMAIL.value,
             None,
             SMS_CONSULTADO_SEM_EMAIL,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.APRESENTACAO],
+            CodigoTipoTemplate.APRESENTACAO.value,
+            EMAIL_APRESENTACAO,
+            SMS_APRESENTACAO,
         ),
     ]
