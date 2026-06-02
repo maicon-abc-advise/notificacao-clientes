@@ -9,6 +9,7 @@ from fastapi.testclient import TestClient
 from app.config.dependencias_templates import obter_porta_templates
 from app.main import app
 from app.mensageria.api.rotas import envio_mensagens
+from app.mensageria.servicos import executar_envio_mensagem
 from app.mensageria.api.dto.modelos import (
     CanalMensagem,
     PedidoEmailProvedor,
@@ -185,11 +186,11 @@ async def _pool_dep_sem_postgres():
 
 def test_post_email_200_com_override(monkeypatch: pytest.MonkeyPatch) -> None:
     monkeypatch.setattr(
-        envio_mensagens,
-        "_validar_engajamento_antes_envio_email",
+        executar_envio_mensagem,
+        "validar_engajamento_antes_envio_email",
         _validar_engajamento_email_sem_db,
     )
-    monkeypatch.setattr(envio_mensagens, "tocar_engajamento_email", _tocar_engajamento_noop)
+    monkeypatch.setattr(executar_envio_mensagem, "tocar_engajamento_email", _tocar_engajamento_noop)
     app.dependency_overrides[envio_mensagens._pool_mensagens] = _pool_dep_sem_postgres
 
     class FalsaPorta:
@@ -326,11 +327,11 @@ def test_post_sms_400_telefone_fixo_nao_chama_provedor_grava_falha(monkeypatch: 
     async def _sem_fallback(*_a, **_k):
         return None
 
-    monkeypatch.setattr(envio_mensagens, "ler_replay_idempotencia", _sem_replay)
-    monkeypatch.setattr(envio_mensagens, "tentar_reenfileirar_apos_sms_invalido", _sem_fallback)
-    monkeypatch.setattr(envio_mensagens, "exigir_destinatario_no_engajamento_sms", _noop)
-    monkeypatch.setattr(envio_mensagens, "tocar_engajamento_sms", _noop)
-    monkeypatch.setattr(envio_mensagens, "inserir_ou_atualizar_falha_validacao_telefone_sms", _captura_falha)
+    monkeypatch.setattr(executar_envio_mensagem, "ler_replay_idempotencia", _sem_replay)
+    monkeypatch.setattr(executar_envio_mensagem, "tentar_reenfileirar_apos_sms_invalido", _sem_fallback)
+    monkeypatch.setattr(executar_envio_mensagem, "exigir_destinatario_no_engajamento_sms", _noop)
+    monkeypatch.setattr(executar_envio_mensagem, "tocar_engajamento_sms", _noop)
+    monkeypatch.setattr(executar_envio_mensagem, "inserir_ou_atualizar_falha_validacao_telefone_sms", _captura_falha)
 
     class PortaNaoChama:
         def enviar_sms(self, *_a, **_k) -> ResultadoEnvioMensagem:
@@ -369,7 +370,7 @@ def test_503_se_sem_token_conector_zenvia(monkeypatch: pytest.MonkeyPatch) -> No
     from app.config.config import obter_configuracao
 
     monkeypatch.setattr(
-        envio_mensagens,
+        executar_envio_mensagem,
         "exigir_destinatario_no_engajamento_sms",
         _exigir_engajamento_sms_noop,
     )

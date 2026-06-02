@@ -9,6 +9,10 @@ def chave_claim_n8n(canal: str, id_externo: str) -> str:
     return f"n8n:claim:{canal}:{id_externo}"
 
 
+async def claim_n8n_ativo(redis: Redis, *, canal: str, id_externo: str) -> bool:
+    return bool(await redis.exists(chave_claim_n8n(canal, id_externo)))
+
+
 async def tentar_claim_item_n8n(
     redis: Redis,
     *,

@@ -22,6 +22,7 @@ from app.reenvio.repositorios.redis_sms_esperando_confirmacao import KEY_SWEEP a
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import chave_hash as chave_sms_conf
 from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as IDX_SMS_PEND
 from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_pend
+from app.reenvio.servicos.n8n_claims import claim_n8n_ativo
 
 router = APIRouter(
     prefix="/v1/interno/dashboard",
@@ -954,6 +955,7 @@ async def lista_emails_redis_pendentes(
             "origem": _h(raw, "origem"),
             "consulta_id": _h(raw, "consulta_id") or None,
             "criado_em": _h(raw, "criado_em"),
+            "claim_n8n_ativo": await claim_n8n_ativo(redis, canal="email", id_externo=ext_s),
         }
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
             continue
@@ -1123,6 +1125,7 @@ async def lista_sms_redis_pendentes(
             "cnpj_basico": _h(raw, "cnpj_basico") or None,
             "consulta_id": _h(raw, "consulta_id") or None,
             "criado_em": _h(raw, "criado_em"),
+            "claim_n8n_ativo": await claim_n8n_ativo(redis, canal="sms", id_externo=ext_s),
         }
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
             continue
