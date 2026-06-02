@@ -30,6 +30,7 @@ _EMAIL_BLOQUEIA_ENVIO = frozenset(
         EngajamentoEmailEstado.EMAIL_WEBHOOK_SENT.value,
         EngajamentoEmailEstado.EMAIL_SWEEP_PROXIMO_EMAIL.value,
         EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS.value,
+        EngajamentoEmailEstado.EMAIL_SWEEP_SEM_CANAL.value,
     }
 )
 
@@ -42,6 +43,7 @@ _SMS_BLOQUEIA_ENVIO = frozenset(
         EngajamentoSmsEstado.SMS_ENVIADO_API.value,
         EngajamentoSmsEstado.SMS_WEBHOOK_SENT.value,
         EngajamentoSmsEstado.SMS_REPROCESSAR_FILA.value,
+        EngajamentoSmsEstado.SMS_SWEEP_SEM_CANAL.value,
     }
 )
 
@@ -71,6 +73,7 @@ _EMAIL_TERMINAL_INATIVO = frozenset(
         EngajamentoEmailEstado.EMAIL_BOUNCE_HARD_SMS_FILA.value,
         EngajamentoEmailEstado.EMAIL_NAO_EXISTE.value,
         EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS.value,
+        EngajamentoEmailEstado.EMAIL_SWEEP_SEM_CANAL.value,
     }
 )
 
@@ -96,6 +99,7 @@ _SMS_TERMINAL_INATIVO = frozenset(
         EngajamentoSmsEstado.SMS_FALHA_LIMITE.value,
         EngajamentoSmsEstado.SMS_NAO_EXISTE.value,
         EngajamentoSmsEstado.SMS_NUMERO_INVALIDO.value,
+        EngajamentoSmsEstado.SMS_SWEEP_SEM_CANAL.value,
     }
 )
 

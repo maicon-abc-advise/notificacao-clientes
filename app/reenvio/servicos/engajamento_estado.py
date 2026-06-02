@@ -24,6 +24,7 @@ class EngajamentoEmailEstado(enum.StrEnum):
     EMAIL_FALHA_RECUPERAVEL_UNKNOWN = "email_falha_recuperavel_unknown"
     EMAIL_SWEEP_PROXIMO_EMAIL = "email_sweep_proximo_email"
     EMAIL_SWEEP_LEMBRETE_SMS = "email_sweep_lembrete_sms"
+    EMAIL_SWEEP_SEM_CANAL = "email_sweep_sem_canal"
     EMAIL_NAO_EXISTE = "email_nao_existe"
     EMAIL_LINK_CLICADO = "email_link_clicado"
 
@@ -37,6 +38,7 @@ class EngajamentoSmsEstado(enum.StrEnum):
     SMS_FALHA_LIMITE = "sms_falha_limite"
     SMS_REPROCESSAR_FILA = "sms_reprocessar_fila"
     SMS_NAO_EXISTE = "sms_nao_existe"
+    SMS_SWEEP_SEM_CANAL = "sms_sweep_sem_canal"
     SMS_LINK_CLICADO = "sms_link_clicado"
 
 def engajamento_falha_recuperavel_email(cls: ResultadoClassificacaoEmail) -> EngajamentoEmailEstado:

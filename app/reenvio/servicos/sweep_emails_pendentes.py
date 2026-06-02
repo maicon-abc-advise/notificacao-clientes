@@ -21,6 +21,36 @@ from app.reenvio.servicos.processar_status_email import TEMPLATE_SMS_EMAIL_INVAL
 _log = logging.getLogger(__name__)
 
 
+async def _encerrar_esperando_sem_canal(
+    pool: asyncpg.Pool,
+    redis: Redis,
+    repo_e: RepositorioEmailsEsperandoConfirmacaoRedis,
+    *,
+    message_id: str,
+    cnpj_basico: str | None,
+    email_destinatario: str | None,
+    fornecedor_id: uuid.UUID | None,
+    id_externo: str,
+    motivo_log: str,
+) -> None:
+    if cnpj_basico:
+        await tocar_engajamento_email(
+            pool,
+            fornecedor_id,
+            cnpj_basico,
+            EngajamentoEmailEstado.EMAIL_SWEEP_SEM_CANAL,
+            endereco=email_destinatario,
+        )
+    _log.info(
+        "Sweep: %s; removido de esperando confirmação. message_id=%s id_externo=%s cnpj_basico=%s",
+        motivo_log,
+        message_id,
+        id_externo,
+        cnpj_basico or "",
+    )
+    await repo_e.remover(redis, message_id)
+
+
 async def executar_sweep_emails_pendentes(
     pool: asyncpg.Pool,
     redis: Redis,
@@ -42,6 +72,8 @@ async def executar_sweep_emails_pendentes(
         ext = (campos.get("id_externo") or campos.get("external_id") or "").strip()
         em_cur = (campos.get("email_destinatario") or "").strip() or None
         cnpj_basico = (campos.get("cnpj_basico") or "").strip() or None
+        uid_s = (campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip() or None
+        fid = parse_fornecedor_id(uid_s)
 
         if cnpj_basico:
             snap = await carregar_por_cnpj_basico(pool, cnpj_basico)
@@ -57,7 +89,7 @@ async def executar_sweep_emails_pendentes(
                 inseridos += 1
                 await tocar_engajamento_email(
                     pool,
-                    parse_fornecedor_id((campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip()),
+                    fid,
                     cnpj_basico,
                     EngajamentoEmailEstado.EMAIL_SWEEP_PROXIMO_EMAIL,
                     endereco=em_cur,
@@ -69,14 +101,18 @@ async def executar_sweep_emails_pendentes(
 
         tel = (tel or "").strip()
         if not tel:
-            _log.warning(
-                "Sweep: sem próximo e-mail nem telefone no engajamento; reagendado. message_id=%s id_externo=%s",
-                message_id,
-                ext,
+            await _encerrar_esperando_sem_canal(
+                pool,
+                redis,
+                repo_e,
+                message_id=message_id,
+                cnpj_basico=cnpj_basico,
+                email_destinatario=em_cur,
+                fornecedor_id=fid,
+                id_externo=ext,
+                motivo_log="sem próximo e-mail nem telefone no engajamento",
             )
             ignorados += 1
-            novo_sweep = agora + cfg.sweep_emails_esperando_confirmacao_dias * 86400
-            await repo_e.reagendar_sweep(redis, message_id, novo_sweep)
             continue
 
         sms_ext = f"{ext}:sweep:{uuid.uuid4().hex[:16]}"
@@ -85,7 +121,6 @@ async def executar_sweep_emails_pendentes(
             url_plataforma_sms=cfg.url_plataforma_sms,
             url_login_sms=cfg.url_login_sms,
         )
-        uid_s = (campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip() or None
         cid = parse_consulta_id_hash(campos.get("consulta_id"))
         ok = await repo_s.criar(
             redis,
@@ -104,15 +139,24 @@ async def executar_sweep_emails_pendentes(
             inseridos += 1
             await tocar_engajamento_email(
                 pool,
-                parse_fornecedor_id(uid_s),
+                fid,
                 cnpj_basico,
                 EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS,
                 endereco=em_cur,
             )
             await repo_e.remover(redis, message_id)
         else:
+            await _encerrar_esperando_sem_canal(
+                pool,
+                redis,
+                repo_e,
+                message_id=message_id,
+                cnpj_basico=cnpj_basico,
+                email_destinatario=em_cur,
+                fornecedor_id=fid,
+                id_externo=ext,
+                motivo_log="SMS pendente não aceito (sem outro canal útil)",
+            )
             ignorados += 1
-            novo_sweep = agora + cfg.sweep_emails_esperando_confirmacao_dias * 86400
-            await repo_e.reagendar_sweep(redis, message_id, novo_sweep)
 
     return {"inseridos": inseridos, "ignorados": ignorados, "candidatos": len(ids)}

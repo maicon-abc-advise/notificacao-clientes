@@ -19,7 +19,6 @@ from app.reenvio.repositorios.redis_sms_esperando_confirmacao import (
 )
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
 from app.reenvio.servicos.engajamento_contatos import (
-    agregado_canal_bloqueado,
     escolher_telefone_efetivo,
     proximo_telefone_tentavel_apos_contato,
 )
@@ -37,6 +36,36 @@ def _contexto_de_hash(campos: dict[str, str]) -> dict[str, str]:
     if not isinstance(base, dict):
         base = {}
     return {str(k): str(v) for k, v in base.items() if v is not None}
+
+
+async def _encerrar_sms_esperando_sem_canal(
+    pool: asyncpg.Pool,
+    redis: Redis,
+    repo_esp: RepositorioSmsEsperandoConfirmacaoRedis,
+    *,
+    message_id: str,
+    cnpj_basico: str | None,
+    telefone_destinatario: str | None,
+    fornecedor_id: uuid.UUID | None,
+    id_externo: str,
+    motivo_log: str,
+) -> None:
+    if cnpj_basico and telefone_destinatario:
+        await tocar_engajamento_sms(
+            pool,
+            fornecedor_id,
+            cnpj_basico,
+            EngajamentoSmsEstado.SMS_SWEEP_SEM_CANAL,
+            endereco=telefone_destinatario,
+        )
+    _log.info(
+        "Sweep SMS: %s; removido de esperando confirmação. message_id=%s id_externo=%s cnpj_basico=%s",
+        motivo_log,
+        message_id,
+        id_externo,
+        cnpj_basico or "",
+    )
+    await repo_esp.remover(redis, message_id)
 
 
 async def executar_sweep_sms_esperando_confirmacao(
@@ -61,6 +90,8 @@ async def executar_sweep_sms_esperando_confirmacao(
         ext = (campos.get("id_externo") or campos.get("external_id") or "").strip()
         tel_cur = (campos.get("telefone_destinatario") or "").strip() or None
         cnpj_basico = (campos.get("cnpj_basico") or "").strip() or None
+        uid_s = (campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip() or None
+        fid = parse_fornecedor_id(uid_s)
         status_atual = (campos.get("status_atual") or "").strip().upper()
 
         # Legado: DELIVERED só atualizava o hash; limpa sem novo envio.
@@ -72,29 +103,27 @@ async def executar_sweep_sms_esperando_confirmacao(
         destino: str | None = None
         if cnpj_basico:
             snap = await carregar_por_cnpj_basico(pool, cnpj_basico)
-            if agregado_canal_bloqueado(snap.engajamento_sms):
-                ignorados += 1
-                novo_sweep = agora + cfg.sweep_emails_esperando_confirmacao_dias * 86400
-                await repo_esp.reagendar_sweep(redis, message_id, novo_sweep)
-                continue
             destino = proximo_telefone_tentavel_apos_contato(snap.contatos_sms, tel_cur)
             if not destino:
                 destino = escolher_telefone_efetivo(snap.contatos_sms, None)
 
         destino = (destino or "").strip()
         if not destino:
-            _log.warning(
-                "Sweep SMS: sem telefone tentável; reagendado. message_id=%s id_externo=%s",
-                message_id,
-                ext,
+            await _encerrar_sms_esperando_sem_canal(
+                pool,
+                redis,
+                repo_esp,
+                message_id=message_id,
+                cnpj_basico=cnpj_basico,
+                telefone_destinatario=tel_cur,
+                fornecedor_id=fid,
+                id_externo=ext,
+                motivo_log="sem próximo telefone tentável no engajamento",
             )
             ignorados += 1
-            novo_sweep = agora + cfg.sweep_emails_esperando_confirmacao_dias * 86400
-            await repo_esp.reagendar_sweep(redis, message_id, novo_sweep)
             continue
 
         ctx = _contexto_de_hash(campos)
-        uid_s = (campos.get("fornecedor_id") or campos.get("usuario_id") or "").strip() or None
         cid = parse_consulta_id_hash(campos.get("consulta_id"))
         sms_ext = f"{ext}:sms_sweep:{uuid.uuid4().hex[:16]}"
         ok = await repo_s.criar(
@@ -114,15 +143,24 @@ async def executar_sweep_sms_esperando_confirmacao(
             inseridos += 1
             await tocar_engajamento_sms(
                 pool,
-                parse_fornecedor_id(uid_s),
+                fid,
                 cnpj_basico,
                 EngajamentoSmsEstado.SMS_REPROCESSAR_FILA,
                 endereco=destino,
             )
             await repo_esp.remover(redis, message_id)
         else:
+            await _encerrar_sms_esperando_sem_canal(
+                pool,
+                redis,
+                repo_esp,
+                message_id=message_id,
+                cnpj_basico=cnpj_basico,
+                telefone_destinatario=tel_cur,
+                fornecedor_id=fid,
+                id_externo=ext,
+                motivo_log="SMS pendente não aceito (sem outro canal útil)",
+            )
             ignorados += 1
-            novo_sweep = agora + cfg.sweep_emails_esperando_confirmacao_dias * 86400
-            await repo_esp.reagendar_sweep(redis, message_id, novo_sweep)
 
     return {"inseridos": inseridos, "ignorados": ignorados, "candidatos": len(ids)}
