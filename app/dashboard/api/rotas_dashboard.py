@@ -1252,12 +1252,18 @@ async def metricas_engajamento(pool: PoolOrquestracao) -> dict[str, Any]:
     }
 
 
+def _filtro_apenas_convertidos(convertidos: str | None) -> bool:
+    s = (convertidos or "").strip().lower()
+    return s in ("1", "true", "sim", "yes", "on")
+
+
 @router.get("/engajamento/fornecedores")
 async def lista_engajamento_fornecedores(
     pool: PoolOrquestracao,
     page: Annotated[int, Query(ge=1)] = 1,
     status: str | None = None,
     cnpj_basico: str | None = None,
+    convertidos: str | None = None,
 ) -> dict[str, Any]:
     p = obter_identificadores_postgres()
     te = p.qual("engajamento_fornecedores")
@@ -1274,6 +1280,11 @@ async def lista_engajamento_fornecedores(
     if status_f:
         marcador = _append_param(params, status_f)
         filtros.append(f"(e.engajamento_email = {marcador} OR e.engajamento_sms = {marcador})")
+    if _filtro_apenas_convertidos(convertidos):
+        filtros.append("e.cadastrado_primeiro_contato = false")
+        filtros.append(
+            f"EXISTS (SELECT 1 FROM {tf} AS fx WHERE fx.cnpj_basico = e.cnpj_basico)",
+        )
     where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
     total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {te} AS e {where_sql}", *params) or 0)
