@@ -95,17 +95,37 @@ async def promover_para_esperando_sms(
     await redis.set(key, fase_esperando_sms(message_id))
 
 
+async def redefinir_para_pendente_sms(
+    redis: Redis,
+    consulta_id: uuid.UUID | None,
+    cnpj_basico: str | None,
+    id_externo: str,
+) -> None:
+    """Sobrescreve a trava NX existente para ``pendente-sms:{id_externo}``."""
+    key = _chave_trava(consulta_id, cnpj_basico)
+    if key is None:
+        return
+    await redis.set(key, fase_pendente_sms(id_externo))
+
+
 async def redefinir_para_pendente_sms_pos_bounce(
     redis: Redis,
     consulta_id: uuid.UUID | None,
     cnpj_basico: str | None,
     id_externo: str,
 ) -> None:
-    """Sobrescreve a trava (e-mail esperando → SMS pendente após bounce / sweep)."""
-    key = _chave_trava(consulta_id, cnpj_basico)
-    if key is None:
-        return
-    await redis.set(key, fase_pendente_sms(id_externo))
+    """Sobrescreve a trava (e-mail esperando → SMS pendente após bounce / sweep de e-mail)."""
+    await redefinir_para_pendente_sms(redis, consulta_id, cnpj_basico, id_externo)
+
+
+async def redefinir_para_pendente_sms_pos_sms_esperando(
+    redis: Redis,
+    consulta_id: uuid.UUID | None,
+    cnpj_basico: str | None,
+    id_externo: str,
+) -> None:
+    """Sobrescreve a trava (``sms-esperando-confirmacao`` → ``sms-pendente`` no sweep SMS)."""
+    await redefinir_para_pendente_sms(redis, consulta_id, cnpj_basico, id_externo)
 
 
 async def liberar_trava_se_fase(

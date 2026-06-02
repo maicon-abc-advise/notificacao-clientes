@@ -20,6 +20,7 @@ from app.reenvio.repositorios.redis_consulta_notificacao import (
     liberar_trava_forcado,
     liberar_trava_se_fase,
     redefinir_para_pendente_sms_pos_bounce,
+    redefinir_para_pendente_sms_pos_sms_esperando,
     tentar_travar_pendente_sms,
 )
 
@@ -47,11 +48,16 @@ class RepositorioSmsPendenteRedis:
         cnpj_basico: str | None = None,
         consulta_id: uuid.UUID | None = None,
         sobrescrever_trava_de_email_esperando: bool = False,
+        sobrescrever_trava_de_sms_esperando: bool = False,
     ) -> bool:
         key = chave_hash(id_externo)
         reservou_trava = False
         if sobrescrever_trava_de_email_esperando:
             await redefinir_para_pendente_sms_pos_bounce(
+                redis, consulta_id, cnpj_basico, id_externo
+            )
+        elif sobrescrever_trava_de_sms_esperando:
+            await redefinir_para_pendente_sms_pos_sms_esperando(
                 redis, consulta_id, cnpj_basico, id_externo
             )
         elif consulta_id is not None:

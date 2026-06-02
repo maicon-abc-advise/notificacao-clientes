@@ -123,3 +123,7 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
         return list(
             await redis.zrangebyscore(KEY_SWEEP, "-inf", float(ate_ts)),
         )
+
+    async def listar_todos_no_sweep(self, redis: Redis) -> list[str]:
+        """Todos os ``message_id`` na fila (mesmo conjunto que o dashboard lista)."""
+        return list(await redis.zrange(KEY_SWEEP, 0, -1))

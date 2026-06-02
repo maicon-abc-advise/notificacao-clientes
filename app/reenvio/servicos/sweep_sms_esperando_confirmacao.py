@@ -108,6 +108,7 @@ async def executar_sweep_sms_esperando_confirmacao(
             fornecedor_id=uid_s if uid_s else None,
             cnpj_basico=cnpj_basico,
             consulta_id=cid,
+            sobrescrever_trava_de_sms_esperando=True,
         )
         if ok:
             inseridos += 1
