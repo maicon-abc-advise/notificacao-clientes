@@ -146,14 +146,50 @@ async def _redis_count_pendentes(
     )
 
 
-def _epoch_criado_em_hash(raw: dict[Any, Any]) -> float | None:
-    criado = _h(raw, "criado_em")
+def _timestamp_criado_em_valor(criado: str | None) -> float | None:
     if not criado:
         return None
     try:
         return float(criado)
     except ValueError:
+        pass
+    try:
+        normalizado = criado.replace("Z", "+00:00")
+        return datetime.fromisoformat(normalizado).timestamp()
+    except ValueError:
         return None
+
+
+def _epoch_criado_em_hash(raw: dict[Any, Any]) -> float | None:
+    return _timestamp_criado_em_valor(_h(raw, "criado_em"))
+
+
+def _linha_dentro_periodo(
+    criado_em: Any,
+    periodo: tuple[datetime, datetime] | None,
+) -> bool:
+    if not periodo:
+        return True
+    ts: float | None = None
+    if isinstance(criado_em, (int, float)):
+        ts = float(criado_em)
+    elif criado_em is not None:
+        ts = _timestamp_criado_em_valor(str(criado_em))
+    if ts is None:
+        return False
+    return periodo[0].timestamp() <= ts <= periodo[1].timestamp()
+
+
+def _append_filtro_periodo_sql(
+    filtros: list[str],
+    params: list[Any],
+    periodo: tuple[datetime, datetime] | None,
+) -> None:
+    if not periodo:
+        return
+    p_ini = _append_param(params, periodo[0])
+    p_fim = _append_param(params, periodo[1])
+    filtros.append(f"criado_em >= {p_ini} AND criado_em <= {p_fim}")
 
 
 async def _redis_count_esperando(
@@ -1407,7 +1443,10 @@ async def lista_emails_postgres(
     status: str | None = None,
     status_grupo: str | None = None,
     cnpj_basico: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     p = obter_identificadores_postgres()
     te = p.qual("emails_enviados")
     page = _page_clamped(page)
@@ -1426,6 +1465,7 @@ async def lista_emails_postgres(
         filtros.append(
             f"COALESCE(NULLIF(trim(coalesce(cnpj_basico, '')), ''), contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}"
         )
+    _append_filtro_periodo_sql(filtros, params, periodo)
     where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
     total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {te} {where_sql}", *params) or 0)
@@ -1455,7 +1495,10 @@ async def lista_emails_redis_pendentes(
     page: Annotated[int, Query(ge=1)] = 1,
     cnpj_basico: str | None = None,
     filtro_pendente: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     page = _page_clamped(page)
     busca = _texto(cnpj_basico)
     filtro_p = _texto(filtro_pendente)
@@ -1486,6 +1529,8 @@ async def lista_emails_redis_pendentes(
         }
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
             continue
+        if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
+            continue
         itens.append(enriquecer_redis_email_pendente(linha))
     itens_pagina, total = _pagina_itens(itens, page)
     return {"origem": "redis", "tabela_logica": "emails_pendentes", "itens": itens_pagina, **_meta(total, page)}
@@ -1497,7 +1542,10 @@ async def lista_emails_redis_esperando(
     page: Annotated[int, Query(ge=1)] = 1,
     status: str | None = None,
     cnpj_basico: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     page = _page_clamped(page)
     status_f = _texto(status)
     busca = _texto(cnpj_basico)
@@ -1528,6 +1576,8 @@ async def lista_emails_redis_esperando(
         if status_f and status_f.upper() != str(linha.get("status_atual") or "").upper():
             continue
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
+            continue
+        if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
             continue
         itens.append(enriquecer_redis_email_esperando(linha))
     itens_pagina, total = _pagina_itens(itens, page)
@@ -1590,7 +1640,10 @@ async def lista_sms_postgres(
     status: str | None = None,
     status_grupo: str | None = None,
     cnpj_basico: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     p = obter_identificadores_postgres()
     ts = p.qual("sms_enviados")
     page = _page_clamped(page)
@@ -1609,6 +1662,7 @@ async def lista_sms_postgres(
         filtros.append(
             f"COALESCE(NULLIF(trim(coalesce(cnpj_basico, '')), ''), contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}"
         )
+    _append_filtro_periodo_sql(filtros, params, periodo)
     where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
     total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {ts} {where_sql}", *params) or 0)
@@ -1638,7 +1692,10 @@ async def lista_sms_redis_pendentes(
     page: Annotated[int, Query(ge=1)] = 1,
     cnpj_basico: str | None = None,
     filtro_pendente: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     page = _page_clamped(page)
     busca = _texto(cnpj_basico)
     filtro_p = _texto(filtro_pendente)
@@ -1669,6 +1726,8 @@ async def lista_sms_redis_pendentes(
         }
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
             continue
+        if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
+            continue
         itens.append(enriquecer_redis_sms_pendente(linha))
     itens_pagina, total = _pagina_itens(itens, page)
     return {"origem": "redis", "tabela_logica": "sms_pendentes", "itens": itens_pagina, **_meta(total, page)}
@@ -1680,7 +1739,10 @@ async def lista_sms_redis_esperando(
     page: Annotated[int, Query(ge=1)] = 1,
     status: str | None = None,
     cnpj_basico: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
 ) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
     page = _page_clamped(page)
     status_f = _texto(status)
     busca = _texto(cnpj_basico)
@@ -1710,6 +1772,8 @@ async def lista_sms_redis_esperando(
         if status_f and status_f.upper() != str(linha.get("status_atual") or "").upper():
             continue
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
+            continue
+        if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
             continue
         itens.append(enriquecer_redis_sms_esperando(linha))
     itens_pagina, total = _pagina_itens(itens, page)
