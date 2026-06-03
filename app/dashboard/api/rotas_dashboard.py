@@ -310,6 +310,17 @@ def _where_status_grupo(canal: str, status_grupo: str) -> str | None:
     return None
 
 
+def _passa_filtro_pendente(claim_ativo: bool, filtro: str | None) -> bool:
+    f = (filtro or "").strip().lower()
+    if not f:
+        return True
+    if f == "claim_ativo":
+        return claim_ativo
+    if f == "sem_claim":
+        return not claim_ativo
+    return True
+
+
 def _cartao(
     chave: str,
     valor: int,
@@ -339,6 +350,214 @@ def _taxa_percentual(parte: int, total: int) -> int:
     if total <= 0:
         return 0
     return int(round((parte / total) * 100))
+
+
+def _linha_metrica_home(chave: str, rotulo: str, valor: int, base: int) -> dict[str, Any]:
+    return {
+        "chave": chave,
+        "rotulo": rotulo,
+        "valor": int(valor),
+        "percentual": _taxa_percentual(int(valor), int(base)),
+    }
+
+
+def _valor_etapa_funil(funil: dict[str, Any] | None, chave: str) -> int:
+    if not funil:
+        return 0
+    for etapa in funil.get("etapas") or []:
+        if etapa.get("chave") == chave:
+            return int(etapa.get("valor") or 0)
+    return 0
+
+
+async def _count_mensagens_periodo(
+    pool: PoolOrquestracao,
+    tabela: str,
+    inicio: date,
+    fim: date,
+    condicao: str = "",
+) -> int:
+    extra = f" AND ({condicao})" if condicao else ""
+    return int(
+        await pool.fetchval(
+            f"""
+            SELECT COUNT(*)
+            FROM {tabela}
+            WHERE criado_em::date BETWEEN $1 AND $2
+            {extra}
+            """,
+            inicio,
+            fim,
+        )
+        or 0
+    )
+
+
+async def _serie_mensagens_periodo(
+    pool: PoolOrquestracao,
+    tabela: str,
+    inicio: date,
+    fim: date,
+    condicao: str = "",
+) -> list[dict[str, Any]]:
+    extra = f" AND ({condicao})" if condicao else ""
+    serie = await _serie_por_dia(
+        pool,
+        inicio=inicio,
+        fim=fim,
+        sql=f"""
+            SELECT criado_em::date AS ref, COUNT(*) AS total
+            FROM {tabela}
+            WHERE criado_em::date BETWEEN $1 AND $2
+            {extra}
+            GROUP BY 1
+            ORDER BY 1
+        """,
+    )
+    return _serie_resposta(inicio, fim, serie)
+
+
+def _painel_canal(
+    *,
+    metrica_padrao: str,
+    metricas: list[dict[str, Any]],
+    series_por_metrica: dict[str, list[dict[str, Any]]],
+) -> dict[str, Any]:
+    return {
+        "metrica_padrao": metrica_padrao,
+        "metricas": metricas,
+        "series_por_metrica": series_por_metrica,
+    }
+
+
+async def _montar_painel_home(
+    pool: PoolOrquestracao,
+    *,
+    inicio: date,
+    fim: date,
+    te: str,
+    ts: str,
+    total_emails: int,
+    emails_entregues: int,
+    emails_aberturas: int,
+    emails_clicados: int,
+    total_sms: int,
+    sms_entregues: int,
+    sms_clicados: int,
+    resumo_eng: dict[str, int],
+    convertidos_periodo: int,
+    canais: dict[str, int],
+    funis: dict[str, Any],
+    serie_emails: dict[str, int],
+    serie_sms: dict[str, int],
+    serie_convertidos: dict[str, int],
+) -> dict[str, Any]:
+    convertidos_email = int(canais.get("so_email") or 0) + int(canais.get("ambos") or 0)
+    convertidos_sms = int(canais.get("so_sms") or 0) + int(canais.get("ambos") or 0)
+    sms_abertos = await _count_mensagens_periodo(
+        pool, ts, inicio, fim, "status_ultimo IN ('lido', 'clicado')"
+    )
+
+    base_email = max(total_emails, 1)
+    painel_email = _painel_canal(
+        metrica_padrao="enviados",
+        metricas=[
+            _linha_metrica_home("enviados", "Enviados", total_emails, base_email),
+            _linha_metrica_home("recebidos", "Recebidos", emails_entregues, base_email),
+            _linha_metrica_home("abertos", "Abertos", emails_aberturas, base_email),
+            _linha_metrica_home("clicados", "Clicados", emails_clicados, base_email),
+            _linha_metrica_home("convertidos", "Convertidos", convertidos_email, base_email),
+        ],
+        series_por_metrica={
+            "enviados": _serie_resposta(inicio, fim, serie_emails),
+            "recebidos": await _serie_mensagens_periodo(pool, te, inicio, fim, _STATUS_ENTREGUES_SQL),
+            "abertos": await _serie_mensagens_periodo(pool, te, inicio, fim, _STATUS_ABERTOS_SQL),
+            "clicados": await _serie_mensagens_periodo(
+                pool, te, inicio, fim, "status_ultimo = 'clicado'"
+            ),
+            "convertidos": _serie_resposta(inicio, fim, serie_convertidos),
+        },
+    )
+
+    base_sms = max(total_sms, 1)
+    painel_sms = _painel_canal(
+        metrica_padrao="enviados",
+        metricas=[
+            _linha_metrica_home("enviados", "Enviados", total_sms, base_sms),
+            _linha_metrica_home("recebidos", "Recebidos", sms_entregues, base_sms),
+            _linha_metrica_home("clicados", "Clicados", sms_clicados, base_sms),
+            _linha_metrica_home("convertidos", "Convertidos", convertidos_sms, base_sms),
+        ],
+        series_por_metrica={
+            "enviados": _serie_resposta(inicio, fim, serie_sms),
+            "recebidos": await _serie_mensagens_periodo(
+                pool,
+                ts,
+                inicio,
+                fim,
+                "status_ultimo IN ('enviado', 'lido', 'clicado')",
+            ),
+            "clicados": await _serie_mensagens_periodo(
+                pool, ts, inicio, fim, "status_ultimo = 'clicado'"
+            ),
+            "convertidos": _serie_resposta(inicio, fim, serie_convertidos),
+        },
+    )
+
+    funil_email = funis.get("email")
+    base_eng = max(int(resumo_eng["total_monitorados"] or 0), 1)
+    recebidos_eng = _valor_etapa_funil(funil_email, "receberam")
+    engajaram_eng = _valor_etapa_funil(funil_email, "lidos")
+    painel_eng = _painel_canal(
+        metrica_padrao="contatos",
+        metricas=[
+            _linha_metrica_home(
+                "contatos",
+                "Contatos",
+                int(resumo_eng["total_monitorados"] or 0),
+                base_eng,
+            ),
+            _linha_metrica_home(
+                "contatados",
+                "Contatados",
+                int(resumo_eng["usuarios_com_algum_contato"] or 0),
+                base_eng,
+            ),
+            _linha_metrica_home("recebidos", "Recebidos", recebidos_eng, base_eng),
+            _linha_metrica_home("engajaram", "Engajaram", engajaram_eng, base_eng),
+            _linha_metrica_home(
+                "convertidos",
+                "Convertidos",
+                int(resumo_eng["usuarios_convertidos"] or 0),
+                base_eng,
+            ),
+        ],
+        series_por_metrica={
+            "contatos": _serie_resposta(inicio, fim, serie_emails),
+            "contatados": _serie_resposta(inicio, fim, serie_emails),
+            "recebidos": await _serie_mensagens_periodo(pool, te, inicio, fim, _STATUS_ENTREGUES_SQL),
+            "engajaram": await _serie_mensagens_periodo(pool, te, inicio, fim, _STATUS_ABERTOS_SQL),
+            "convertidos": _serie_resposta(inicio, fim, serie_convertidos),
+        },
+    )
+
+    com_email = max(int(resumo_eng["usuarios_com_email"] or 0), 1)
+    com_telefone = max(int(resumo_eng["usuarios_com_telefone"] or 0), 1)
+    return {
+        "email": painel_email,
+        "sms": painel_sms,
+        "engajamento": painel_eng,
+        "gauges": {
+            "email": {
+                "conversoes_pct": _taxa_percentual(convertidos_email, com_email),
+                "cliques_pct": _taxa_percentual(emails_clicados, max(total_emails, 1)),
+            },
+            "sms": {
+                "conversoes_pct": _taxa_percentual(convertidos_sms, com_telefone),
+                "cliques_pct": _taxa_percentual(sms_clicados, max(total_sms, 1)),
+            },
+        },
+    }
 
 
 async def _coluna_data_fornecedores(pool: PoolOrquestracao) -> str | None:
@@ -844,6 +1063,36 @@ async def resumo_home_dashboard(
         resumo_eng=resumo_eng,
         canais=canais,
     )
+    emails_entregues_home = await _count_mensagens_periodo(
+        pool, te, inicio, fim, _STATUS_ENTREGUES_SQL
+    )
+    emails_clicados_home = await _count_mensagens_periodo(
+        pool, te, inicio, fim, "status_ultimo = 'clicado'"
+    )
+    sms_clicados_home = await _count_mensagens_periodo(
+        pool, ts, inicio, fim, "status_ultimo = 'clicado'"
+    )
+    painel_home = await _montar_painel_home(
+        pool,
+        inicio=inicio,
+        fim=fim,
+        te=te,
+        ts=ts,
+        total_emails=total_emails,
+        emails_entregues=emails_entregues_home,
+        emails_aberturas=emails_aberturas_total,
+        emails_clicados=emails_clicados_home,
+        total_sms=total_sms,
+        sms_entregues=sms_entregues,
+        sms_clicados=sms_clicados_home,
+        resumo_eng=resumo_eng,
+        convertidos_periodo=convertidos_periodo,
+        canais=canais,
+        funis=funis,
+        serie_emails=serie_emails,
+        serie_sms=serie_sms,
+        serie_convertidos=serie_convertidos,
+    )
 
     return {
         "periodo": {
@@ -901,6 +1150,7 @@ async def resumo_home_dashboard(
         ],
         "resumo_engajamento": resumo_eng,
         "funis": funis,
+        "painel_home": painel_home,
     }
 
 
@@ -1014,9 +1264,11 @@ async def lista_emails_redis_pendentes(
     redis: RedisOrquestracao,
     page: Annotated[int, Query(ge=1)] = 1,
     cnpj_basico: str | None = None,
+    filtro_pendente: str | None = None,
 ) -> dict[str, Any]:
     page = _page_clamped(page)
     busca = _texto(cnpj_basico)
+    filtro_p = _texto(filtro_pendente)
     ids_raw = await redis.zrevrange(IDX_EMAIL_PEND, 0, -1)
     itens: list[dict[str, Any]] = []
     for ext in ids_raw:
@@ -1024,6 +1276,9 @@ async def lista_emails_redis_pendentes(
         raw = await redis.hgetall(chave_email_pend(ext_s))
         if not raw:
             await redis.zrem(IDX_EMAIL_PEND, ext_s)
+            continue
+        claim = await claim_n8n_ativo(redis, canal="email", id_externo=ext_s)
+        if not _passa_filtro_pendente(claim, filtro_p):
             continue
         ctx = decodificar_contexto_json_bruto(_h(raw, "contexto_json"))
         linha: dict[str, Any] = {
@@ -1037,7 +1292,7 @@ async def lista_emails_redis_pendentes(
             "origem": _h(raw, "origem"),
             "consulta_id": _h(raw, "consulta_id") or None,
             "criado_em": _h(raw, "criado_em"),
-            "claim_n8n_ativo": await claim_n8n_ativo(redis, canal="email", id_externo=ext_s),
+            "claim_n8n_ativo": claim,
         }
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
             continue
@@ -1192,9 +1447,11 @@ async def lista_sms_redis_pendentes(
     redis: RedisOrquestracao,
     page: Annotated[int, Query(ge=1)] = 1,
     cnpj_basico: str | None = None,
+    filtro_pendente: str | None = None,
 ) -> dict[str, Any]:
     page = _page_clamped(page)
     busca = _texto(cnpj_basico)
+    filtro_p = _texto(filtro_pendente)
     ids_raw = await redis.zrevrange(IDX_SMS_PEND, 0, -1)
     itens: list[dict[str, Any]] = []
     for ext in ids_raw:
@@ -1202,6 +1459,9 @@ async def lista_sms_redis_pendentes(
         raw = await redis.hgetall(chave_sms_pend(ext_s))
         if not raw:
             await redis.zrem(IDX_SMS_PEND, ext_s)
+            continue
+        claim = await claim_n8n_ativo(redis, canal="sms", id_externo=ext_s)
+        if not _passa_filtro_pendente(claim, filtro_p):
             continue
         ctx = decodificar_contexto_json_bruto(_h(raw, "contexto_json"))
         linha = {
@@ -1215,7 +1475,7 @@ async def lista_sms_redis_pendentes(
             "cnpj_basico": _h(raw, "cnpj_basico") or None,
             "consulta_id": _h(raw, "consulta_id") or None,
             "criado_em": _h(raw, "criado_em"),
-            "claim_n8n_ativo": await claim_n8n_ativo(redis, canal="sms", id_externo=ext_s),
+            "claim_n8n_ativo": claim,
         }
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
             continue
