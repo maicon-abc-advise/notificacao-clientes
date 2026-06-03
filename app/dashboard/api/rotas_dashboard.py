@@ -235,6 +235,81 @@ def _segmento(rotulo: str, valor: int, cor: str) -> dict[str, Any]:
     return {"rotulo": rotulo, "valor": int(valor), "cor": cor}
 
 
+_STATUS_ENTREGUES_SQL = "status_ultimo IN ('enviado', 'lido', 'clicado', 'lido_maquina')"
+_STATUS_ABERTOS_SQL = "status_ultimo IN ('lido', 'clicado', 'lido_maquina')"
+
+
+def _segmento_barra(
+    chave: str,
+    rotulo: str,
+    valor: int,
+    cor: str,
+    *,
+    aba: str = "postgres",
+    status: str | None = None,
+    status_grupo: str | None = None,
+) -> dict[str, Any]:
+    filtro: dict[str, str] = {"aba": aba}
+    if status:
+        filtro["status"] = status
+    if status_grupo:
+        filtro["status_grupo"] = status_grupo
+    return {
+        "chave": chave,
+        "rotulo": rotulo,
+        "valor": int(valor),
+        "cor": cor,
+        "filtro": filtro,
+    }
+
+
+def _barra_status_email(
+    total: int,
+    entregues: int,
+    abertos: int,
+    clicados: int,
+    erros: int,
+) -> dict[str, Any]:
+    return {
+        "total_rotulo": "enviados",
+        "total": int(total),
+        "segmentos": [
+            _segmento_barra("entregues", "recebidos", entregues, "light", status_grupo="entregues"),
+            _segmento_barra("abertos", "abertos", abertos, "medium", status_grupo="abertos"),
+            _segmento_barra("clicados", "clicados", clicados, "navy", status="clicado"),
+            _segmento_barra("erros", "erros", erros, "error", status="falha_definitiva"),
+        ],
+    }
+
+
+def _barra_status_sms(
+    total: int,
+    entregues: int,
+    abertos: int,
+    clicados: int,
+    erros: int,
+) -> dict[str, Any]:
+    return {
+        "total_rotulo": "enviados",
+        "total": int(total),
+        "segmentos": [
+            _segmento_barra("entregues", "recebidos", entregues, "light", status_grupo="entregues"),
+            _segmento_barra("abertos", "abertos", abertos, "medium", status_grupo="abertos"),
+            _segmento_barra("clicados", "clicados", clicados, "navy", status="clicado"),
+            _segmento_barra("erros", "erros", erros, "error", status="falha_definitiva"),
+        ],
+    }
+
+
+def _where_status_grupo(canal: str, status_grupo: str) -> str | None:
+    g = (status_grupo or "").strip().lower()
+    if g == "entregues":
+        return _STATUS_ENTREGUES_SQL
+    if g == "abertos":
+        return _STATUS_ABERTOS_SQL if canal == "email" else "status_ultimo IN ('lido', 'clicado')"
+    return None
+
+
 def _cartao(
     chave: str,
     valor: int,
@@ -855,17 +930,20 @@ async def metricas_emails(
     )
     aberturas_total = lidos + lidos_maquina
     clicados = await _pg_count_periodo(pool, te, periodo, "status_ultimo = 'clicado'")
+    entregues = await _pg_count_periodo(pool, te, periodo, _STATUS_ENTREGUES_SQL)
     pendentes = await _redis_count_pendentes(redis, IDX_EMAIL_PEND, periodo)
     esperando = await _redis_count_esperando(redis, IDX_EMAIL_CONF, chave_email_conf, periodo)
     return {
         **_meta_periodo_metricas(periodo),
         "emails_enviados_total": total,
+        "emails_entregues": entregues,
         "emails_pendentes_pre_envio": pendentes,
         "emails_esperando_confirmacao": esperando,
         "emails_falha_definitiva": falhas,
         "emails_lidos": lidos,
         "emails_lidos_maquina": lidos_maquina,
         "emails_clicados": clicados,
+        "barra_status": _barra_status_email(total, entregues, aberturas_total, clicados, falhas),
         "cartoes": [
             _cartao("enviados", total, "E-mails registados"),
             _cartao("pendentes", pendentes, "Na fila pré-envio"),
@@ -887,6 +965,7 @@ async def lista_emails_postgres(
     pool: PoolOrquestracao,
     page: Annotated[int, Query(ge=1)] = 1,
     status: str | None = None,
+    status_grupo: str | None = None,
     cnpj_basico: str | None = None,
 ) -> dict[str, Any]:
     p = obter_identificadores_postgres()
@@ -897,9 +976,12 @@ async def lista_emails_postgres(
     filtros: list[str] = []
     params: list[Any] = []
     status_f = _texto(status)
+    grupo_sql = _where_status_grupo("email", status_grupo or "")
     cnpj_f = _busca_cnpj(cnpj_basico)
     if status_f:
         filtros.append(f"status_ultimo = {_append_param(params, status_f)}")
+    elif grupo_sql:
+        filtros.append(grupo_sql)
     if cnpj_f:
         filtros.append(
             f"COALESCE(NULLIF(trim(coalesce(cnpj_basico, '')), ''), contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}"
@@ -1031,16 +1113,20 @@ async def metricas_sms(
         "status_ultimo IN ('enviado', 'lido', 'clicado')",
     )
     clicados = await _pg_count_periodo(pool, ts, periodo, "status_ultimo = 'clicado'")
+    entregues_barra = await _pg_count_periodo(pool, ts, periodo, _STATUS_ENTREGUES_SQL)
+    abertos_sms = await _pg_count_periodo(pool, ts, periodo, "status_ultimo IN ('lido', 'clicado')")
     pendentes = await _redis_count_pendentes(redis, IDX_SMS_PEND, periodo)
     esperando = await _redis_count_esperando(redis, IDX_SMS_CONF, chave_sms_conf, periodo)
     return {
         **_meta_periodo_metricas(periodo),
         "sms_enviados_total": total,
+        "sms_entregues": entregues_barra,
         "sms_pendentes_fila": pendentes,
         "sms_esperando_confirmacao": esperando,
         "sms_falha_definitiva": falhas,
-        "sms_entregues": entregues,
+        "sms_entregues_card": entregues,
         "sms_clicados": clicados,
+        "barra_status": _barra_status_sms(total, entregues_barra, abertos_sms, clicados, falhas),
         "cartoes": [
             _cartao("enviados", total, "SMS registados"),
             _cartao("pendentes", pendentes, "Na fila a enviar"),
@@ -1057,6 +1143,7 @@ async def lista_sms_postgres(
     pool: PoolOrquestracao,
     page: Annotated[int, Query(ge=1)] = 1,
     status: str | None = None,
+    status_grupo: str | None = None,
     cnpj_basico: str | None = None,
 ) -> dict[str, Any]:
     p = obter_identificadores_postgres()
@@ -1067,9 +1154,12 @@ async def lista_sms_postgres(
     filtros: list[str] = []
     params: list[Any] = []
     status_f = _texto(status)
+    grupo_sql = _where_status_grupo("sms", status_grupo or "")
     cnpj_f = _busca_cnpj(cnpj_basico)
     if status_f:
         filtros.append(f"status_ultimo = {_append_param(params, status_f)}")
+    elif grupo_sql:
+        filtros.append(grupo_sql)
     if cnpj_f:
         filtros.append(
             f"COALESCE(NULLIF(trim(coalesce(cnpj_basico, '')), ''), contexto->>'cnpj_basico', '') ILIKE {_append_param(params, cnpj_f)}"
