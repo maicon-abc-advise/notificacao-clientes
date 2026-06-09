@@ -35,6 +35,8 @@ router = APIRouter(
 
 PAGE_SIZE = 10
 
+_coluna_data_fornecedor_cache: str | None | bool = False
+
 
 def _page_clamped(page: int) -> int:
     return max(1, page)
@@ -670,46 +672,6 @@ async def _pacote_sms_home_periodo(
     return totais, series
 
 
-async def _convertidos_home_periodo(
-    pool: PoolOrquestracao,
-    *,
-    teg: str,
-    tf: str,
-    coluna_data: str,
-    inicio: date,
-    fim: date,
-) -> tuple[int, dict[str, int]]:
-    convertidos_periodo = int(
-        await pool.fetchval(
-            f"""
-            SELECT COUNT(DISTINCT e.cnpj_basico)
-            FROM {teg} AS e
-            INNER JOIN {tf} AS f ON f.cnpj_basico = e.cnpj_basico
-            WHERE e.cadastrado_primeiro_contato = false
-              AND f.{coluna_data}::date BETWEEN $1 AND $2
-            """,
-            inicio,
-            fim,
-        )
-        or 0
-    )
-    serie_convertidos = await _serie_por_dia(
-        pool,
-        inicio=inicio,
-        fim=fim,
-        sql=f"""
-            SELECT f.{coluna_data}::date AS ref, COUNT(DISTINCT e.cnpj_basico) AS total
-            FROM {teg} AS e
-            INNER JOIN {tf} AS f ON f.cnpj_basico = e.cnpj_basico
-            WHERE e.cadastrado_primeiro_contato = false
-              AND f.{coluna_data}::date BETWEEN $1 AND $2
-            GROUP BY 1
-            ORDER BY 1
-        """,
-    )
-    return convertidos_periodo, serie_convertidos
-
-
 def _sql_cte_convertidos_com_canal(
     *,
     teg: str,
@@ -815,20 +777,6 @@ async def _atribuicao_convertidos_home(
         tdcf=tdcf,
         coluna_data=coluna_data,
     )
-    row = await pool.fetchrow(
-        f"""
-        {cte}
-        SELECT
-            COUNT(*) AS total,
-            COUNT(*) FILTER (WHERE canal = 'email') AS email,
-            COUNT(*) FILTER (WHERE canal = 'sms') AS sms,
-            COUNT(*) FILTER (WHERE tem_contato_externo) AS externo,
-            COUNT(*) FILTER (WHERE NOT tem_contato_externo AND canal IS NULL) AS sem_canal
-        FROM com_canal
-        """,
-        inicio,
-        fim,
-    )
     rows = await pool.fetch(
         f"""
         {cte}
@@ -836,21 +784,25 @@ async def _atribuicao_convertidos_home(
             ref,
             COUNT(*) AS total,
             COUNT(*) FILTER (WHERE canal = 'email') AS email,
-            COUNT(*) FILTER (WHERE canal = 'sms') AS sms
+            COUNT(*) FILTER (WHERE canal = 'sms') AS sms,
+            COUNT(*) FILTER (WHERE tem_contato_externo) AS externo,
+            COUNT(*) FILTER (WHERE NOT tem_contato_externo AND canal IS NULL) AS sem_canal
         FROM com_canal
-        GROUP BY ref
-        ORDER BY ref
+        GROUP BY ROLLUP (ref)
+        ORDER BY ref NULLS FIRST
         """,
         inicio,
         fim,
     )
-    serie_total, serie_email, serie_sms = _preencher_series_convertidos(rows, inicio, fim)
+    total_row = rows[0] if rows else None
+    daily_rows = [r for r in rows if r["ref"] is not None]
+    serie_total, serie_email, serie_sms = _preencher_series_convertidos(daily_rows, inicio, fim)
     return {
-        "total": int(row["total"] or 0),
-        "email": int(row["email"] or 0),
-        "sms": int(row["sms"] or 0),
-        "externo": int(row["externo"] or 0),
-        "sem_canal": int(row["sem_canal"] or 0),
+        "total": int(total_row["total"] or 0) if total_row else 0,
+        "email": int(total_row["email"] or 0) if total_row else 0,
+        "sms": int(total_row["sms"] or 0) if total_row else 0,
+        "externo": int(total_row["externo"] or 0) if total_row else 0,
+        "sem_canal": int(total_row["sem_canal"] or 0) if total_row else 0,
         "serie_total": serie_total,
         "serie_email": serie_email,
         "serie_sms": serie_sms,
@@ -863,17 +815,15 @@ async def _metricas_engajamento_home_periodo(
     teg: str,
     te: str,
     ts: str,
-    tf: str,
     inicio: date,
     fim: date,
-    coluna_data_fornecedor: str | None,
 ) -> dict[str, Any]:
-    """Contatos, contatados e convertidos do painel Engajamento na Home (só no período)."""
+    """Contatos e contatados do painel Engajamento na Home (só no período)."""
     cnpj_em = _expr_cnpj_mensagem("em")
     cnpj_sm = _expr_cnpj_mensagem("sm")
 
-    contatos = int(
-        await pool.fetchval(
+    contatos, contatados, serie_contatos, serie_contatados = await asyncio.gather(
+        pool.fetchval(
             f"""
             SELECT COUNT(DISTINCT e.cnpj_basico)
             FROM {teg} AS e
@@ -882,11 +832,8 @@ async def _metricas_engajamento_home_periodo(
             """,
             inicio,
             fim,
-        )
-        or 0
-    )
-    contatados = int(
-        await pool.fetchval(
+        ),
+        pool.fetchval(
             f"""
             SELECT COUNT(DISTINCT cnpj)
             FROM (
@@ -903,62 +850,48 @@ async def _metricas_engajamento_home_periodo(
             """,
             inicio,
             fim,
-        )
-        or 0
-    )
-    serie_contatos = await _serie_por_dia(
-        pool,
-        inicio=inicio,
-        fim=fim,
-        sql=f"""
-            SELECT e.engajamento_atualizado_em::date AS ref, COUNT(DISTINCT e.cnpj_basico) AS total
-            FROM {teg} AS e
-            WHERE e.engajamento_atualizado_em::date BETWEEN $1 AND $2
-              AND COALESCE(btrim(e.cnpj_basico), '') <> ''
-            GROUP BY 1
-            ORDER BY 1
-        """,
-    )
-    serie_contatados = await _serie_por_dia(
-        pool,
-        inicio=inicio,
-        fim=fim,
-        sql=f"""
-            SELECT ref, COUNT(DISTINCT cnpj) AS total
-            FROM (
-                SELECT em.criado_em::date AS ref, {cnpj_em} AS cnpj
-                FROM {te} AS em
-                WHERE em.criado_em::date BETWEEN $1 AND $2
-                  AND {cnpj_em} <> ''
-                UNION ALL
-                SELECT sm.criado_em::date AS ref, {cnpj_sm} AS cnpj
-                FROM {ts} AS sm
-                WHERE sm.criado_em::date BETWEEN $1 AND $2
-                  AND {cnpj_sm} <> ''
-            ) AS contatados_dia
-            GROUP BY 1
-            ORDER BY 1
-        """,
-    )
-    if coluna_data_fornecedor:
-        convertidos, serie_convertidos = await _convertidos_home_periodo(
+        ),
+        _serie_por_dia(
             pool,
-            teg=teg,
-            tf=tf,
-            coluna_data=coluna_data_fornecedor,
             inicio=inicio,
             fim=fim,
-        )
-    else:
-        convertidos, serie_convertidos = 0, _serie_base(inicio, fim)
+            sql=f"""
+                SELECT e.engajamento_atualizado_em::date AS ref, COUNT(DISTINCT e.cnpj_basico) AS total
+                FROM {teg} AS e
+                WHERE e.engajamento_atualizado_em::date BETWEEN $1 AND $2
+                  AND COALESCE(btrim(e.cnpj_basico), '') <> ''
+                GROUP BY 1
+                ORDER BY 1
+            """,
+        ),
+        _serie_por_dia(
+            pool,
+            inicio=inicio,
+            fim=fim,
+            sql=f"""
+                SELECT ref, COUNT(DISTINCT cnpj) AS total
+                FROM (
+                    SELECT em.criado_em::date AS ref, {cnpj_em} AS cnpj
+                    FROM {te} AS em
+                    WHERE em.criado_em::date BETWEEN $1 AND $2
+                      AND {cnpj_em} <> ''
+                    UNION ALL
+                    SELECT sm.criado_em::date AS ref, {cnpj_sm} AS cnpj
+                    FROM {ts} AS sm
+                    WHERE sm.criado_em::date BETWEEN $1 AND $2
+                      AND {cnpj_sm} <> ''
+                ) AS contatados_dia
+                GROUP BY 1
+                ORDER BY 1
+            """,
+        ),
+    )
 
     return {
-        "contatos": contatos,
-        "contatados": contatados,
-        "convertidos": convertidos,
+        "contatos": int(contatos or 0),
+        "contatados": int(contatados or 0),
         "serie_contatos": serie_contatos,
         "serie_contatados": serie_contatados,
-        "serie_convertidos": serie_convertidos,
     }
 
 
@@ -1036,8 +969,9 @@ def _montar_painel_home(
     convertidos_periodo: int,
     convertidos_email: int,
     convertidos_sms: int,
-    funis: dict[str, Any],
     engajamento_periodo: dict[str, Any],
+    engajamento_recebidos: int,
+    engajamento_engajaram: int,
     serie_emails: dict[str, int],
     serie_sms: dict[str, int],
     serie_convertidos: dict[str, int],
@@ -1090,13 +1024,12 @@ def _montar_painel_home(
         },
     )
 
-    funil_email = funis.get("email")
     contatos_eng = int(engajamento_periodo["contatos"] or 0)
     contatados_eng = int(engajamento_periodo["contatados"] or 0)
     convertidos_eng = int(engajamento_periodo["convertidos"] or 0)
     base_eng = max(contatos_eng, 1)
-    recebidos_eng = _valor_etapa_funil(funil_email, "receberam")
-    engajaram_eng = _valor_etapa_funil(funil_email, "lidos")
+    recebidos_eng = int(engajamento_recebidos)
+    engajaram_eng = int(engajamento_engajaram)
     serie_contatos_eng = _serie_resposta(
         inicio, fim, engajamento_periodo["serie_contatos"]
     )
@@ -1139,6 +1072,14 @@ def _montar_painel_home(
             },
         },
     }
+
+
+async def _coluna_data_fornecedores_cached(pool: PoolOrquestracao) -> str | None:
+    global _coluna_data_fornecedor_cache
+    if _coluna_data_fornecedor_cache is not False:
+        return _coluna_data_fornecedor_cache  # type: ignore[return-value]
+    _coluna_data_fornecedor_cache = await _coluna_data_fornecedores(pool)
+    return _coluna_data_fornecedor_cache  # type: ignore[return-value]
 
 
 async def _coluna_data_fornecedores(pool: PoolOrquestracao) -> str | None:
@@ -1384,47 +1325,21 @@ async def _count_cnpj_distintos_periodo(
     )
 
 
-async def _funis_home(
-    pool: PoolOrquestracao,
+def _montar_funis_home(
     *,
-    inicio: date,
-    fim: date,
     resumo_eng: dict[str, int],
+    email_receberam: int,
+    email_lidos: int,
+    email_clicados: int,
+    sms_receberam: int,
+    sms_entregues: int,
+    sms_clicados: int,
     convertidos_email: int,
     convertidos_sms: int,
 ) -> dict[str, Any]:
-    p = obter_identificadores_postgres()
-    te = p.qual("emails_enviados")
-    ts = p.qual("sms_enviados")
-
     monitorados = int(resumo_eng["total_monitorados"] or 0)
     com_email = int(resumo_eng["usuarios_com_email"] or 0)
     com_telefone = int(resumo_eng["usuarios_com_telefone"] or 0)
-
-    (
-        (email_receberam, email_lidos, email_clicados),
-        (sms_receberam, sms_entregues, sms_clicados),
-    ) = await asyncio.gather(
-        _funil_contagens_distintas_periodo(
-            pool,
-            tabela=te,
-            alias="m",
-            inicio=inicio,
-            fim=fim,
-            condicao_etapa2="m.status_ultimo IN ('lido', 'clicado')",
-        ),
-        _funil_contagens_distintas_periodo(
-            pool,
-            tabela=ts,
-            alias="m",
-            inicio=inicio,
-            fim=fim,
-            condicao_etapa2="m.status_ultimo IN ('enviado', 'lido', 'clicado')",
-        ),
-    )
-    convertidos_email = int(convertidos_email)
-    convertidos_sms = int(convertidos_sms)
-
     return {
         "email": _funil_canal(
             "email",
@@ -1503,7 +1418,7 @@ async def resumo_home_dashboard(
         (totais_sms, series_sms_raw),
     ) = await asyncio.gather(
         _resumo_engajamento(pool),
-        _coluna_data_fornecedores(pool),
+        _coluna_data_fornecedores_cached(pool),
         _pacote_email_home_periodo(pool, te, inicio, fim),
         _pacote_sms_home_periodo(pool, ts, inicio, fim),
     )
@@ -1526,16 +1441,19 @@ async def resumo_home_dashboard(
     series_painel_sms = _series_painel_prontas(inicio, fim, series_sms_raw)
 
     t_paralelo = time.perf_counter()
-    engajamento_periodo, atribuicao = await asyncio.gather(
+    (
+        engajamento_periodo,
+        atribuicao,
+        email_funil,
+        sms_funil,
+    ) = await asyncio.gather(
         _metricas_engajamento_home_periodo(
             pool,
             teg=teg,
             te=te,
             ts=ts,
-            tf=tf,
             inicio=inicio,
             fim=fim,
-            coluna_data_fornecedor=coluna_data_fornecedor,
         ),
         _atribuicao_convertidos_home(
             pool,
@@ -1548,6 +1466,22 @@ async def resumo_home_dashboard(
             inicio=inicio,
             fim=fim,
         ),
+        _funil_contagens_distintas_periodo(
+            pool,
+            tabela=te,
+            alias="m",
+            inicio=inicio,
+            fim=fim,
+            condicao_etapa2="m.status_ultimo IN ('lido', 'clicado')",
+        ),
+        _funil_contagens_distintas_periodo(
+            pool,
+            tabela=ts,
+            alias="m",
+            inicio=inicio,
+            fim=fim,
+            condicao_etapa2="m.status_ultimo IN ('enviado', 'lido', 'clicado')",
+        ),
     )
     convertidos_periodo = int(atribuicao["total"] or 0)
     convertidos_email = int(atribuicao["email"] or 0)
@@ -1557,22 +1491,24 @@ async def resumo_home_dashboard(
     serie_convertidos_sms = atribuicao["serie_sms"]
     engajamento_periodo["convertidos"] = convertidos_periodo
     engajamento_periodo["serie_convertidos"] = serie_convertidos
+    email_receberam, email_lidos, email_clicados = email_funil
+    sms_receberam, sms_entregues_funil, sms_clicados_funil = sms_funil
+    funis = _montar_funis_home(
+        resumo_eng=resumo_eng,
+        email_receberam=email_receberam,
+        email_lidos=email_lidos,
+        email_clicados=email_clicados,
+        sms_receberam=sms_receberam,
+        sms_entregues=sms_entregues_funil,
+        sms_clicados=sms_clicados_funil,
+        convertidos_email=convertidos_email,
+        convertidos_sms=convertidos_sms,
+    )
     ms_paralelo = int((time.perf_counter() - t_paralelo) * 1000)
 
     emails_nao_lidos = max(total_emails - emails_aberturas_total, 0)
     sms_pendentes = max(total_sms - sms_entregues, 0)
     total_atribuicao = convertidos_periodo
-
-    t_funis = time.perf_counter()
-    funis = await _funis_home(
-        pool,
-        inicio=inicio,
-        fim=fim,
-        resumo_eng=resumo_eng,
-        convertidos_email=convertidos_email,
-        convertidos_sms=convertidos_sms,
-    )
-    ms_funis = int((time.perf_counter() - t_funis) * 1000)
 
     painel_home = _montar_painel_home(
         inicio=inicio,
@@ -1588,8 +1524,9 @@ async def resumo_home_dashboard(
         convertidos_periodo=convertidos_periodo,
         convertidos_email=convertidos_email,
         convertidos_sms=convertidos_sms,
-        funis=funis,
         engajamento_periodo=engajamento_periodo,
+        engajamento_recebidos=email_receberam,
+        engajamento_engajaram=email_lidos,
         serie_emails=serie_emails,
         serie_sms=serie_sms,
         serie_convertidos=serie_convertidos,
@@ -1604,18 +1541,16 @@ async def resumo_home_dashboard(
     ms_total = int((time.perf_counter() - t_inicio) * 1000)
     response.headers["Server-Timing"] = (
         f"pacotes;dur={ms_pacotes}, "
-        f"convertidos_canais;dur={ms_paralelo}, "
-        f"funis;dur={ms_funis}, "
+        f"paralelo;dur={ms_paralelo}, "
         f"total;dur={ms_total}"
     )
     if _logger.isEnabledFor(logging.DEBUG):
         _logger.debug(
-            "home/resumo periodo=%s..%s ms_pacotes=%s ms_convertidos_canais=%s ms_funis=%s ms_total=%s",
+            "home/resumo periodo=%s..%s ms_pacotes=%s ms_paralelo=%s ms_total=%s",
             inicio,
             fim,
             ms_pacotes,
             ms_paralelo,
-            ms_funis,
             ms_total,
         )
 
