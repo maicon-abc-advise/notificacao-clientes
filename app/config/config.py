@@ -162,6 +162,22 @@ class Configuracao(BaseSettings):
         validation_alias="MENSAGENS_PROVEDOR_SMS",
     )
 
+    vapi_api_key: str = Field(
+        default="",
+        validation_alias=AliasChoices("VAPI_API_KEY", "VAPI_API_TOKEN"),
+        description="Bearer token da API Vapi.",
+    )
+    vapi_assistant_id: str = Field(
+        default="",
+        validation_alias="VAPI_ASSISTANT_ID",
+        description="ID do assistente Vapi usado em outbound.",
+    )
+    vapi_phone_number_id: str = Field(
+        default="",
+        validation_alias="VAPI_PHONE_NUMBER_ID",
+        description="ID do número Vapi/Twilio importado no painel.",
+    )
+
     @field_validator("ambiente", mode="before")
     @classmethod
     def _normalizar_ambiente(cls, v: Any) -> Any:
