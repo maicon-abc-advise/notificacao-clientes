@@ -11,6 +11,25 @@ import asyncpg
 from app.config.postgres_identificadores import obter_identificadores_postgres
 
 
+async def buscar_enviados_por_ids_externos(
+    pool: asyncpg.Pool, ids_externos: list[str]
+) -> list[asyncpg.Record]:
+    """Retorna linhas de ``emails_enviados`` com ``id_mensagem_zenvia`` preenchido."""
+    if not ids_externos:
+        return []
+    p = obter_identificadores_postgres()
+    te = p.qual("emails_enviados")
+    return await pool.fetch(
+        f"""
+        SELECT id_externo, id_mensagem_zenvia, cnpj_basico
+        FROM {te}
+        WHERE id_externo = ANY($1::text[])
+          AND id_mensagem_zenvia IS NOT NULL
+        """,
+        ids_externos,
+    )
+
+
 async def buscar_por_id_externo(pool: asyncpg.Pool, id_externo: str) -> asyncpg.Record | None:
     p = obter_identificadores_postgres()
     te = p.qual("emails_enviados")

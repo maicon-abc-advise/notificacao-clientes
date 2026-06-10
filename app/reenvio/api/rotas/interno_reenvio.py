@@ -1,13 +1,16 @@
 from typing import Annotated
 
 import asyncpg
-from fastapi import APIRouter, Depends, status
+from fastapi import APIRouter, Depends, Query, status
 from redis.asyncio import Redis
 
 from app.config.config import Configuracao, obter_configuracao
 from app.iam.dependencias import verificar_chamada_interna
 from app.reenvio.redis_app import obter_cliente_redis
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis
+from app.reenvio.servicos.limpar_pendentes_ja_enviados import (
+    executar_limpar_emails_pendentes_ja_enviados,
+)
 from app.reenvio.servicos.sweep_emails_pendentes import executar_sweep_emails_pendentes
 from app.reenvio.servicos.sweep_sms_esperando_confirmacao import (
     executar_sweep_sms_esperando_confirmacao,
@@ -35,6 +38,19 @@ async def _executar_sweep_emails_esperando_confirmacao(
     config: Configuracao,
 ) -> dict:
     return await executar_sweep_emails_pendentes(pool, redis, config)
+
+
+@router.post(
+    "/limpar-emails-pendentes-ja-enviados",
+    status_code=status.HTTP_200_OK,
+    summary="Remove da fila Redis e-mails que já constam em emails_enviados (fluxo travou após envio)",
+)
+async def post_limpar_emails_pendentes_ja_enviados(
+    pool: Annotated[asyncpg.Pool, Depends(_pool)],
+    redis: Annotated[Redis, Depends(_redis)],
+    limite: Annotated[int, Query(ge=1, le=5000)] = 500,
+) -> dict:
+    return await executar_limpar_emails_pendentes_ja_enviados(pool, redis, limite=limite)
 
 
 @router.post(

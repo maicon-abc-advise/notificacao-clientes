@@ -1,0 +1,2 @@
+id,id_externo,id_chamada_vapi,telefone,cnpj_basico,fornecedor_id,quantidade_buscas,uf_buscada,segmento_buscado,status_ultimo,motivo_encerramento,transcricao,url_gravacao,duracao_segundos,iniciado_em,encerrado_em,nota_satisfacao,vai_cadastrar,analise_json,criado_em,atualizado_em
+00000000-0000-4000-8000-000000000001,00000000-0000-4000-8000-000000000001,call-exemplo-001,+5511999887766,12345678,,3,SP,TI,disparado,,,,,,,,,{},2026-01-01T12:00:00+00:00,2026-01-01T12:00:00+00:00
