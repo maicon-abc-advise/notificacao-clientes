@@ -9,8 +9,10 @@ from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.dashboard.servicos.exibicao import (
     enriquecer_linha_postgres,
+    enriquecer_linha_postgres_ligacao,
     enriquecer_redis_email_esperando,
     enriquecer_redis_email_pendente,
+    enriquecer_redis_ligacao_pendente,
     enriquecer_redis_sms_esperando,
     enriquecer_redis_sms_pendente,
 )
@@ -23,6 +25,8 @@ from app.reenvio.repositorios.redis_emails_esperando_confirmacao import KEY_SWEE
 from app.reenvio.repositorios.redis_emails_esperando_confirmacao import chave_hash as chave_email_conf
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import KEY_SWEEP as IDX_SMS_CONF
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import chave_hash as chave_sms_conf
+from app.ligacoes.repositorios.redis_ligacoes_pendente import KEY_INDEX as IDX_LIG_PEND
+from app.ligacoes.repositorios.redis_ligacoes_pendente import chave_hash as chave_lig_pend
 from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as IDX_SMS_PEND
 from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_pend
 from app.reenvio.servicos.n8n_claims import claim_n8n_ativo
@@ -345,6 +349,23 @@ def _barra_status_sms(
             _segmento_barra("abertos", "abertos", abertos, "medium", status_grupo="abertos"),
             _segmento_barra("clicados", "clicados", clicados, "navy", status="clicado"),
             _segmento_barra("erros", "erros", erros, "error", status="falha_definitiva"),
+        ],
+    }
+
+
+def _barra_status_ligacoes(
+    total: int,
+    concluidos: int,
+    sem_resposta: int,
+    falhas: int,
+) -> dict[str, Any]:
+    return {
+        "total_rotulo": "enviadas",
+        "total": int(total),
+        "segmentos": [
+            _segmento_barra("concluido", "concluídas", concluidos, "success", status="concluido"),
+            _segmento_barra("sem_resposta", "sem resposta", sem_resposta, "warning", status="sem_resposta"),
+            _segmento_barra("falha", "falhas", falhas, "error", status="falha"),
         ],
     }
 
@@ -2017,6 +2038,136 @@ async def lista_sms_redis_esperando(
         "itens": itens_pagina,
         **_meta(total, page),
     }
+
+
+@router.get("/ligacoes/metricas")
+async def metricas_ligacoes(
+    pool: PoolOrquestracao,
+    redis: RedisOrquestracao,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
+) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
+    p = obter_identificadores_postgres()
+    tl = p.qual("ligacoes_enviadas")
+    total = await _pg_count_periodo(pool, tl, periodo)
+    concluidos = await _pg_count_periodo(pool, tl, periodo, "status_ultimo = 'concluido'")
+    sem_resposta = await _pg_count_periodo(pool, tl, periodo, "status_ultimo = 'sem_resposta'")
+    falhas = await _pg_count_periodo(
+        pool,
+        tl,
+        periodo,
+        "status_ultimo IN ('falha', 'falha_definitiva')",
+    )
+    pendentes = await _redis_count_pendentes(redis, IDX_LIG_PEND, periodo)
+    return {
+        **_meta_periodo_metricas(periodo),
+        "ligacoes_enviadas_total": total,
+        "ligacoes_pendentes_fila": pendentes,
+        "ligacoes_concluidas": concluidos,
+        "ligacoes_sem_resposta": sem_resposta,
+        "ligacoes_falha": falhas,
+        "barra_status": _barra_status_ligacoes(total, concluidos, sem_resposta, falhas),
+        "cartoes": [
+            _cartao("enviadas", total, "Ligações registadas"),
+            _cartao("pendentes", pendentes, "Na fila a disparar"),
+            _cartao("concluidas", concluidos, "Concluídas"),
+            _cartao("sem_resposta", sem_resposta, "Sem resposta"),
+            _cartao("falhas", falhas, "Falha"),
+        ],
+    }
+
+
+@router.get("/ligacoes/postgres")
+async def lista_ligacoes_postgres(
+    pool: PoolOrquestracao,
+    page: Annotated[int, Query(ge=1)] = 1,
+    status: str | None = None,
+    cnpj_basico: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
+) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
+    p = obter_identificadores_postgres()
+    tl = p.qual("ligacoes_enviadas")
+    page = _page_clamped(page)
+    offset = (page - 1) * PAGE_SIZE
+
+    filtros: list[str] = []
+    params: list[Any] = []
+    status_f = _texto(status)
+    cnpj_f = _busca_cnpj(cnpj_basico)
+    if status_f:
+        filtros.append(f"status_ultimo = {_append_param(params, status_f)}")
+    if cnpj_f:
+        filtros.append(f"cnpj_basico ILIKE {_append_param(params, cnpj_f)}")
+    _append_filtro_periodo_sql(filtros, params, periodo)
+    where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
+
+    total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {tl} {where_sql}", *params) or 0)
+    rows = await pool.fetch(
+        f"""
+        SELECT *
+        FROM {tl}
+        {where_sql}
+        ORDER BY criado_em DESC NULLS LAST, id DESC
+        LIMIT {PAGE_SIZE} OFFSET {offset}
+        """,
+        *params,
+    )
+    itens = [enriquecer_linha_postgres_ligacao(registo_para_json(r)) for r in rows]
+    return {"origem": "postgres", "tabela_logica": "ligacoes_enviadas", "itens": itens, **_meta(total, page)}
+
+
+@router.get("/ligacoes/redis-pendentes")
+async def lista_ligacoes_redis_pendentes(
+    redis: RedisOrquestracao,
+    page: Annotated[int, Query(ge=1)] = 1,
+    cnpj_basico: str | None = None,
+    filtro_pendente: str | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
+) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
+    page = _page_clamped(page)
+    busca = _texto(cnpj_basico)
+    filtro_p = _texto(filtro_pendente)
+    ids_raw = await redis.zrevrange(IDX_LIG_PEND, 0, -1)
+    itens: list[dict[str, Any]] = []
+    for ext in ids_raw:
+        ext_s = ext.decode() if isinstance(ext, bytes) else str(ext)
+        raw = await redis.hgetall(chave_lig_pend(ext_s))
+        if not raw:
+            await redis.zrem(IDX_LIG_PEND, ext_s)
+            continue
+        claim = await claim_n8n_ativo(redis, canal="ligacao", id_externo=ext_s)
+        if not _passa_filtro_pendente(claim, filtro_p):
+            continue
+        qtd_raw = _h(raw, "quantidade_buscas") or "0"
+        try:
+            qtd = int(qtd_raw)
+        except ValueError:
+            qtd = 0
+        linha = {
+            "id_externo": _h(raw, "id_externo") or ext_s,
+            "telefone": _h(raw, "telefone"),
+            "cnpj_basico": _h(raw, "cnpj_basico") or None,
+            "quantidade_buscas": qtd,
+            "uf_buscada": _h(raw, "uf_buscada") or None,
+            "segmento_buscado": _h(raw, "segmento_buscado") or None,
+            "nome_empresa": _h(raw, "nome_empresa") or None,
+            "fornecedor_id": _h(raw, "fornecedor_id") or None,
+            "origem": _h(raw, "origem"),
+            "criado_em": _h(raw, "criado_em"),
+            "claim_n8n_ativo": claim,
+        }
+        if busca and busca not in str(linha.get("cnpj_basico") or ""):
+            continue
+        if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
+            continue
+        itens.append(enriquecer_redis_ligacao_pendente(linha))
+    itens_pagina, total = _pagina_itens(itens, page)
+    return {"origem": "redis", "tabela_logica": "ligacoes_pendentes", "itens": itens_pagina, **_meta(total, page)}
 
 
 @router.get("/engajamento/metricas")

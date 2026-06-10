@@ -7,10 +7,12 @@ from typing import Annotated, Any, Literal
 from fastapi import APIRouter, Depends, Query
 
 from app.dashboard.api.dto.envio_manual_dashboard import (
+    CorpoCriarLigacaoPendenteDashboard,
     CorpoCriarPendenteDashboard,
     CorpoEnviarPendenteDashboard,
 )
 from app.dashboard.servicos import envio_manual_dashboard_servico as s
+from app.dashboard.servicos import ligacoes_dashboard_servico as lig
 from app.iam.rotas.dashboard_rotas import usuario_logado
 from app.orquestracao.api.dependencias import PoolOrquestracao, RedisOrquestracao
 router = APIRouter(
@@ -85,6 +87,38 @@ async def post_enviar_email_pendente(
 
     _exigir_senha(sessao, body.senha)
     return await s.enviar_pendente_dashboard(pool, redis, canal="email", id_externo=id_externo)
+
+
+@router.post("/ligacoes/redis-pendentes", status_code=201)
+async def post_criar_ligacao_pendente(
+    redis: RedisOrquestracao,
+    body: CorpoCriarLigacaoPendenteDashboard,
+) -> dict[str, Any]:
+    item = await lig.criar_ligacao_pendente_dashboard(
+        redis,
+        telefone=body.telefone,
+        cnpj_basico=body.cnpj_basico,
+        quantidade_buscas=body.quantidade_buscas,
+        uf_buscada=body.uf_buscada,
+        segmento_buscado=body.segmento_buscado,
+        nome_empresa=body.nome_empresa,
+        fornecedor_id=body.fornecedor_id,
+    )
+    return {"origem": "redis", "tabela_logica": "ligacoes_pendentes", "item": item}
+
+
+@router.post("/ligacoes/redis-pendentes/{id_externo:path}/dispatch")
+async def post_dispatch_ligacao_pendente(
+    id_externo: str,
+    pool: PoolOrquestracao,
+    redis: RedisOrquestracao,
+    body: CorpoEnviarPendenteDashboard,
+    sessao: Annotated[dict[str, Any], Depends(usuario_logado)],
+) -> dict[str, Any]:
+    from app.dashboard.servicos.mutacoes_dashboard_servico import _exigir_senha
+
+    _exigir_senha(sessao, body.senha)
+    return await lig.disparar_ligacao_pendente_dashboard(pool, redis, id_externo=id_externo)
 
 
 @router.post("/sms/redis-pendentes/{id_externo:path}/enviar")

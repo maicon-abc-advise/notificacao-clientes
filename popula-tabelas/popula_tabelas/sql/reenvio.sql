@@ -66,3 +66,49 @@ CREATE TABLE IF NOT EXISTS public.webhook_eventos_processados (
     id_evento text PRIMARY KEY,
     processado_em timestamptz NOT NULL DEFAULT now()
 );
+
+CREATE TABLE IF NOT EXISTS public.ligacoes_enviadas (
+    id uuid PRIMARY KEY DEFAULT gen_random_uuid(),
+    id_externo text NOT NULL UNIQUE,
+    id_chamada_vapi text UNIQUE,
+
+    telefone text NOT NULL,
+    cnpj_basico text,
+    fornecedor_id uuid,
+    quantidade_buscas int,
+    uf_buscada text,
+    segmento_buscado text,
+
+    status_ultimo text NOT NULL DEFAULT 'disparado',
+    motivo_encerramento text,
+    transcricao text,
+    url_gravacao text,
+    duracao_segundos int,
+    iniciado_em timestamptz,
+    encerrado_em timestamptz,
+
+    nota_satisfacao int,
+    vai_cadastrar boolean,
+    analise_json jsonb NOT NULL DEFAULT '{}'::jsonb,
+
+    criado_em timestamptz NOT NULL DEFAULT now(),
+    atualizado_em timestamptz NOT NULL DEFAULT now(),
+
+    CONSTRAINT ligacoes_enviadas_status_chk CHECK (
+        status_ultimo IN (
+            'disparado', 'tocando', 'em_andamento',
+            'concluido', 'sem_resposta', 'caixa_postal',
+            'falha', 'falha_definitiva'
+        )
+    ),
+    CONSTRAINT ligacoes_enviadas_satisfacao_chk CHECK (
+        nota_satisfacao IS NULL OR (nota_satisfacao >= 0 AND nota_satisfacao <= 5)
+    )
+);
+
+CREATE INDEX IF NOT EXISTS idx_ligacoes_enviadas_id_chamada_vapi
+    ON public.ligacoes_enviadas (id_chamada_vapi)
+    WHERE id_chamada_vapi IS NOT NULL;
+
+CREATE INDEX IF NOT EXISTS idx_ligacoes_enviadas_cnpj
+    ON public.ligacoes_enviadas (cnpj_basico);

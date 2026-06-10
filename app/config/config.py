@@ -177,6 +177,11 @@ class Configuracao(BaseSettings):
         validation_alias="VAPI_PHONE_NUMBER_ID",
         description="ID do número Vapi/Twilio importado no painel.",
     )
+    vapi_webhook_secret: str = Field(
+        default="",
+        validation_alias="VAPI_WEBHOOK_SECRET",
+        description="Segredo opcional para validar webhooks Vapi (header X-Vapi-Secret).",
+    )
 
     @field_validator("ambiente", mode="before")
     @classmethod

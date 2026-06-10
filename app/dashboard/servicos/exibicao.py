@@ -88,3 +88,34 @@ def enriquecer_redis_sms_esperando(linha: dict[str, Any]) -> dict[str, Any]:
     out = dict(linha)
     out["estado_exibicao"] = estado_redis_sms_esperando(out.get("status_atual"))
     return out
+
+
+def estado_postgres_ligacao(status_ultimo: str) -> dict[str, str]:
+    m: dict[str, tuple[str, str]] = {
+        "disparado": ("Disparado", "info"),
+        "tocando": ("Tocando", "info"),
+        "em_andamento": ("Em andamento", "info"),
+        "concluido": ("Concluído", "success"),
+        "sem_resposta": ("Sem resposta", "warning"),
+        "caixa_postal": ("Caixa postal", "warning"),
+        "falha": ("Falha", "danger"),
+        "falha_definitiva": ("Falha definitiva", "danger"),
+    }
+    rotulo, cor = m.get(status_ultimo, (status_ultimo or "—", "neutral"))
+    return _badge(rotulo, cor)
+
+
+def estado_redis_ligacao_pendente() -> dict[str, str]:
+    return _badge("Na fila (a disparar)", "neutral")
+
+
+def enriquecer_linha_postgres_ligacao(linha: dict[str, Any]) -> dict[str, Any]:
+    out = dict(linha)
+    out["estado_exibicao"] = estado_postgres_ligacao(str(out.get("status_ultimo") or ""))
+    return out
+
+
+def enriquecer_redis_ligacao_pendente(linha: dict[str, Any]) -> dict[str, Any]:
+    out = dict(linha)
+    out["estado_exibicao"] = estado_redis_ligacao_pendente()
+    return out

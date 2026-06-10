@@ -19,6 +19,11 @@ from app.reenvio.api.dto.n8n import (
     RespostaItensPendentesN8N,
 )
 from app.reenvio.redis_app import obter_cliente_redis
+from app.ligacoes.repositorios.redis_ligacoes_pendente import (
+    RepositorioLigacoesPendenteRedis,
+    chave_hash as chave_hash_ligacao_pendente,
+)
+from app.ligacoes.servicos.executar_dispatch_call import pedido_de_hash_redis
 from app.reenvio.repositorios.redis_sms_pendente import (
     RepositorioSmsPendenteRedis,
     chave_hash as chave_hash_sms_pendente,
@@ -73,6 +78,33 @@ def _serializar_item_email(item: dict[str, Any]) -> ItemPendenteN8N:
         origem=item.get("origem", ""),
         criado_em=item.get("criado_em"),
         payload_envio=_montar_payload_envio(item, destinatario=destinatario),
+    )
+
+
+def _serializar_item_ligacao(item: dict[str, Any]) -> ItemPendenteN8N:
+    telefone = item.get("telefone", "")
+    id_externo = item.get("id_externo", "")
+    pedido = pedido_de_hash_redis(
+        {
+            "telefone": telefone,
+            "cnpj_basico": item.get("cnpj_basico") or "",
+            "quantidade_buscas": str(item.get("quantidade_buscas") or 0),
+            "uf_buscada": item.get("uf_buscada") or "",
+            "segmento_buscado": item.get("segmento_buscado") or "",
+        },
+        id_externo,
+    )
+    return ItemPendenteN8N(
+        canal="ligacao",
+        id_externo=id_externo,
+        destinatario=telefone,
+        tipo_template="",
+        contexto={},
+        fornecedor_id=item.get("fornecedor_id"),
+        cnpj_basico=item.get("cnpj_basico"),
+        origem=item.get("origem", ""),
+        criado_em=item.get("criado_em"),
+        payload_envio=pedido.model_dump(),
     )
 
 
@@ -232,6 +264,64 @@ async def post_claim_sms_pendentes_recentes_n8n(
         itens=claimados,
         ttl_claim_segundos=CLAIM_TTL_PADRAO_SEGUNDOS,
     )
+
+
+@router.get(
+    "/ligacoes-pendentes",
+    response_model=RespostaItensPendentesN8N,
+    status_code=status.HTTP_200_OK,
+    summary="Lista ligações pendentes para integracao com n8n",
+)
+async def get_ligacoes_pendentes_n8n(
+    redis: Annotated[Redis, Depends(_redis)],
+    limite: Annotated[int, Query(ge=1, le=500)] = 200,
+) -> RespostaItensPendentesN8N:
+    repo = RepositorioLigacoesPendenteRedis()
+    itens = await repo.listar_pendentes(redis, limite=_limitar_lote(limite))
+    serializados = [_serializar_item_ligacao(item) for item in itens]
+    return RespostaItensPendentesN8N(total=len(serializados), itens=serializados)
+
+
+@router.post(
+    "/ligacoes-pendentes/claim",
+    response_model=RespostaClaimN8N,
+    status_code=status.HTTP_200_OK,
+    summary="Reserva temporariamente ligações pendentes para o n8n (mais antigos primeiro)",
+)
+async def post_claim_ligacoes_pendentes_n8n(
+    pedido: PedidoClaimN8N,
+    redis: Annotated[Redis, Depends(_redis)],
+) -> RespostaClaimN8N:
+    repo = RepositorioLigacoesPendenteRedis()
+    itens = await repo.listar_pendentes(redis, limite=_limitar_lote(pedido.limite * 5))
+    serializados = [_serializar_item_ligacao(item) for item in itens]
+    claimados = await _claim_itens(redis, canal="ligacao", itens=serializados, limite=pedido.limite)
+    return RespostaClaimN8N(
+        total=len(claimados),
+        itens=claimados,
+        ttl_claim_segundos=CLAIM_TTL_PADRAO_SEGUNDOS,
+    )
+
+
+@router.post(
+    "/ligacoes-pendentes/confirmar-consumo",
+    response_model=RespostaConfirmarConsumoN8N,
+    status_code=status.HTTP_200_OK,
+    summary="Confirma consumo de ligação pendente e remove da fila",
+)
+async def post_confirmar_consumo_ligacao_n8n(
+    pedido: PedidoConfirmarConsumoN8N,
+    redis: Annotated[Redis, Depends(_redis)],
+) -> RespostaConfirmarConsumoN8N:
+    repo = RepositorioLigacoesPendenteRedis()
+    existe = bool(await redis.exists(chave_hash_ligacao_pendente(pedido.id_externo)))
+    if existe:
+        await repo.remover(redis, pedido.id_externo)
+        status_remocao = "removido"
+    else:
+        status_remocao = "ja_nao_existia"
+    await liberar_claim_item_n8n(redis, canal="ligacao", id_externo=pedido.id_externo)
+    return RespostaConfirmarConsumoN8N(id_externo=pedido.id_externo, status=status_remocao)
 
 
 @router.post(
