@@ -12,12 +12,13 @@ import asyncpg
 
 from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.reenvio.repositorios.postgres_telefone_engajamento import (
-    fundir_telefones_sms_novos,
-    garantir_telefone_sms_ativo,
+    fundir_telefones_descobertos,
+    garantir_telefone_descoberto,
     listar_contatos_sms,
     listar_contatos_sms_com_fallback,
+    listar_contatos_sms_orquestracao,
+    promover_ou_gravar_sms,
     telefone_sms_existe,
-    upsert_status_sms,
 )
 from app.reenvio.servicos.engajamento_contatos import (
     agora_iso,
@@ -344,14 +345,14 @@ async def tocar_engajamento_sms(
                 )
                 return
 
-            await upsert_status_sms(
+            await promover_ou_gravar_sms(
                 conn,
                 cnpj_basico=cnpj_b,
                 telefone=alvo,
                 status=est,
                 atualizado_em=_parse_atualizado_em(now),
             )
-            contatos_s = await listar_contatos_sms(conn, cnpj_b)
+            contatos_s = await listar_contatos_sms_orquestracao(conn, cnpj_b)
 
             if est in _SET_ULTIMO_SMS:
                 ultimo_s = alvo
@@ -421,7 +422,7 @@ async def persistir_contatos_iniciais_engajamento(
                 return
             exist_e = parse_contatos_json(row["contatos_email"])
             merged_e = fundir_lista_contatos_email(exist_e, contatos_email)
-            merged_s = await fundir_telefones_sms_novos(
+            merged_s = await fundir_telefones_descobertos(
                 conn,
                 cnpj_basico=cnpj_b,
                 novos=contatos_sms,
@@ -495,7 +496,7 @@ async def garantir_enderecos_no_engajamento(
             if ne:
                 merge_contato(contatos_e, ne, EngajamentoEmailEstado.ATIVO.value, now_iso=now)
             if nt:
-                await garantir_telefone_sms_ativo(
+                await garantir_telefone_descoberto(
                     conn,
                     cnpj_basico=cnpj_b,
                     telefone=nt,

@@ -27,7 +27,10 @@ from app.reenvio.repositorios.redis_sms_esperando_confirmacao import KEY_SWEEP a
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import chave_hash as chave_sms_conf
 from app.ligacoes.repositorios.redis_ligacoes_pendente import KEY_INDEX as IDX_LIG_PEND
 from app.ligacoes.repositorios.redis_ligacoes_pendente import chave_hash as chave_lig_pend
-from app.reenvio.repositorios.postgres_telefone_engajamento import listar_contatos_sms_por_cnpjs
+from app.reenvio.repositorios.postgres_telefone_engajamento import (
+    listar_contatos_sms_por_cnpjs,
+    listar_telefones_agrupados_por_cnpjs,
+)
 from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as IDX_SMS_PEND
 from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_pend
 from app.reenvio.servicos.n8n_claims import claim_n8n_ativo
@@ -2305,6 +2308,7 @@ async def lista_engajamento_fornecedores(
     )
     cnpjs = [str(r["cnpj_basico"]) for r in rows]
     contatos_sms_por_cnpj = await listar_contatos_sms_por_cnpjs(pool, cnpjs)
+    telefones_por_cnpj = await listar_telefones_agrupados_por_cnpjs(pool, cnpjs)
     itens: list[dict[str, Any]] = []
     for r in rows:
         item = registo_para_json(r)
@@ -2312,6 +2316,9 @@ async def lista_engajamento_fornecedores(
         sms_tabela = contatos_sms_por_cnpj.get(cnpj) or []
         if sms_tabela:
             item["contatos_sms"] = sms_tabela
+        telefones = telefones_por_cnpj.get(cnpj) or []
+        if telefones:
+            item["telefones_engajamento"] = telefones
         itens.append(item)
     return {
         "origem": "postgres",

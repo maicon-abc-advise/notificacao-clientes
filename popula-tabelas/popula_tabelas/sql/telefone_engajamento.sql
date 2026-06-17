@@ -12,7 +12,7 @@ CREATE TABLE IF NOT EXISTS public.telefone_engajamento (
         PRIMARY KEY (cnpj_basico, telefone, canal),
 
     CONSTRAINT telefone_engajamento_canal_check
-        CHECK (canal IN ('sms', 'whatsapp', 'ligacao')),
+        CHECK (canal IN ('sem_canal', 'sms', 'whatsapp', 'ligacao')),
 
     CONSTRAINT telefone_engajamento_telefone_digits_check
         CHECK (telefone ~ '^[0-9]+$' AND length(telefone) >= 10),
