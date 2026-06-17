@@ -12,6 +12,9 @@ from app.reenvio.servicos.limpar_pendentes_ja_enviados import (
     executar_limpar_emails_pendentes_ja_enviados,
 )
 from app.reenvio.servicos.sweep_emails_pendentes import executar_sweep_emails_pendentes
+from app.reenvio.servicos.migrar_contatos_sms_telefone_engajamento import (
+    executar_migrar_contatos_sms_para_telefone_engajamento,
+)
 from app.reenvio.servicos.sweep_sms_esperando_confirmacao import (
     executar_sweep_sms_esperando_confirmacao,
 )
@@ -91,3 +94,22 @@ async def get_sms_pendentes(
     repo = RepositorioSmsPendenteRedis()
     itens = await repo.listar_pendentes(redis, limite=max(1, min(limite, 500)))
     return {"total": len(itens), "itens": itens}
+
+
+@router.post(
+    "/migrar-telefone-engajamento",
+    status_code=status.HTTP_200_OK,
+    summary="Migra contatos_sms (JSON) de engajamento_fornecedores para telefone_engajamento (canal sms)",
+)
+async def post_migrar_telefone_engajamento(
+    pool: Annotated[asyncpg.Pool, Depends(_pool)],
+    cnpj_basico: Annotated[str | None, Query(min_length=8, max_length=8)] = None,
+    limite: Annotated[int | None, Query(ge=1, le=50_000)] = None,
+    dry_run: Annotated[bool, Query()] = False,
+) -> dict:
+    return await executar_migrar_contatos_sms_para_telefone_engajamento(
+        pool,
+        cnpj_basico=cnpj_basico,
+        limite=limite,
+        dry_run=dry_run,
+    )

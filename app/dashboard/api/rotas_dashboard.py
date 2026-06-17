@@ -27,6 +27,7 @@ from app.reenvio.repositorios.redis_sms_esperando_confirmacao import KEY_SWEEP a
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import chave_hash as chave_sms_conf
 from app.ligacoes.repositorios.redis_ligacoes_pendente import KEY_INDEX as IDX_LIG_PEND
 from app.ligacoes.repositorios.redis_ligacoes_pendente import chave_hash as chave_lig_pend
+from app.reenvio.repositorios.postgres_telefone_engajamento import listar_contatos_sms_por_cnpjs
 from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as IDX_SMS_PEND
 from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_pend
 from app.reenvio.servicos.n8n_claims import claim_n8n_ativo
@@ -1150,6 +1151,15 @@ async def _resumo_engajamento(pool: PoolOrquestracao) -> dict[str, int]:
     p = obter_identificadores_postgres()
     te = p.qual("engajamento_fornecedores")
     tf = p.qual("fornecedores")
+    tt = p.qual("telefone_engajamento")
+    tem_telefone_sms = f"""
+        EXISTS (
+            SELECT 1
+            FROM {tt} AS t
+            WHERE t.cnpj_basico = e.cnpj_basico
+              AND t.canal = 'sms'::public.canal_telefone_engajamento
+        )
+    """
     row = await pool.fetchrow(
         f"""
         SELECT
@@ -1158,12 +1168,12 @@ async def _resumo_engajamento(pool: PoolOrquestracao) -> dict[str, int]:
                 WHERE jsonb_array_length(COALESCE(contatos_email, '[]'::jsonb)) > 0
             ) AS usuarios_com_email,
             COUNT(*) FILTER (
-                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                WHERE {tem_telefone_sms}
             ) AS usuarios_com_telefone,
             COUNT(*) FILTER (
                 WHERE (
                     jsonb_array_length(COALESCE(contatos_email, '[]'::jsonb)) > 0
-                    OR jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                    OR {tem_telefone_sms}
                 )
             ) AS usuarios_com_algum_contato,
             COUNT(*) FILTER (
@@ -1196,22 +1206,22 @@ async def _resumo_engajamento(pool: PoolOrquestracao) -> dict[str, int]:
                   )
             ) AS email_agg_outros,
             COUNT(*) FILTER (
-                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) = 0
+                WHERE NOT ({tem_telefone_sms})
             ) AS sms_sem_lista,
             COUNT(*) FILTER (
-                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                WHERE {tem_telefone_sms}
                   AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) = 'ativo'
             ) AS sms_agg_ativo,
             COUNT(*) FILTER (
-                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                WHERE {tem_telefone_sms}
                   AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) = 'em_analise'
             ) AS sms_agg_em_analise,
             COUNT(*) FILTER (
-                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                WHERE {tem_telefone_sms}
                   AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) = 'inativo'
             ) AS sms_agg_inativo,
             COUNT(*) FILTER (
-                WHERE jsonb_array_length(COALESCE(contatos_sms, '[]'::jsonb)) > 0
+                WHERE {tem_telefone_sms}
                   AND lower(trim(COALESCE(e.engajamento_sms::text, ''))) NOT IN (
                       'ativo', 'em_analise', 'inativo'
                   )
@@ -2293,7 +2303,16 @@ async def lista_engajamento_fornecedores(
         """,
         *params,
     )
-    itens = [registo_para_json(r) for r in rows]
+    cnpjs = [str(r["cnpj_basico"]) for r in rows]
+    contatos_sms_por_cnpj = await listar_contatos_sms_por_cnpjs(pool, cnpjs)
+    itens: list[dict[str, Any]] = []
+    for r in rows:
+        item = registo_para_json(r)
+        cnpj = str(r["cnpj_basico"])
+        sms_tabela = contatos_sms_por_cnpj.get(cnpj) or []
+        if sms_tabela:
+            item["contatos_sms"] = sms_tabela
+        itens.append(item)
     return {
         "origem": "postgres",
         "tabela_logica": "engajamento_fornecedores",

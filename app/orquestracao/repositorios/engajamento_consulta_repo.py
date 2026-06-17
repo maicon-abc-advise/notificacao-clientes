@@ -8,6 +8,7 @@ from typing import Any
 import asyncpg
 
 from app.config.postgres_identificadores import obter_identificadores_postgres
+from app.reenvio.repositorios.postgres_telefone_engajamento import listar_contatos_sms_com_fallback
 from app.reenvio.servicos.engajamento_contatos import parse_contatos_json
 from app.reenvio.servicos.engajamento_estado import EngajamentoCanalAgregado
 
@@ -129,11 +130,16 @@ async def carregar_por_cnpj_basico(
     )
     if row is None:
         return _snapshot_padrao_sem_linha()
+    contatos_sms = await listar_contatos_sms_com_fallback(
+        pool,
+        cnpj_basico,
+        row["contatos_sms"],
+    )
     return SnapshotEngajamentoOrquestracao(
         row["engajamento_email"],
         row["engajamento_sms"],
         parse_contatos_json(row["contatos_email"]),
-        parse_contatos_json(row["contatos_sms"]),
+        contatos_sms,
         row["ultimo_envio_email_endereco"],
         row["ultimo_envio_sms_endereco"],
         row["ultimo_lembrete_limite_semanal_em"],

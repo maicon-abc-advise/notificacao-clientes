@@ -1,21 +1,28 @@
-"""Atualização de ``engajamento_fornecedores``: contatos em JSON + colunas agregadas por canal."""
+"""Atualização de ``engajamento_fornecedores``: e-mail em JSON; SMS em ``telefone_engajamento``."""
 
 from __future__ import annotations
 
 import json
 import logging
 import uuid
+from datetime import UTC, datetime
 from typing import Any
 
 import asyncpg
 
 from app.config.postgres_identificadores import obter_identificadores_postgres
+from app.reenvio.repositorios.postgres_telefone_engajamento import (
+    fundir_telefones_sms_novos,
+    garantir_telefone_sms_ativo,
+    listar_contatos_sms,
+    listar_contatos_sms_com_fallback,
+    telefone_sms_existe,
+    upsert_status_sms,
+)
 from app.reenvio.servicos.engajamento_contatos import (
     agora_iso,
     contatos_incluem_email,
-    contatos_incluem_telefone,
     fundir_lista_contatos_email,
-    fundir_lista_contatos_sms,
     merge_contato,
     merge_contato_sms,
     normalizar_email,
@@ -51,6 +58,28 @@ def parse_fornecedor_id(val: str | None) -> uuid.UUID | None:
 
 def _as_jsonb_param(lista: list[dict[str, Any]]) -> str:
     return json.dumps(lista, ensure_ascii=False)
+
+
+def _parse_atualizado_em(val: Any) -> datetime:
+    if isinstance(val, datetime):
+        return val if val.tzinfo else val.replace(tzinfo=UTC)
+    if isinstance(val, str):
+        bruto = val.strip()
+        if bruto:
+            try:
+                dt = datetime.fromisoformat(bruto.replace("Z", "+00:00"))
+                return dt if dt.tzinfo else dt.replace(tzinfo=UTC)
+            except ValueError:
+                pass
+    return datetime.now(UTC)
+
+
+async def _carregar_contatos_sms_transacao(
+    conn: asyncpg.Connection,
+    cnpj_basico: str,
+    legado_contatos_sms: Any,
+) -> list[dict[str, Any]]:
+    return await listar_contatos_sms_com_fallback(conn, cnpj_basico, legado_contatos_sms)
 
 
 async def exigir_destinatario_no_engajamento_email(
@@ -90,15 +119,14 @@ async def exigir_destinatario_no_engajamento_sms(
     p = obter_identificadores_postgres()
     te = p.qual("engajamento_fornecedores")
     row = await pool.fetchrow(
-        f"SELECT contatos_sms FROM {te} WHERE cnpj_basico = $1",
+        f"SELECT 1 FROM {te} WHERE cnpj_basico = $1",
         cnpj_b,
     )
     if row is None:
         raise ValueError(
             "Não há engajamento para este CNPJ; a orquestração deve preparar os contatos antes do envio."
         )
-    contatos = parse_contatos_json(row["contatos_sms"])
-    if not contatos_incluem_telefone(contatos, destinatario):
+    if not await telefone_sms_existe(pool, cnpj_b, destinatario):
         raise ValueError("Destinatário não consta nos contatos de engajamento deste fornecedor.")
 
 
@@ -149,7 +177,11 @@ async def tocar_engajamento_email(
                 )
                 return
             contatos_e = parse_contatos_json(row["contatos_email"]) if row else []
-            contatos_s = parse_contatos_json(row["contatos_sms"]) if row else []
+            contatos_s = await _carregar_contatos_sms_transacao(
+                conn,
+                cnpj_b,
+                row["contatos_sms"] if row else None,
+            )
             ultimo_e = (row["ultimo_envio_email_endereco"] or None) if row else None
             ultimo_s = (row["ultimo_envio_sms_endereco"] or None) if row else None
 
@@ -182,20 +214,18 @@ async def tocar_engajamento_email(
                     UPDATE {te} SET
                         fornecedor_id = COALESCE($2, {te}.fornecedor_id),
                         contatos_email = $3::jsonb,
-                        contatos_sms = $4::jsonb,
-                        engajamento_email = $5,
-                        engajamento_sms = $6,
+                        engajamento_email = $4,
+                        engajamento_sms = $5,
                         engajamento_email_atualizado_em = now(),
                         engajamento_sms_atualizado_em = now(),
                         engajamento_atualizado_em = now(),
-                        ultimo_envio_email_endereco = $7,
-                        ultimo_envio_sms_endereco = $8
+                        ultimo_envio_email_endereco = $6,
+                        ultimo_envio_sms_endereco = $7
                     WHERE cnpj_basico = $1
                     """,
                     cnpj_b,
                     fornecedor_id,
                     _as_jsonb_param(contatos_e),
-                    _as_jsonb_param(contatos_s),
                     agg_e,
                     agg_s,
                     ultimo_e,
@@ -206,7 +236,7 @@ async def tocar_engajamento_email(
                     f"""
                     INSERT INTO {te} (
                         cnpj_basico, fornecedor_id,
-                        contatos_email, contatos_sms,
+                        contatos_email,
                         engajamento_email, engajamento_sms,
                         engajamento_email_atualizado_em, engajamento_sms_atualizado_em,
                         engajamento_atualizado_em,
@@ -214,15 +244,14 @@ async def tocar_engajamento_email(
                     )
                     VALUES (
                         $1, $2,
-                        $3::jsonb, $4::jsonb,
-                        $5, $6,
+                        $3::jsonb,
+                        $4, $5,
                         now(), now(), now(),
-                        $7, $8
+                        $6, $7
                     )
                     ON CONFLICT (cnpj_basico) DO UPDATE SET
                         fornecedor_id = COALESCE(EXCLUDED.fornecedor_id, {te}.fornecedor_id),
                         contatos_email = EXCLUDED.contatos_email,
-                        contatos_sms = EXCLUDED.contatos_sms,
                         engajamento_email = EXCLUDED.engajamento_email,
                         engajamento_sms = EXCLUDED.engajamento_sms,
                         engajamento_email_atualizado_em = now(),
@@ -234,7 +263,6 @@ async def tocar_engajamento_email(
                     cnpj_b,
                     fornecedor_id,
                     _as_jsonb_param(contatos_e),
-                    _as_jsonb_param(contatos_s),
                     agg_e,
                     agg_s,
                     ultimo_e,
@@ -290,7 +318,11 @@ async def tocar_engajamento_sms(
                 )
                 return
             contatos_e = parse_contatos_json(row["contatos_email"]) if row else []
-            contatos_s = parse_contatos_json(row["contatos_sms"]) if row else []
+            contatos_s = await _carregar_contatos_sms_transacao(
+                conn,
+                cnpj_b,
+                row["contatos_sms"] if row else None,
+            )
             ultimo_e = (row["ultimo_envio_email_endereco"] or None) if row else None
             ultimo_s = (row["ultimo_envio_sms_endereco"] or None) if row else None
 
@@ -311,76 +343,42 @@ async def tocar_engajamento_sms(
                     alvo,
                 )
                 return
+
+            await upsert_status_sms(
+                conn,
+                cnpj_basico=cnpj_b,
+                telefone=alvo,
+                status=est,
+                atualizado_em=_parse_atualizado_em(now),
+            )
+            contatos_s = await listar_contatos_sms(conn, cnpj_b)
+
             if est in _SET_ULTIMO_SMS:
                 ultimo_s = alvo
 
             agg_e = rollup_engajamento_email(contatos_e, ultimo_e).value
             agg_s = rollup_engajamento_sms(contatos_s, ultimo_s).value
 
-            if somente_endereco_existente:
-                await conn.execute(
-                    f"""
-                    UPDATE {te} SET
-                        fornecedor_id = COALESCE($2, {te}.fornecedor_id),
-                        contatos_email = $3::jsonb,
-                        contatos_sms = $4::jsonb,
-                        engajamento_email = $5,
-                        engajamento_sms = $6,
-                        engajamento_email_atualizado_em = now(),
-                        engajamento_sms_atualizado_em = now(),
-                        engajamento_atualizado_em = now(),
-                        ultimo_envio_email_endereco = $7,
-                        ultimo_envio_sms_endereco = $8
-                    WHERE cnpj_basico = $1
-                    """,
-                    cnpj_b,
-                    fornecedor_id,
-                    _as_jsonb_param(contatos_e),
-                    _as_jsonb_param(contatos_s),
-                    agg_e,
-                    agg_s,
-                    ultimo_e,
-                    ultimo_s,
-                )
-            else:
-                await conn.execute(
-                    f"""
-                    INSERT INTO {te} (
-                        cnpj_basico, fornecedor_id,
-                        contatos_email, contatos_sms,
-                        engajamento_email, engajamento_sms,
-                        engajamento_email_atualizado_em, engajamento_sms_atualizado_em,
-                        engajamento_atualizado_em,
-                        ultimo_envio_email_endereco, ultimo_envio_sms_endereco
-                    )
-                    VALUES (
-                        $1, $2,
-                        $3::jsonb, $4::jsonb,
-                        $5, $6,
-                        now(), now(), now(),
-                        $7, $8
-                    )
-                    ON CONFLICT (cnpj_basico) DO UPDATE SET
-                        fornecedor_id = COALESCE(EXCLUDED.fornecedor_id, {te}.fornecedor_id),
-                        contatos_email = EXCLUDED.contatos_email,
-                        contatos_sms = EXCLUDED.contatos_sms,
-                        engajamento_email = EXCLUDED.engajamento_email,
-                        engajamento_sms = EXCLUDED.engajamento_sms,
-                        engajamento_email_atualizado_em = now(),
-                        engajamento_sms_atualizado_em = now(),
-                        engajamento_atualizado_em = now(),
-                        ultimo_envio_email_endereco = EXCLUDED.ultimo_envio_email_endereco,
-                        ultimo_envio_sms_endereco = EXCLUDED.ultimo_envio_sms_endereco
-                    """,
-                    cnpj_b,
-                    fornecedor_id,
-                    _as_jsonb_param(contatos_e),
-                    _as_jsonb_param(contatos_s),
-                    agg_e,
-                    agg_s,
-                    ultimo_e,
-                    ultimo_s,
-                )
+            await conn.execute(
+                f"""
+                UPDATE {te} SET
+                    fornecedor_id = COALESCE($2, {te}.fornecedor_id),
+                    engajamento_email = $3,
+                    engajamento_sms = $4,
+                    engajamento_email_atualizado_em = now(),
+                    engajamento_sms_atualizado_em = now(),
+                    engajamento_atualizado_em = now(),
+                    ultimo_envio_email_endereco = $5,
+                    ultimo_envio_sms_endereco = $6
+                WHERE cnpj_basico = $1
+                """,
+                cnpj_b,
+                fornecedor_id,
+                agg_e,
+                agg_s,
+                ultimo_e,
+                ultimo_s,
+            )
     _log.debug("Engajamento SMS cnpj_basico=%s endereco=%s estado=%s agg=%s", cnpj_b, alvo, est, agg_s)
 
 
@@ -392,7 +390,7 @@ async def persistir_contatos_iniciais_engajamento(
     contatos_email: list[dict[str, Any]],
     contatos_sms: list[dict[str, Any]],
 ) -> None:
-    """Mescla listas novas (payload / company_profile) com o que já está no banco; não apaga canal com lista vazia."""
+    """Mescla contatos novos (payload / company_profile); SMS em ``telefone_engajamento``."""
     cnpj_b = (cnpj_basico or "").strip()
     if not cnpj_b:
         return
@@ -412,7 +410,7 @@ async def persistir_contatos_iniciais_engajamento(
             )
             row = await conn.fetchrow(
                 f"""
-                SELECT contatos_email, contatos_sms, ultimo_envio_email_endereco, ultimo_envio_sms_endereco
+                SELECT contatos_email, ultimo_envio_email_endereco, ultimo_envio_sms_endereco
                 FROM {te}
                 WHERE cnpj_basico = $1
                 FOR UPDATE
@@ -422,9 +420,12 @@ async def persistir_contatos_iniciais_engajamento(
             if row is None:
                 return
             exist_e = parse_contatos_json(row["contatos_email"])
-            exist_s = parse_contatos_json(row["contatos_sms"])
             merged_e = fundir_lista_contatos_email(exist_e, contatos_email)
-            merged_s = fundir_lista_contatos_sms(exist_s, contatos_sms)
+            merged_s = await fundir_telefones_sms_novos(
+                conn,
+                cnpj_basico=cnpj_b,
+                novos=contatos_sms,
+            )
             ultimo_e = (row["ultimo_envio_email_endereco"] or None) or (
                 normalizar_email(str(merged_e[0].get("endereco") or "")) if merged_e else None
             )
@@ -438,20 +439,18 @@ async def persistir_contatos_iniciais_engajamento(
                 UPDATE {te} SET
                     fornecedor_id = COALESCE($2, {te}.fornecedor_id),
                     contatos_email = $3::jsonb,
-                    contatos_sms = $4::jsonb,
-                    engajamento_email = $5,
-                    engajamento_sms = $6,
+                    engajamento_email = $4,
+                    engajamento_sms = $5,
                     engajamento_email_atualizado_em = now(),
                     engajamento_sms_atualizado_em = now(),
                     engajamento_atualizado_em = now(),
-                    ultimo_envio_email_endereco = $7,
-                    ultimo_envio_sms_endereco = $8
+                    ultimo_envio_email_endereco = $6,
+                    ultimo_envio_sms_endereco = $7
                 WHERE cnpj_basico = $1
                 """,
                 cnpj_b,
                 fornecedor_id,
                 _as_jsonb_param(merged_e),
-                _as_jsonb_param(merged_s),
                 agg_e,
                 agg_s,
                 ultimo_e,
@@ -491,22 +490,26 @@ async def garantir_enderecos_no_engajamento(
             if row is None:
                 return
             contatos_e = parse_contatos_json(row["contatos_email"])
-            contatos_s = parse_contatos_json(row["contatos_sms"])
             ultimo_e = row["ultimo_envio_email_endereco"] or None
             ultimo_s = row["ultimo_envio_sms_endereco"] or None
             if ne:
                 merge_contato(contatos_e, ne, EngajamentoEmailEstado.ATIVO.value, now_iso=now)
             if nt:
-                merge_contato_sms(contatos_s, nt, EngajamentoSmsEstado.ATIVO.value, now_iso=now)
+                await garantir_telefone_sms_ativo(
+                    conn,
+                    cnpj_basico=cnpj_b,
+                    telefone=nt,
+                    now_iso=now,
+                )
+            contatos_s = await _carregar_contatos_sms_transacao(conn, cnpj_b, row["contatos_sms"])
             agg_e = rollup_engajamento_email(contatos_e, ultimo_e).value
             agg_s = rollup_engajamento_sms(contatos_s, ultimo_s).value
             await conn.execute(
                 f"""
                 UPDATE {te} SET
                     contatos_email = $2::jsonb,
-                    contatos_sms = $3::jsonb,
-                    engajamento_email = $4,
-                    engajamento_sms = $5,
+                    engajamento_email = $3,
+                    engajamento_sms = $4,
                     engajamento_email_atualizado_em = now(),
                     engajamento_sms_atualizado_em = now(),
                     engajamento_atualizado_em = now()
@@ -514,7 +517,6 @@ async def garantir_enderecos_no_engajamento(
                 """,
                 cnpj_b,
                 _as_jsonb_param(contatos_e),
-                _as_jsonb_param(contatos_s),
                 agg_e,
                 agg_s,
             )
@@ -546,7 +548,7 @@ async def recalcular_agregados_engajamento(
             if row is None:
                 return
             contatos_e = parse_contatos_json(row["contatos_email"])
-            contatos_s = parse_contatos_json(row["contatos_sms"])
+            contatos_s = await _carregar_contatos_sms_transacao(conn, cnpj_b, row["contatos_sms"])
             ultimo_e = row["ultimo_envio_email_endereco"] or None
             ultimo_s = row["ultimo_envio_sms_endereco"] or None
             agg_e = rollup_engajamento_email(contatos_e, ultimo_e).value
