@@ -63,7 +63,7 @@ async def listar_contatos_sms(
         f"""
         SELECT telefone, status, atualizado_em
         FROM {_tabela()}
-        WHERE cnpj_basico = $1 AND canal = $2::public.canal_telefone_engajamento
+        WHERE cnpj_basico = $1 AND canal = $2
         ORDER BY telefone
         """,
         cnpj,
@@ -94,7 +94,7 @@ async def listar_contatos_sms_por_cnpjs(
         f"""
         SELECT cnpj_basico, telefone, status, atualizado_em
         FROM {_tabela()}
-        WHERE canal = $1::public.canal_telefone_engajamento
+        WHERE canal = $1
           AND cnpj_basico = ANY($2::text[])
         ORDER BY cnpj_basico, telefone
         """,
@@ -123,7 +123,7 @@ async def telefone_sms_existe(
         FROM {_tabela()}
         WHERE cnpj_basico = $1
           AND telefone = $2
-          AND canal = $3::public.canal_telefone_engajamento
+          AND canal = $3
         LIMIT 1
         """,
         cnpj,
@@ -149,7 +149,7 @@ async def upsert_status_sms(
     await executor.execute(
         f"""
         INSERT INTO {_tabela()} (cnpj_basico, telefone, canal, status, atualizado_em)
-        VALUES ($1, $2, $3::public.canal_telefone_engajamento, $4, $5)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (cnpj_basico, telefone, canal) DO UPDATE SET
             status = EXCLUDED.status,
             atualizado_em = EXCLUDED.atualizado_em

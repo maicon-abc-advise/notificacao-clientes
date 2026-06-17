@@ -114,7 +114,7 @@ async def executar_migrar_contatos_sms_para_telefone_engajamento(
 
     sql_upsert = f"""
         INSERT INTO {t_tel} (cnpj_basico, telefone, canal, status, atualizado_em)
-        VALUES ($1, $2, $3::public.canal_telefone_engajamento, $4, $5)
+        VALUES ($1, $2, $3, $4, $5)
         ON CONFLICT (cnpj_basico, telefone, canal) DO UPDATE SET
             status = EXCLUDED.status,
             atualizado_em = EXCLUDED.atualizado_em

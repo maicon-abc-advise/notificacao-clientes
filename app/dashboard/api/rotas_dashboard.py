@@ -1157,7 +1157,7 @@ async def _resumo_engajamento(pool: PoolOrquestracao) -> dict[str, int]:
             SELECT 1
             FROM {tt} AS t
             WHERE t.cnpj_basico = e.cnpj_basico
-              AND t.canal = 'sms'::public.canal_telefone_engajamento
+              AND t.canal = 'sms'
         )
     """
     row = await pool.fetchrow(
