@@ -1,7 +1,7 @@
 from typing import Annotated
 
 import asyncpg
-from fastapi import APIRouter, Depends, Query, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 from redis.asyncio import Redis
 
 from app.config.config import Configuracao, obter_configuracao
@@ -107,9 +107,15 @@ async def post_migrar_telefone_engajamento(
     limite: Annotated[int | None, Query(ge=1, le=50_000)] = None,
     dry_run: Annotated[bool, Query()] = False,
 ) -> dict:
-    return await executar_migrar_contatos_sms_para_telefone_engajamento(
-        pool,
-        cnpj_basico=cnpj_basico,
-        limite=limite,
-        dry_run=dry_run,
-    )
+    try:
+        return await executar_migrar_contatos_sms_para_telefone_engajamento(
+            pool,
+            cnpj_basico=cnpj_basico,
+            limite=limite,
+            dry_run=dry_run,
+        )
+    except asyncpg.PostgresError as exc:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail=f"Erro Postgres na migração: {exc}",
+        ) from exc

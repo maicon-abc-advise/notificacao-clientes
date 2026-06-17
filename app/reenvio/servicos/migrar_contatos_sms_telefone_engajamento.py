@@ -19,6 +19,8 @@ _log = logging.getLogger(__name__)
 
 CANAL_SMS = "sms"
 _MIN_TELEFONE_LEN = 10
+_BATCH_UPSERT = 100
+_MAX_ERROS_AMOSTRA = 25
 
 
 def parse_atualizado_em_contato(val: Any) -> datetime:
@@ -75,6 +77,24 @@ def linhas_migracao_sms_de_fornecedor(
     return linhas, ignorados_sem, ignorados_invalido
 
 
+async def _upsert_linha_migracao(conn: asyncpg.Connection, t_tel: str, linha: dict[str, Any]) -> None:
+    sql_upsert = f"""
+        INSERT INTO {t_tel} (cnpj_basico, telefone, canal, status, atualizado_em, criado_em)
+        VALUES ($1, $2, $3, $4, $5, $5)
+        ON CONFLICT (cnpj_basico, telefone, canal) DO UPDATE SET
+            status = EXCLUDED.status,
+            atualizado_em = EXCLUDED.atualizado_em
+    """
+    await conn.execute(
+        sql_upsert,
+        linha["cnpj_basico"],
+        linha["telefone"],
+        linha["canal"],
+        linha["status"],
+        linha["atualizado_em"],
+    )
+
+
 async def executar_migrar_contatos_sms_para_telefone_engajamento(
     pool: asyncpg.Pool,
     *,
@@ -112,51 +132,60 @@ async def executar_migrar_contatos_sms_para_telefone_engajamento(
         params.append(limite_efetivo)
         sql_select += f" LIMIT ${len(params)}"
 
-    sql_upsert = f"""
-        INSERT INTO {t_tel} (cnpj_basico, telefone, canal, status, atualizado_em)
-        VALUES ($1, $2, $3, $4, $5)
-        ON CONFLICT (cnpj_basico, telefone, canal) DO UPDATE SET
-            status = EXCLUDED.status,
-            atualizado_em = EXCLUDED.atualizado_em
-    """
-
     fornecedores_lidos = 0
     contatos_lidos = 0
     linhas_gravadas = 0
+    linhas_com_erro = 0
     ignorados_sem_telefone = 0
     ignorados_telefone_invalido = 0
     fornecedores_sem_contatos = 0
+    erros_amostra: list[dict[str, str]] = []
 
     async with pool.acquire() as conn:
         rows = await conn.fetch(sql_select, *params)
 
-        async with conn.transaction():
-            for row in rows:
-                fornecedores_lidos += 1
-                cnpj = str(row["cnpj_basico"]).strip()
-                contatos = parse_contatos_json(row["contatos_sms"])
-                if not contatos:
-                    fornecedores_sem_contatos += 1
-                    continue
+    pendentes: list[dict[str, Any]] = []
+    for row in rows:
+        fornecedores_lidos += 1
+        cnpj = str(row["cnpj_basico"]).strip()
+        contatos = parse_contatos_json(row["contatos_sms"])
+        if not contatos:
+            fornecedores_sem_contatos += 1
+            continue
 
-                contatos_lidos += len(contatos)
-                linhas, ign_sem, ign_inv = linhas_migracao_sms_de_fornecedor(cnpj, contatos)
-                ignorados_sem_telefone += ign_sem
-                ignorados_telefone_invalido += ign_inv
+        contatos_lidos += len(contatos)
+        linhas, ign_sem, ign_inv = linhas_migracao_sms_de_fornecedor(cnpj, contatos)
+        ignorados_sem_telefone += ign_sem
+        ignorados_telefone_invalido += ign_inv
+        pendentes.extend(linhas)
 
-                for linha in linhas:
-                    if dry_run:
+    if dry_run:
+        linhas_gravadas = len(pendentes)
+    else:
+        for offset in range(0, len(pendentes), _BATCH_UPSERT):
+            lote = pendentes[offset : offset + _BATCH_UPSERT]
+            async with pool.acquire() as conn:
+                for linha in lote:
+                    try:
+                        async with conn.transaction():
+                            await _upsert_linha_migracao(conn, t_tel, linha)
                         linhas_gravadas += 1
-                        continue
-                    await conn.execute(
-                        sql_upsert,
-                        linha["cnpj_basico"],
-                        linha["telefone"],
-                        linha["canal"],
-                        linha["status"],
-                        linha["atualizado_em"],
-                    )
-                    linhas_gravadas += 1
+                    except Exception as exc:
+                        linhas_com_erro += 1
+                        if len(erros_amostra) < _MAX_ERROS_AMOSTRA:
+                            erros_amostra.append(
+                                {
+                                    "cnpj_basico": str(linha["cnpj_basico"]),
+                                    "telefone": str(linha["telefone"]),
+                                    "erro": str(exc),
+                                }
+                            )
+                        _log.warning(
+                            "Migração telefone_engajamento falhou cnpj=%s telefone=%s: %s",
+                            linha["cnpj_basico"],
+                            linha["telefone"],
+                            exc,
+                        )
 
     resultado = {
         "dry_run": dry_run,
@@ -166,8 +195,10 @@ async def executar_migrar_contatos_sms_para_telefone_engajamento(
         "fornecedores_sem_contatos": fornecedores_sem_contatos,
         "contatos_lidos": contatos_lidos,
         "linhas_gravadas": linhas_gravadas,
+        "linhas_com_erro": linhas_com_erro,
         "ignorados_sem_telefone": ignorados_sem_telefone,
         "ignorados_telefone_invalido": ignorados_telefone_invalido,
+        "erros_amostra": erros_amostra,
     }
     _log.info("Migração telefone_engajamento concluída: %s", resultado)
     return resultado

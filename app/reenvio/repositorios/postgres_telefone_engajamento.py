@@ -148,8 +148,8 @@ async def upsert_status_sms(
     ts = atualizado_em or datetime.now(UTC)
     await executor.execute(
         f"""
-        INSERT INTO {_tabela()} (cnpj_basico, telefone, canal, status, atualizado_em)
-        VALUES ($1, $2, $3, $4, $5)
+        INSERT INTO {_tabela()} (cnpj_basico, telefone, canal, status, atualizado_em, criado_em)
+        VALUES ($1, $2, $3, $4, $5, $5)
         ON CONFLICT (cnpj_basico, telefone, canal) DO UPDATE SET
             status = EXCLUDED.status,
             atualizado_em = EXCLUDED.atualizado_em
