@@ -716,7 +716,7 @@ def _sql_cte_convertidos_com_canal(
                 EXISTS (
                     SELECT 1
                     FROM {tdcf} AS dc
-                    WHERE dc.cnpj_basico = e.cnpj_basico
+                    WHERE dc.cnpj_empresa = e.cnpj_basico
                 ) AS tem_contato_externo,
                 (
                     SELECT MAX(em.criado_em)
@@ -1495,7 +1495,7 @@ async def resumo_home_dashboard(
             tf=tf,
             tem=te,
             tsm=ts,
-            tdcf=p.qual("dash_contato_fornecedor"),
+            tdcf=p.qual("whatsapp_envios"),
             coluna_data=coluna_data_fornecedor,
             inicio=inicio,
             fim=fim,
