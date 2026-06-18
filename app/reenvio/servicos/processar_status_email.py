@@ -247,6 +247,20 @@ async def processar_webhook_status_email(
                 consulta_id=cid,
                 sobrescrever_trava_de_email_esperando=True,
             )
+            wa_result = None
+            if cnpj_basico:
+                from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import (
+                    entrada_whatsapp_apos_falha_email,
+                )
+
+                wa_result = await entrada_whatsapp_apos_falha_email(
+                    pool,
+                    cfg,
+                    cnpj_basico=cnpj_basico,
+                    fornecedor_id=fid,
+                    origem="bounce_email",
+                    telefone=tel,
+                )
             await atualizar_status_por_id_mensagem_zenvia(
                 pool,
                 id_mensagem_zenvia=message_id,
@@ -265,6 +279,7 @@ async def processar_webhook_status_email(
                 "id_externo_sms": sms_ext,
                 "inseriu": inseriu,
                 "message_id": message_id,
+                "whatsapp": wa_result,
             }
 
         if cnpj_basico:

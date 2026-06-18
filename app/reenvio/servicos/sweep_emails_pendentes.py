@@ -144,6 +144,19 @@ async def executar_sweep_emails_pendentes(
                 EngajamentoEmailEstado.EMAIL_SWEEP_LEMBRETE_SMS,
                 endereco=em_cur,
             )
+            if cnpj_basico:
+                from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import (
+                    entrada_whatsapp_apos_falha_email,
+                )
+
+                await entrada_whatsapp_apos_falha_email(
+                    pool,
+                    cfg,
+                    cnpj_basico=cnpj_basico,
+                    fornecedor_id=fid,
+                    origem="sweep_emails_esperando_confirmacao",
+                    telefone=tel,
+                )
             await repo_e.remover(redis, message_id)
         else:
             await _encerrar_esperando_sem_canal(

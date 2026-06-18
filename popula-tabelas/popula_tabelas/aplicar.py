@@ -91,9 +91,11 @@ async def _migrar_status_ultimo_lido_e_limpar_zenvia(conn: asyncpg.Connection) -
 
 async def aplicar_schema_reenvio(dsn: str) -> None:
     sql = _sql_arquivo("reenvio.sql")
+    whatsapp = _sql_arquivo("whatsapp_envios.sql")
     conn = await asyncpg.connect(dsn)
     try:
         await conn.execute(sql)
+        await conn.execute(whatsapp)
         te = obter_identificadores_postgres().qual("emails_enviados")
         await conn.execute(f"ALTER TABLE {te} DROP COLUMN IF EXISTS telefone_sms_fallback")
         await _migrar_status_ultimo_lido_e_limpar_zenvia(conn)

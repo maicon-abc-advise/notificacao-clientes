@@ -28,6 +28,7 @@ from app.ligacoes.api.rotas import (
     webhook_vapi_debug_router,
     webhook_vapi_voice_router,
 )
+from app.whatsapp.api.rotas import whatsapp_dashboard_router, whatsapp_interno_router
 from app.orquestracao.api.router import router as orquestracao_router
 from app.reenvio.redis_app import fechar_cliente_redis, obter_cliente_redis
 from app.templates.conexao import fechar_pool
@@ -140,3 +141,5 @@ app.include_router(ligacoes_disparar_router)
 app.include_router(ligacoes_dashboard_router)
 app.include_router(webhook_vapi_voice_router)
 app.include_router(webhook_vapi_debug_router)
+app.include_router(whatsapp_interno_router)
+app.include_router(whatsapp_dashboard_router)

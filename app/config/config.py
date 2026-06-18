@@ -183,6 +183,21 @@ class Configuracao(BaseSettings):
         description="Segredo opcional para validar webhooks Vapi (header X-Vapi-Secret).",
     )
 
+    evolution_url: str = Field(default="", validation_alias="EVOLUTION_URL")
+    evolution_key: str = Field(default="", validation_alias="EVOLUTION_KEY")
+    evolution_instance: str = Field(default="BuscaFornecedor", validation_alias="EVOLUTION_INSTANCE")
+    evolution_label_name: str = Field(
+        default="Fornecedores 🤝",
+        validation_alias="EVOLUTION_LABEL_NAME",
+    )
+    evolution_label_id: str = Field(default="", validation_alias="EVOLUTION_LABEL_ID")
+    openai_api_key: str = Field(default="", validation_alias="OPENAI_API_KEY")
+    openai_model: str = Field(default="gpt-4o-mini", validation_alias="OPENAI_MODEL")
+    routine_max_falhas: int = Field(default=3, ge=1, le=10, validation_alias="ROUTINE_MAX_FALHAS")
+    routine_cooldown_hours: int = Field(default=48, ge=0, validation_alias="ROUTINE_COOLDOWN_HOURS")
+    routine_min_buscas: int = Field(default=5, ge=1, validation_alias="ROUTINE_MIN_BUSCAS")
+    whatsapp_validacao_cache_dias: int = Field(default=30, ge=1, validation_alias="WHATSAPP_VALIDACAO_CACHE_DIAS")
+
     @field_validator("ambiente", mode="before")
     @classmethod
     def _normalizar_ambiente(cls, v: Any) -> Any:

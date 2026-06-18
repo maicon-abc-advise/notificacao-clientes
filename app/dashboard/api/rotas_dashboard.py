@@ -2328,43 +2328,4 @@ async def lista_engajamento_fornecedores(
     }
 
 
-@router.get("/whatsapp/contatos")
-async def lista_whatsapp_contatos(
-    pool: PoolOrquestracao,
-    page: Annotated[int, Query(ge=1)] = 1,
-    status: str | None = None,
-    cnpj_basico: str | None = None,
-) -> dict[str, Any]:
-    p = obter_identificadores_postgres()
-    tw = p.qual("dash_contato_fornecedor")
-    page = _page_clamped(page)
-    offset = (page - 1) * PAGE_SIZE
-
-    filtros: list[str] = []
-    params: list[Any] = []
-    status_f = _texto(status)
-    cnpj_f = _busca_cnpj(cnpj_basico)
-    if cnpj_f:
-        filtros.append(f"w.cnpj_basico ILIKE {_append_param(params, cnpj_f)}")
-    if status_f:
-        filtros.append(f"w.status_contato = {_append_param(params, status_f)}")
-    where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
-
-    total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {tw} AS w {where_sql}", *params) or 0)
-    rows = await pool.fetch(
-        f"""
-        SELECT w.*
-        FROM {tw} AS w
-        {where_sql}
-        ORDER BY w.ultimo_contato_em DESC NULLS LAST, w.updated_at DESC, w.cnpj_basico DESC
-        LIMIT {PAGE_SIZE} OFFSET {offset}
-        """,
-        *params,
-    )
-    itens = [registo_para_json(r) for r in rows]
-    return {
-        "origem": "postgres",
-        "tabela_logica": "dash_contato_fornecedor",
-        "itens": itens,
-        **_meta(total, page),
-    }
+# WhatsApp: rotas em app/whatsapp/api/rotas/dashboard.py (whatsapp_envios)

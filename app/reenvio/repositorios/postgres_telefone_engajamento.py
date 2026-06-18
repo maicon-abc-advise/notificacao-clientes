@@ -170,6 +170,63 @@ async def promover_ou_gravar_sms(
     )
 
 
+async def promover_ou_gravar_whatsapp(
+    executor: _Executor,
+    *,
+    cnpj_basico: str,
+    telefone: str,
+    status: str,
+    atualizado_em: datetime | None = None,
+) -> None:
+    """Promove ``sem_canal`` → ``whatsapp`` no 1º evento; depois upsert linha ``whatsapp``."""
+    cnpj = (cnpj_basico or "").strip()
+    tel = normalizar_telefone(telefone)
+    if not cnpj or not tel:
+        return
+    ts = atualizado_em or datetime.now(UTC)
+
+    row_sem = await executor.fetchrow(
+        f"""
+        SELECT canal, status
+        FROM {_tabela()}
+        WHERE cnpj_basico = $1 AND telefone = $2 AND canal = $3
+        """,
+        cnpj,
+        tel,
+        CANAL_SEM_CANAL,
+    )
+    if row_sem is not None:
+        await executor.execute(
+            f"""
+            UPDATE {_tabela()}
+            SET canal = $4, status = $5, atualizado_em = $6
+            WHERE cnpj_basico = $1 AND telefone = $2 AND canal = $3
+            """,
+            cnpj,
+            tel,
+            CANAL_SEM_CANAL,
+            CANAL_WHATSAPP,
+            status,
+            ts,
+        )
+        return
+
+    await executor.execute(
+        f"""
+        INSERT INTO {_tabela()} (cnpj_basico, telefone, canal, status, atualizado_em, criado_em)
+        VALUES ($1, $2, $3, $4, $5, $5)
+        ON CONFLICT (cnpj_basico, telefone, canal) DO UPDATE SET
+            status = EXCLUDED.status,
+            atualizado_em = EXCLUDED.atualizado_em
+        """,
+        cnpj,
+        tel,
+        CANAL_WHATSAPP,
+        status,
+        ts,
+    )
+
+
 async def listar_contatos_sms_orquestracao(
     executor: _Executor,
     cnpj_basico: str,
