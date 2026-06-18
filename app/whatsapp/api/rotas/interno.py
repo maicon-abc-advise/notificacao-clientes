@@ -35,7 +35,7 @@ async def post_enviar_pendentes_whatsapp(
 
 @router.post("/enviar-pendentes/{envio_id}")
 async def post_enviar_pendentes_whatsapp_um(
-    envio_id: uuid.UUID,
+    envio_id: int,
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
 ) -> dict[str, Any]:
@@ -58,7 +58,7 @@ async def post_atualizar_conversas_whatsapp(
 
 @router.post("/atualizar-conversas/{envio_id}")
 async def post_atualizar_conversas_whatsapp_um(
-    envio_id: uuid.UUID,
+    envio_id: int,
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
 ) -> dict[str, Any]:
@@ -81,7 +81,7 @@ async def post_rotina_whatsapp(
 
 @router.post("/rotina/{envio_id}")
 async def post_rotina_whatsapp_um(
-    envio_id: uuid.UUID,
+    envio_id: int,
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
 ) -> dict[str, Any]:

@@ -13,6 +13,7 @@ from app.config.config import Configuracao
 from app.orquestracao.repositorios.fornecedores_repo import buscar_usuario_fornecedor_por_cnpj_basico
 from app.whatsapp.api.externo.evolution.adaptador_evolution import ErroEvolutionAPI, buscar_mensagens_chat
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
+from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
 from app.whatsapp.servicos.conversation_agent import AgentDecision, decide_next_step
 from app.whatsapp.servicos.executar_envio_whatsapp import enviar_mensagem_inicial
 from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp, variantes_telefone_whatsapp
@@ -150,7 +151,7 @@ async def executar_envio_pendentes_whatsapp(
             continue
         result.processed += 1
         rid = str(row["id"])
-        cnpj = str(row["cnpj_basico"])
+        cnpj = cnpj_de_row(row)
         status = str(row["status"])
         tel = str(row["numero_telefone"])
 
@@ -215,7 +216,7 @@ async def executar_atualizar_conversas_whatsapp(
             continue
         result.processed += 1
         rid = str(row["id"])
-        cnpj = str(row["cnpj_basico"])
+        cnpj = cnpj_de_row(row)
         status = str(row["status"])
         tel = str(row["numero_telefone"])
 
@@ -292,7 +293,7 @@ async def _aplicar_decisao(
     result: RoutineResult,
 ) -> None:
     rid = str(row["id"])
-    cnpj = str(row["cnpj_basico"])
+    cnpj = cnpj_de_row(row)
     status = str(row["status"])
     tel = str(row["numero_telefone"])
     step = decision.proximo_passo

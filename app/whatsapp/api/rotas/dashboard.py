@@ -185,7 +185,7 @@ async def post_rotina_dashboard(
 
 @router.post("/{envio_id}/enviar")
 async def post_enviar_whatsapp(
-    envio_id: uuid.UUID,
+    envio_id: int,
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
     corpo: CorpoEnviarWhatsapp | None = None,
@@ -203,7 +203,7 @@ async def post_enviar_whatsapp(
 
 @router.post("/{envio_id}/validar")
 async def post_validar_whatsapp(
-    envio_id: uuid.UUID,
+    envio_id: int,
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
 ) -> dict[str, Any]:
@@ -215,7 +215,7 @@ async def post_validar_whatsapp(
 
 @router.patch("/{envio_id}/status")
 async def patch_status_whatsapp(
-    envio_id: uuid.UUID,
+    envio_id: int,
     corpo: CorpoPatchStatus,
     pool: PoolOrquestracao,
 ) -> dict[str, Any]:
@@ -227,7 +227,7 @@ async def patch_status_whatsapp(
 
 @router.patch("/{envio_id}/falhas")
 async def patch_falhas_whatsapp(
-    envio_id: uuid.UUID,
+    envio_id: int,
     corpo: CorpoPatchFalhas,
     pool: PoolOrquestracao,
 ) -> dict[str, Any]:
@@ -246,7 +246,7 @@ async def patch_falhas_whatsapp(
 
 
 @router.get("/{envio_id}")
-async def detalhe_whatsapp(pool: PoolOrquestracao, envio_id: uuid.UUID) -> dict[str, Any]:
+async def detalhe_whatsapp(pool: PoolOrquestracao, envio_id: int) -> dict[str, Any]:
     row = await repo.buscar_por_id(pool, envio_id)
     if not row:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Envio não encontrado")

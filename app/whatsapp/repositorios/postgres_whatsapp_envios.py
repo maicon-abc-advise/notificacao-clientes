@@ -1,7 +1,8 @@
-"""Persistência de ``whatsapp_envios`` — fila/funil WhatsApp."""
+"""Persistência de ``whatsapp_envios`` — alinhado ao schema Supabase ``busca_fornecedor``."""
 
 from __future__ import annotations
 
+import json
 import uuid
 from datetime import UTC, datetime
 from typing import Any
@@ -10,29 +11,41 @@ import asyncpg
 
 from app.config.postgres_identificadores import obter_identificadores_postgres
 
+# Schema Supabase (produção): cnpj_empresa, id bigint, etapas text — sem criado_em / motivo_falha / fornecedor_id.
+_COL_CNPJ = "cnpj_empresa"
+
 
 def _tabela() -> str:
     return obter_identificadores_postgres().qual("whatsapp_envios")
 
 
-def _col_fornecedor() -> str:
-    return obter_identificadores_postgres().col_fornecedor_id
+def _select_listagem() -> str:
+    return f"""
+        w.id,
+        w.updated_at,
+        w.status,
+        w.etapa1,
+        w.etapa2,
+        w.etapa3,
+        w.whatsapp_status,
+        w.{_COL_CNPJ} AS cnpj_basico,
+        w.{_COL_CNPJ},
+        w.numero_telefone
+    """
 
 
-def _registo_para_dict(row: asyncpg.Record) -> dict[str, Any]:
-    d = dict(row)
-    for k, v in d.items():
-        if isinstance(v, datetime):
-            d[k] = v.isoformat()
-        elif isinstance(v, uuid.UUID):
-            d[k] = str(v)
-    return d
+def _parse_id(envio_id: uuid.UUID | str | int) -> int:
+    return int(envio_id)
 
 
-async def buscar_por_id(pool: asyncpg.Pool, envio_id: uuid.UUID | str) -> asyncpg.Record | None:
+def cnpj_de_row(row: asyncpg.Record | dict[str, Any]) -> str:
+    return str(row.get("cnpj_basico") or row.get("cnpj_empresa") or "").strip()
+
+
+async def buscar_por_id(pool: asyncpg.Pool, envio_id: uuid.UUID | str | int) -> asyncpg.Record | None:
     return await pool.fetchrow(
         f"SELECT * FROM {_tabela()} WHERE id = $1 LIMIT 1",
-        uuid.UUID(str(envio_id)),
+        _parse_id(envio_id),
     )
 
 
@@ -45,7 +58,7 @@ async def buscar_por_cnpj_telefone(
     return await pool.fetchrow(
         f"""
         SELECT * FROM {_tabela()}
-        WHERE cnpj_basico = $1 AND numero_telefone = $2
+        WHERE {_COL_CNPJ} = $1 AND numero_telefone = $2
         LIMIT 1
         """,
         cnpj_basico.strip(),
@@ -57,7 +70,7 @@ async def buscar_ultimo_por_cnpj(pool: asyncpg.Pool, cnpj_basico: str) -> asyncp
     return await pool.fetchrow(
         f"""
         SELECT * FROM {_tabela()}
-        WHERE cnpj_basico = $1
+        WHERE {_COL_CNPJ} = $1
         ORDER BY updated_at DESC
         LIMIT 1
         """,
@@ -72,37 +85,38 @@ async def inserir_se_ausente(
     numero_telefone: str,
     fornecedor_id: uuid.UUID | None = None,
 ) -> tuple[asyncpg.Record | None, bool]:
-    """INSERT … ON CONFLICT DO NOTHING. Retorna (linha, inseriu)."""
-    cf = _col_fornecedor()
+    _ = fornecedor_id
+    cnpj = cnpj_basico.strip()
+    tel = numero_telefone.strip()
     row = await pool.fetchrow(
         f"""
-        INSERT INTO {_tabela()} (cnpj_basico, numero_telefone, {cf}, status, whatsapp_status)
-        VALUES ($1, $2, $3, 'pendente', 'nao_verificado')
-        ON CONFLICT (cnpj_basico, numero_telefone) DO NOTHING
+        INSERT INTO {_tabela()} ({_COL_CNPJ}, numero_telefone, status, whatsapp_status)
+        VALUES ($1, $2, 'pendente', 'nao_verificado')
+        ON CONFLICT ({_COL_CNPJ}) DO NOTHING
         RETURNING *
         """,
-        cnpj_basico.strip(),
-        numero_telefone.strip(),
-        fornecedor_id,
+        cnpj,
+        tel,
     )
     if row is not None:
         return row, True
-    existente = await buscar_por_cnpj_telefone(
-        pool, cnpj_basico=cnpj_basico, numero_telefone=numero_telefone
-    )
+    existente = await buscar_por_cnpj_telefone(pool, cnpj_basico=cnpj, numero_telefone=tel)
+    if existente is None:
+        existente = await buscar_ultimo_por_cnpj(pool, cnpj)
     return existente, False
 
 
 async def atualizar_status(
     pool: asyncpg.Pool,
-    envio_id: uuid.UUID | str,
+    envio_id: uuid.UUID | str | int,
     *,
     status: str | None = None,
     whatsapp_status: str | None = None,
     motivo_falha: str | None = None,
 ) -> asyncpg.Record | None:
+    _ = motivo_falha
     sets: list[str] = ["updated_at = now()"]
-    params: list[Any] = [uuid.UUID(str(envio_id))]
+    params: list[Any] = [_parse_id(envio_id)]
     idx = 2
     if status is not None:
         sets.append(f"status = ${idx}")
@@ -112,10 +126,6 @@ async def atualizar_status(
         sets.append(f"whatsapp_status = ${idx}")
         params.append(whatsapp_status)
         idx += 1
-    if motivo_falha is not None:
-        sets.append(f"motivo_falha = ${idx}")
-        params.append(motivo_falha)
-        idx += 1
     return await pool.fetchrow(
         f"UPDATE {_tabela()} SET {', '.join(sets)} WHERE id = $1 RETURNING *",
         *params,
@@ -124,34 +134,34 @@ async def atualizar_status(
 
 async def incrementar_etapa_falha(
     pool: asyncpg.Pool,
-    envio_id: uuid.UUID | str,
+    envio_id: uuid.UUID | str | int,
     *,
     max_falhas: int = 3,
 ) -> asyncpg.Record | None:
-    """Incrementa próxima etapa vazia; se esgotar, ``concluido_falha``."""
     row = await buscar_por_id(pool, envio_id)
     if not row:
         return None
     etapas = [row["etapa1"], row["etapa2"], row["etapa3"]]
-    n = sum(1 for e in etapas if e is not None)
+    n = sum(1 for e in etapas if e is not None and str(e).strip())
     if n >= max_falhas:
-        return await atualizar_status(pool, envio_id, status="concluido_falha", motivo_falha="max_falhas_conversa")
+        return await atualizar_status(pool, envio_id, status="concluido_falha")
     col = f"etapa{n + 1}"
     novo_status = "pendente" if n + 1 < max_falhas else "concluido_falha"
-    motivo = None if n + 1 < max_falhas else "max_falhas_conversa"
-    sets = [f"{col} = now()", "updated_at = now()", f"status = ${2}"]
-    params: list[Any] = [uuid.UUID(str(envio_id)), novo_status]
-    if motivo:
-        sets.append(f"motivo_falha = ${3}")
-        params.append(motivo)
+    marca = datetime.now(UTC).isoformat()
     return await pool.fetchrow(
-        f"UPDATE {_tabela()} SET {', '.join(sets)} WHERE id = $1 RETURNING *",
-        *params,
+        f"""
+        UPDATE {_tabela()}
+        SET {col} = $2, updated_at = now(), status = $3
+        WHERE id = $1
+        RETURNING *
+        """,
+        _parse_id(envio_id),
+        marca,
+        novo_status,
     )
 
 
 async def listar_pendentes_para_envio(pool: asyncpg.Pool) -> list[asyncpg.Record]:
-    """Registros ``pendente`` elegíveis para 1º envio (serialização por telefone)."""
     return await pool.fetch(
         f"""
         SELECT w.*,
@@ -171,7 +181,6 @@ async def listar_contatados_para_atualizacao(
     *,
     max_falhas: int = 3,
 ) -> list[asyncpg.Record]:
-    """Registros ``contatado`` aguardando leitura de conversa / funil."""
     _ = max_falhas
     return await pool.fetch(
         f"""
@@ -184,7 +193,6 @@ async def listar_contatados_para_atualizacao(
 
 
 async def listar_candidatos_rotina(pool: asyncpg.Pool, *, max_falhas: int = 3) -> list[asyncpg.Record]:
-    """Legado — união de pendentes + contatados (preferir rotinas separadas)."""
     pendentes = await listar_pendentes_para_envio(pool)
     contatados = await listar_contatados_para_atualizacao(pool, max_falhas=max_falhas)
     return list(pendentes) + list(contatados)
@@ -203,7 +211,10 @@ async def contar_por_status(pool: asyncpg.Pool, *, where_extra: str = "", params
     )
     out = {"pendente": 0, "contatado": 0, "concluido_sucesso": 0, "concluido_falha": 0}
     for r in rows:
-        out[str(r["status"])] = int(r["n"])
+        st = r["status"]
+        if st is None:
+            continue
+        out[str(st)] = int(r["n"])
     return out
 
 
@@ -215,7 +226,7 @@ async def contar_whatsapp_status(pool: asyncpg.Pool) -> dict[str, int]:
         GROUP BY whatsapp_status
         """,
     )
-    return {str(r["whatsapp_status"]): int(r["n"]) for r in rows}
+    return {str(r["whatsapp_status"]): int(r["n"]) for r in rows if r["whatsapp_status"] is not None}
 
 
 async def listar_paginado(
@@ -239,7 +250,7 @@ async def listar_paginado(
         params.append(whatsapp_status)
         idx += 1
     if cnpj_basico:
-        filtros.append(f"w.cnpj_basico ILIKE ${idx}")
+        filtros.append(f"w.{_COL_CNPJ} ILIKE ${idx}")
         params.append(f"%{cnpj_basico.strip()}%")
         idx += 1
     where = f"WHERE {' AND '.join(filtros)}" if filtros else ""
@@ -247,10 +258,10 @@ async def listar_paginado(
     params.extend([limit, offset])
     rows = await pool.fetch(
         f"""
-        SELECT w.*
+        SELECT {_select_listagem()}
         FROM {_tabela()} w
         {where}
-        ORDER BY w.updated_at DESC, w.criado_em DESC
+        ORDER BY w.updated_at DESC
         LIMIT ${idx} OFFSET ${idx + 1}
         """,
         *params,
@@ -264,39 +275,45 @@ async def salvar_execucao_rotina(
     resultado: dict[str, Any],
     iniciado_em: datetime,
     finalizado_em: datetime,
-) -> uuid.UUID:
-    import json
-
-    row = await pool.fetchrow(
-        f"""
-        INSERT INTO {obter_identificadores_postgres().qual('whatsapp_rotina_execucoes')}
-            (resultado, iniciado_em, finalizado_em)
-        VALUES ($1::jsonb, $2, $3)
-        RETURNING id
-        """,
-        json.dumps(resultado),
-        iniciado_em if iniciado_em.tzinfo else iniciado_em.replace(tzinfo=UTC),
-        finalizado_em if finalizado_em.tzinfo else finalizado_em.replace(tzinfo=UTC),
-    )
-    return row["id"]
+) -> int | uuid.UUID:
+    tbl = obter_identificadores_postgres().qual("whatsapp_rotina_execucoes")
+    try:
+        row = await pool.fetchrow(
+            f"""
+            INSERT INTO {tbl} (resultado, iniciado_em, finalizado_em)
+            VALUES ($1::jsonb, $2, $3)
+            RETURNING id
+            """,
+            json.dumps(resultado),
+            iniciado_em if iniciado_em.tzinfo else iniciado_em.replace(tzinfo=UTC),
+            finalizado_em if finalizado_em.tzinfo else finalizado_em.replace(tzinfo=UTC),
+        )
+        return row["id"]
+    except asyncpg.UndefinedTableError:
+        return 0
 
 
 async def listar_execucoes_rotina(pool: asyncpg.Pool, *, limit: int = 20) -> list[asyncpg.Record]:
-    return await pool.fetch(
-        f"""
-        SELECT id, iniciado_em, finalizado_em, criado_em,
-               (resultado->>'processed')::int AS processados,
-               jsonb_array_length(COALESCE(resultado->'actions', '[]'::jsonb)) AS acoes
-        FROM {obter_identificadores_postgres().qual('whatsapp_rotina_execucoes')}
-        ORDER BY iniciado_em DESC
-        LIMIT $1
-        """,
-        limit,
-    )
+    tbl = obter_identificadores_postgres().qual("whatsapp_rotina_execucoes")
+    try:
+        return await pool.fetch(
+            f"""
+            SELECT id, iniciado_em, finalizado_em, criado_em,
+                   (resultado->>'processed')::int AS processados,
+                   jsonb_array_length(COALESCE(resultado->'actions', '[]'::jsonb)) AS acoes
+            FROM {tbl}
+            ORDER BY iniciado_em DESC
+            LIMIT $1
+            """,
+            limit,
+        )
+    except asyncpg.UndefinedTableError:
+        return []
 
 
-async def buscar_execucao_rotina(pool: asyncpg.Pool, execucao_id: uuid.UUID | str) -> asyncpg.Record | None:
-    return await pool.fetchrow(
-        f"SELECT * FROM {obter_identificadores_postgres().qual('whatsapp_rotina_execucoes')} WHERE id = $1",
-        uuid.UUID(str(execucao_id)),
-    )
+async def buscar_execucao_rotina(pool: asyncpg.Pool, execucao_id: uuid.UUID | str | int) -> asyncpg.Record | None:
+    tbl = obter_identificadores_postgres().qual("whatsapp_rotina_execucoes")
+    try:
+        return await pool.fetchrow(f"SELECT * FROM {tbl} WHERE id = $1", _parse_id(execucao_id))
+    except asyncpg.UndefinedTableError:
+        return None

@@ -22,6 +22,7 @@ from app.whatsapp.api.externo.evolution.adaptador_evolution import (
     verificar_numero_whatsapp,
 )
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
+from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
 from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import entrada_whatsapp_apos_falha_email
 from app.whatsapp.servicos.mensagem_inicial import montar_mensagem_inicial
 from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp
@@ -80,7 +81,7 @@ async def validar_e_atualizar_numero(
     if not row:
         raise ValueError("Envio WhatsApp não encontrado")
     tel = str(row["numero_telefone"])
-    cnpj = str(row["cnpj_basico"])
+    cnpj = cnpj_de_row(row)
 
     if await _cache_whatsapp_invalido(pool, cnpj, tel, cfg):
         exists = False
@@ -109,7 +110,7 @@ async def _tentar_proximo_telefone(
     cfg: Configuracao,
     row: asyncpg.Record,
 ) -> dict[str, Any] | None:
-    cnpj = str(row["cnpj_basico"])
+    cnpj = cnpj_de_row(row)
     tel_atual = str(row["numero_telefone"])
     snap = await carregar_por_cnpj_basico(pool, cnpj)
     prox = proximo_telefone_tentavel_apos_contato(snap.contatos_sms, tel_atual)
@@ -154,7 +155,7 @@ async def enviar_mensagem_inicial(
 
     status_antes = str(row["status"])
     tel = str(row["numero_telefone"])
-    cnpj = str(row["cnpj_basico"])
+    cnpj = cnpj_de_row(row)
 
     validacao = await validar_e_atualizar_numero(pool, cfg, row["id"])
     if validacao.get("acao") == "whatsapp_erro_api_retry":

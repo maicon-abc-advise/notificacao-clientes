@@ -18,6 +18,9 @@ def registo_para_json(r: asyncpg.Record) -> dict[str, Any]:
 def _valor_json(v: Any) -> Any:
     if v is None:
         return None
+    if isinstance(v, int) and not isinstance(v, bool):
+        # bigint / identity id
+        return v
     if isinstance(v, uuid.UUID):
         return str(v)
     if isinstance(v, (datetime, date)):
