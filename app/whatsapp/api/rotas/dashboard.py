@@ -7,6 +7,8 @@ import uuid
 from typing import Annotated, Any
 
 from fastapi import APIRouter, Depends, HTTPException, Query, status
+from uuid import UUID
+
 from pydantic import BaseModel, Field
 
 from app.config.config import Configuracao, obter_configuracao
@@ -22,7 +24,9 @@ from app.dashboard.api.rotas_dashboard import (
 from app.iam.rotas.dashboard_rotas import usuario_logado
 from app.orquestracao.api.dependencias import PoolOrquestracao
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
+from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import entrada_whatsapp_apos_falha_email
 from app.whatsapp.servicos.executar_envio_whatsapp import enviar_mensagem_inicial, validar_e_atualizar_numero
+from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp
 from app.whatsapp.servicos.rotina_whatsapp import (
     executar_atualizar_conversas_whatsapp,
     executar_envio_pendentes_whatsapp,
@@ -46,6 +50,24 @@ class CorpoPatchStatus(BaseModel):
 
 class CorpoPatchFalhas(BaseModel):
     limpar: bool = Field(default=False, description="Se true, zera etapas de falha")
+
+
+class CorpoCriarWhatsappPendenteDashboard(BaseModel):
+    cnpj_basico: str = Field(..., min_length=8, max_length=8)
+    telefone: str = Field(..., min_length=8)
+    fornecedor_id: UUID | None = None
+
+
+_MENSAGENS_CRIAR_WHATSAPP: dict[str, tuple[int, str]] = {
+    "whatsapp_inserido": (status.HTTP_201_CREATED, "Inserido na fila WhatsApp"),
+    "whatsapp_ja_na_fila": (status.HTTP_409_CONFLICT, "CNPJ ou telefone já está na fila"),
+    "whatsapp_ignorado_cadastrado": (status.HTTP_409_CONFLICT, "Fornecedor já cadastrou na plataforma"),
+    "whatsapp_ignorado_falha": (
+        status.HTTP_409_CONFLICT,
+        "Aguardando novas buscas antes de reabrir WhatsApp",
+    ),
+    "whatsapp_sem_telefone": (status.HTTP_400_BAD_REQUEST, "Telefone inválido ou ausente"),
+}
 
 
 @router.get("/metricas")
@@ -127,6 +149,52 @@ async def lista_whatsapp_postgres(
         "tabela_logica": "whatsapp_envios",
         "itens": itens,
         **_meta(total, page),
+    }
+
+
+@router.post("/postgres", status_code=status.HTTP_201_CREATED)
+async def post_criar_whatsapp_pendente(
+    pool: PoolOrquestracao,
+    config: Annotated[Configuracao, Depends(obter_configuracao)],
+    body: CorpoCriarWhatsappPendenteDashboard,
+) -> dict[str, Any]:
+    """Inserção manual na fila ``whatsapp_envios`` (status ``pendente``)."""
+    cnpj = body.cnpj_basico.strip()
+    try:
+        tel = normalizar_telefone_whatsapp(body.telefone)
+    except ValueError as exc:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=str(exc)) from exc
+
+    resultado = await entrada_whatsapp_apos_falha_email(
+        pool,
+        config,
+        cnpj_basico=cnpj,
+        fornecedor_id=body.fornecedor_id,
+        origem="dashboard_manual",
+        telefone=tel,
+    )
+    retorno = str(resultado.get("retorno") or "")
+    if retorno != "whatsapp_inserido":
+        codigo, msg = _MENSAGENS_CRIAR_WHATSAPP.get(
+            retorno,
+            (status.HTTP_400_BAD_REQUEST, retorno or "Não foi possível inserir na fila"),
+        )
+        raise HTTPException(status_code=codigo, detail=msg)
+
+    envio_id = resultado.get("id")
+    row = await repo.buscar_por_id(pool, envio_id) if envio_id else None
+    if row is None:
+        row = await repo.buscar_por_cnpj_telefone(pool, cnpj_basico=cnpj, numero_telefone=tel)
+    if row is None:
+        raise HTTPException(
+            status_code=status.HTTP_500_INTERNAL_SERVER_ERROR,
+            detail="Inserido, mas registro não encontrado",
+        )
+    return {
+        "origem": "postgres",
+        "tabela_logica": "whatsapp_envios",
+        "item": registo_para_json(row),
+        "retorno": retorno,
     }
 
 

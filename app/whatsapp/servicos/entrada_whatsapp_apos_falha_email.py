@@ -29,7 +29,7 @@ RetornoEntrada = Literal[
     "whatsapp_sem_telefone",
 ]
 
-_ORIGEM_ISENTA_APARICOES = frozenset({"proximo_telefone_invalido"})
+_ORIGEM_ISENTA_APARICOES = frozenset({"proximo_telefone_invalido", "dashboard_manual"})
 
 
 def _q(schema: str) -> str:
