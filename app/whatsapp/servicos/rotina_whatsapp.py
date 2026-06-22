@@ -200,7 +200,10 @@ async def executar_atualizar_conversas_whatsapp(
     *,
     envio_id: str | None = None,
 ) -> RoutineResult:
-    """Lê chat Evolution e atualiza funil para registros ``contatado``."""
+    """Lê chat Evolution e atualiza funil para registros ``contatado``.
+
+    Com ``envio_id`` (ação manual por registro), ignora o cooldown configurado.
+    """
     result = RoutineResult(tipo="atualizar_conversas", started_at=_utcnow())
     now = result.started_at
     cooldown_h = cfg.routine_cooldown_hours
@@ -243,7 +246,7 @@ async def executar_atualizar_conversas_whatsapp(
                 )
                 continue
 
-            if not _cooldown_passed(row["updated_at"], now, cooldown_h):
+            if envio_id is None and not _cooldown_passed(row["updated_at"], now, cooldown_h):
                 result.actions.append(
                     RoutineAction(
                         id=rid,
