@@ -24,6 +24,7 @@ from app.whatsapp.api.externo.evolution.adaptador_evolution import (
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
 from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
 from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import entrada_whatsapp_apos_falha_email
+from app.whatsapp.repositorios.redis_contato_fornecedores import enfileirar_contato_fornecedor
 from app.whatsapp.servicos.mensagem_inicial import montar_mensagem_inicial
 from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp
 from app.whatsapp.servicos.tocar_engajamento_whatsapp import tocar_engajamento_whatsapp, WhatsappEngajamentoEstado
@@ -192,12 +193,23 @@ async def enviar_mensagem_inicial(
         WhatsappEngajamentoEstado.WHATSAPP_CONTATADO,
         telefone=tel,
     )
+
+    redis_telefones: list[str] | None = None
+    redis_enqueued = False
+    try:
+        redis_telefones = await enfileirar_contato_fornecedor(cfg, tel)
+        redis_enqueued = redis_telefones is not None
+    except Exception as exc:
+        _log.warning("Fila contato-fornecedores não enfileirada (envio WhatsApp ok): %s", exc)
+
     return {
         "acao": "enviar_mensagem",
         "id": str(row["id"]),
         "status_antes": status_antes,
         "status_depois": "contatado",
         "mensagem_enviada": True,
+        "redis_enqueued": redis_enqueued,
+        "redis_telefones": redis_telefones,
         "numero_telefone": tel,
         "registro": dict(atualizado) if atualizado else None,
     }

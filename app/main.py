@@ -31,6 +31,7 @@ from app.ligacoes.api.rotas import (
 from app.whatsapp.api.rotas import whatsapp_dashboard_router, whatsapp_interno_router
 from app.orquestracao.api.router import router as orquestracao_router
 from app.reenvio.redis_app import fechar_cliente_redis, obter_cliente_redis
+from app.whatsapp.repositorios.redis_contato_fornecedores import fechar_cliente_contato_fornecedores
 from app.templates.conexao import fechar_pool
 
 _log = logging.getLogger(__name__)
@@ -56,6 +57,7 @@ async def lifespan(_app: FastAPI):
     yield
     await fechar_pool()
     await fechar_cliente_redis()
+    await fechar_cliente_contato_fornecedores()
 
 app = FastAPI(
     title="API do sistema de notificações da ABC Advise",

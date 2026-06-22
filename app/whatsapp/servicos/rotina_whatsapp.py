@@ -11,7 +11,11 @@ import asyncpg
 
 from app.config.config import Configuracao
 from app.orquestracao.repositorios.fornecedores_repo import buscar_usuario_fornecedor_por_cnpj_basico
-from app.whatsapp.api.externo.evolution.adaptador_evolution import ErroEvolutionAPI, buscar_mensagens_chat
+from app.whatsapp.api.externo.evolution.adaptador_evolution import (
+    ErroEvolutionAPI,
+    buscar_mensagens_chat,
+    jid_whatsapp,
+)
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
 from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
 from app.whatsapp.servicos.conversation_agent import AgentDecision, decide_next_step
@@ -33,6 +37,7 @@ class RoutineAction:
     status_antes: str | None = None
     status_depois: str | None = None
     agent_source: str | None = None
+    agent_debug: dict[str, Any] | None = None
 
 
 @dataclass
@@ -61,6 +66,7 @@ class RoutineResult:
                     "status_antes": a.status_antes,
                     "status_depois": a.status_depois,
                     "agent_source": a.agent_source,
+                    "agent_debug": a.agent_debug,
                 }
                 for a in self.actions
             ],
@@ -264,7 +270,13 @@ async def executar_atualizar_conversas_whatsapp(
                 continue
 
             messages = await _fetch_conversation(cfg, tel)
-            ctx = {"cnpj_basico": cnpj, "status": status, "cadastrado": False}
+            ctx = {
+                "cnpj_basico": cnpj,
+                "status": status,
+                "cadastrado": False,
+                "telefone": tel,
+                "remote_jid": jid_whatsapp(tel),
+            }
             decision = decide_next_step(messages, ctx, since=row["updated_at"], cfg=cfg)
             await _aplicar_decisao(pool, cfg, row, decision, result)
 
@@ -305,6 +317,7 @@ async def _aplicar_decisao(
     tel = str(row["numero_telefone"])
     step = decision.proximo_passo
     detail = f"{decision.motivo} [{decision.source}]"
+    dbg = decision.debug
 
     if step == "concluir_sucesso":
         await repo.atualizar_status(pool, row["id"], status="concluido_sucesso")
@@ -312,7 +325,9 @@ async def _aplicar_decisao(
             pool, row.get("fornecedor_id"), cnpj, WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_SUCESSO, telefone=tel
         )
         result.actions.append(
-            RoutineAction(rid, cnpj, "concluir_sucesso", detail, status, "concluido_sucesso", decision.source)
+            RoutineAction(
+                rid, cnpj, "concluir_sucesso", detail, status, "concluido_sucesso", decision.source, dbg
+            )
         )
         return
 
@@ -322,7 +337,7 @@ async def _aplicar_decisao(
             pool, row.get("fornecedor_id"), cnpj, WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_FALHA, telefone=tel
         )
         result.actions.append(
-            RoutineAction(rid, cnpj, "concluir_falha", detail, status, "concluido_falha", decision.source)
+            RoutineAction(rid, cnpj, "concluir_falha", detail, status, "concluido_falha", decision.source, dbg)
         )
         return
 
@@ -330,7 +345,7 @@ async def _aplicar_decisao(
         atualizado = await repo.incrementar_etapa_falha(pool, row["id"], max_falhas=cfg.routine_max_falhas)
         novo = str(atualizado["status"]) if atualizado else status
         result.actions.append(
-            RoutineAction(rid, cnpj, "falha_retorna_pendente", detail, status, novo, decision.source)
+            RoutineAction(rid, cnpj, "falha_retorna_pendente", detail, status, novo, decision.source, dbg)
         )
         return
 
@@ -342,11 +357,11 @@ async def _aplicar_decisao(
             await enviar_texto(cfg, tel, decision.mensagem_resposta)
             await repo.atualizar_status(pool, row["id"], status="contatado")
             result.actions.append(
-                RoutineAction(rid, cnpj, "enviar_resposta", detail, status, "contatado", decision.source)
+                RoutineAction(rid, cnpj, "enviar_resposta", detail, status, "contatado", decision.source, dbg)
             )
         except ErroEvolutionAPI as exc:
             result.errors.append(f"{rid}: {exc}")
         return
 
     action = "aguardar_resposta" if step == "aguardar_resposta" else "sem_acao"
-    result.actions.append(RoutineAction(rid, cnpj, action, detail, status, status, decision.source))
+    result.actions.append(RoutineAction(rid, cnpj, action, detail, status, status, decision.source, dbg))

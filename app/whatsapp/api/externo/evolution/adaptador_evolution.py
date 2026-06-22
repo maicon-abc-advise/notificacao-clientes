@@ -88,6 +88,11 @@ def _whatsapp_jid(number: str) -> str:
     return f"{digits}@s.whatsapp.net"
 
 
+def jid_whatsapp(number: str) -> str:
+    """JID WhatsApp usado na consulta Evolution (``remoteJid``)."""
+    return _whatsapp_jid(number)
+
+
 async def buscar_mensagens_chat(
     cfg: Configuracao,
     number: str,

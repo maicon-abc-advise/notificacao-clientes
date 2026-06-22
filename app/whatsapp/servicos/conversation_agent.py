@@ -6,6 +6,7 @@ import json
 import logging
 from dataclasses import dataclass
 from datetime import datetime
+from typing import Any
 
 from app.config.config import Configuracao
 from app.whatsapp.servicos.conversation_analysis import (
@@ -25,6 +26,8 @@ VALID_STEPS = frozenset({
     "sem_acao",
 })
 
+_SYSTEM_PROMPT = "Analise conversa B2B WhatsApp e retorne JSON."
+
 
 @dataclass
 class AgentDecision:
@@ -33,6 +36,29 @@ class AgentDecision:
     mensagem_resposta: str | None = None
     outcome: ConversationOutcome = ConversationOutcome.INCONCLUSIVO
     source: str = "heuristica"
+    debug: dict[str, Any] | None = None
+
+
+def _format_thread(messages: list[dict]) -> str:
+    thread_lines: list[str] = []
+    for msg in messages:
+        incoming = not (msg.get("key") or {}).get("fromMe", msg.get("fromMe", False))
+        prefix = "Fornecedor" if incoming else "Cláudia"
+        text = msg.get("message", {})
+        if isinstance(text, dict):
+            text = text.get("conversation") or text.get("extendedTextMessage", {}).get("text") or ""
+        thread_lines.append(f"{prefix}: {text}")
+    return "\n".join(thread_lines) or "(vazio)"
+
+
+def _debug_base(messages: list[dict], ctx: dict) -> dict[str, Any]:
+    return {
+        "telefone": ctx.get("telefone"),
+        "remote_jid": ctx.get("remote_jid"),
+        "evolution_filtro": {"where": {"key": {"remoteJid": ctx.get("remote_jid")}}},
+        "evolution_mensagens_total": len(messages),
+        "thread": _format_thread(messages),
+    }
 
 
 def _legacy_decision(analysis: AnalyzedConversation) -> AgentDecision:
@@ -65,40 +91,53 @@ def decide_next_step(
             motivo="Fornecedor já cadastrado na plataforma",
             outcome=ConversationOutcome.SUCESSO,
             source="regra",
+            debug={
+                "openai_nao_chamada": "fornecedor já cadastrado na plataforma",
+                "evolution_mensagens_total": len(messages),
+            },
         )
 
+    debug = _debug_base(messages, ctx)
     api_key = (cfg.openai_api_key if cfg else "") or ""
     if not api_key.strip():
-        return _legacy_decision(analyze_conversation(messages, since=since))
+        analysis = analyze_conversation(messages, since=since)
+        decision = _legacy_decision(analysis)
+        debug["modo"] = "heuristica"
+        debug["analise"] = {
+            "outcome": analysis.outcome.value,
+            "motivo": analysis.reason,
+            "mensagens_fornecedor": analysis.incoming_count,
+        }
+        decision.debug = debug
+        return decision
 
     try:
         from openai import OpenAI
 
-        client = OpenAI(api_key=api_key.strip())
-        thread_lines = []
-        for msg in messages:
-            incoming = not (msg.get("key") or {}).get("fromMe", msg.get("fromMe", False))
-            prefix = "Fornecedor" if incoming else "Cláudia"
-            text = msg.get("message", {})
-            if isinstance(text, dict):
-                text = text.get("conversation") or text.get("extendedTextMessage", {}).get("text") or ""
-            thread_lines.append(f"{prefix}: {text}")
-        thread = "\n".join(thread_lines) or "(vazio)"
+        thread = debug["thread"]
         prompt = (
             f"Contexto: CNPJ {ctx.get('cnpj_basico')} status={ctx.get('status')} "
             f"cadastrado={ctx.get('cadastrado')}\nHistórico:\n{thread}\n"
             'Retorne JSON: {"proximo_passo": "...", "motivo": "...", "mensagem_resposta": null}'
         )
-        resp = client.chat.completions.create(
-            model=(cfg.openai_model if cfg else "gpt-4o-mini") or "gpt-4o-mini",
-            messages=[
-                {"role": "system", "content": "Analise conversa B2B WhatsApp e retorne JSON."},
+        model = (cfg.openai_model if cfg else "gpt-4o-mini") or "gpt-4o-mini"
+        openai_request = {
+            "model": model,
+            "messages": [
+                {"role": "system", "content": _SYSTEM_PROMPT},
                 {"role": "user", "content": prompt},
             ],
-            response_format={"type": "json_object"},
-            temperature=0.3,
-        )
+            "response_format": {"type": "json_object"},
+            "temperature": 0.3,
+        }
+        debug["modo"] = "openai"
+        debug["openai_request"] = openai_request
+
+        client = OpenAI(api_key=api_key.strip())
+        resp = client.chat.completions.create(**openai_request)
         parsed = json.loads(resp.choices[0].message.content or "{}")
+        debug["openai_resposta"] = parsed
+
         step = str(parsed.get("proximo_passo", "sem_acao"))
         if step not in VALID_STEPS:
             step = "sem_acao"
@@ -107,9 +146,19 @@ def decide_next_step(
             motivo=str(parsed.get("motivo") or ""),
             mensagem_resposta=parsed.get("mensagem_resposta"),
             source="openai",
+            debug=debug,
         )
     except Exception as exc:
         _log.warning("OpenAI indisponível, heurística: %s", exc)
-        decision = _legacy_decision(analyze_conversation(messages, since=since))
+        analysis = analyze_conversation(messages, since=since)
+        decision = _legacy_decision(analysis)
         decision.motivo = f"{decision.motivo} (fallback: {exc})"
+        debug["modo"] = "heuristica_fallback"
+        debug["erro_openai"] = str(exc)
+        debug["analise"] = {
+            "outcome": analysis.outcome.value,
+            "motivo": analysis.reason,
+            "mensagens_fornecedor": analysis.incoming_count,
+        }
+        decision.debug = debug
         return decision

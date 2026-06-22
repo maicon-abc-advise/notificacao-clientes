@@ -60,6 +60,20 @@ class Configuracao(BaseSettings):
     redis_url_fallback: str | None = Field(default=None, validation_alias="REDIS_URL")
     redis_url: str = ""
 
+    redis_contato_fornecedores_url_test: str | None = Field(
+        default=None,
+        validation_alias="REDIS_CONTATO_FORNECEDORES_URL_TEST",
+    )
+    redis_contato_fornecedores_url_prod: str | None = Field(
+        default=None,
+        validation_alias="REDIS_CONTATO_FORNECEDORES_URL_PROD",
+    )
+    redis_contato_fornecedores_url_fallback: str | None = Field(
+        default=None,
+        validation_alias="REDIS_CONTATO_FORNECEDORES_URL",
+    )
+    redis_contato_fornecedores_url: str = ""
+
     database_url_test: str | None = Field(default=None, validation_alias="DATABASE_URL_TEST")
     database_url_prod: str | None = Field(default=None, validation_alias="DATABASE_URL_PROD")
     database_url_fallback: str | None = Field(
@@ -271,6 +285,12 @@ class Configuracao(BaseSettings):
                 "ou REDIS_URL como retorno.",
             )
         object.__setattr__(self, "redis_url", pick_redis)
+
+        rc_test = _strip(self.redis_contato_fornecedores_url_test)
+        rc_prod = _strip(self.redis_contato_fornecedores_url_prod)
+        rc_fb = _strip(self.redis_contato_fornecedores_url_fallback)
+        pick_rc = (rc_test if local else rc_prod) or rc_fb
+        object.__setattr__(self, "redis_contato_fornecedores_url", pick_rc)
 
         d_test, d_prod = _strip(self.database_url_test), _strip(self.database_url_prod)
         d_fb = _strip(self.database_url_fallback)
