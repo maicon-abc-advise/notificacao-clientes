@@ -2310,6 +2310,26 @@ async def _whatsapp_resumo_por_cnpjs(pool: PoolOrquestracao, cnpjs: list[str]) -
     return out
 
 
+async def _cadastrados_plataforma_por_cnpjs(pool: PoolOrquestracao, cnpjs: list[str]) -> set[str]:
+    """CNPJs com linha em ``usuario_fornecedor`` (tabela ``fornecedores`` no schema)."""
+    if not cnpjs:
+        return set()
+    p = obter_identificadores_postgres()
+    tf = p.qual("fornecedores")
+    try:
+        rows = await pool.fetch(
+            f"""
+            SELECT DISTINCT cnpj_basico
+            FROM {tf}
+            WHERE cnpj_basico = ANY($1::text[])
+            """,
+            cnpjs,
+        )
+    except Exception:
+        return set()
+    return {str(r["cnpj_basico"]) for r in rows if r["cnpj_basico"]}
+
+
 def _filtro_apenas_convertidos(convertidos: str | None) -> bool:
     s = (convertidos or "").strip().lower()
     return s in ("1", "true", "sim", "yes", "on")
@@ -2360,11 +2380,18 @@ async def lista_engajamento_fornecedores(
         *params,
     )
     cnpjs = [str(r["cnpj_basico"]) for r in rows]
-    contatos_sms_por_cnpj, telefones_por_cnpj, aparicoes_por_cnpj, whatsapp_por_cnpj = await asyncio.gather(
+    (
+        contatos_sms_por_cnpj,
+        telefones_por_cnpj,
+        aparicoes_por_cnpj,
+        whatsapp_por_cnpj,
+        cadastrados_plataforma,
+    ) = await asyncio.gather(
         listar_contatos_sms_por_cnpjs(pool, cnpjs),
         listar_telefones_agrupados_por_cnpjs(pool, cnpjs),
         _contar_aparicoes_por_cnpjs(pool, cnpjs),
         _whatsapp_resumo_por_cnpjs(pool, cnpjs),
+        _cadastrados_plataforma_por_cnpjs(pool, cnpjs),
     )
     min_aparicoes_wa = obter_configuracao().routine_min_buscas
     itens: list[dict[str, Any]] = []
@@ -2379,6 +2406,7 @@ async def lista_engajamento_fornecedores(
             item["telefones_engajamento"] = telefones
         item["aparicoes_total"] = aparicoes_por_cnpj.get(cnpj, int(r.get("aparicoes_busca") or 0))
         item["aparicoes_minimo_whatsapp"] = min_aparicoes_wa
+        item["cadastrado_plataforma"] = cnpj in cadastrados_plataforma
         wa = whatsapp_por_cnpj.get(cnpj)
         if wa:
             item["whatsapp_resumo"] = wa
