@@ -88,11 +88,12 @@ async def inserir_se_ausente(
     _ = fornecedor_id
     cnpj = cnpj_basico.strip()
     tel = numero_telefone.strip()
+    # Produção (Supabase): UNIQUE em cnpj_empresa (`idx_whatsapp_envios_cnpj`) — 1 linha por CNPJ.
     row = await pool.fetchrow(
         f"""
         INSERT INTO {_tabela()} ({_COL_CNPJ}, numero_telefone, status, whatsapp_status)
         VALUES ($1, $2, 'pendente', 'nao_verificado')
-        ON CONFLICT ({_COL_CNPJ}, numero_telefone) DO NOTHING
+        ON CONFLICT ({_COL_CNPJ}) DO NOTHING
         RETURNING *
         """,
         cnpj,
