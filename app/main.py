@@ -122,6 +122,29 @@ async def _sem_tabela_postgres(_request: Request, _exc: asyncpg.exceptions.Undef
     )
 
 
+@app.exception_handler(asyncpg.exceptions.UndefinedColumnError)
+async def _sem_coluna_postgres(_request: Request, exc: asyncpg.exceptions.UndefinedColumnError) -> JSONResponse:
+    return JSONResponse(
+        status_code=503,
+        content={
+            "detail": (
+                "Postgres sem coluna necessária. Aplique as migrações recentes "
+                "(ex.: engajamento_whatsapp_ligacao.sql, telefone_engajamento.sql). "
+                f"Erro: {exc}"
+            ),
+        },
+    )
+
+
+@app.exception_handler(asyncpg.PostgresError)
+async def _erro_postgres_generico(_request: Request, exc: asyncpg.PostgresError) -> JSONResponse:
+    _log.exception("Erro Postgres não tratado: %s", exc)
+    return JSONResponse(
+        status_code=503,
+        content={"detail": f"Erro no Postgres: {type(exc).__name__}: {exc}"},
+    )
+
+
 app.include_router(saude.router, tags=["saúde"])
 app.include_router(clique_router)
 app.include_router(ping_autenticado.router, tags=["autenticação"])

@@ -92,7 +92,7 @@ async def inserir_se_ausente(
         f"""
         INSERT INTO {_tabela()} ({_COL_CNPJ}, numero_telefone, status, whatsapp_status)
         VALUES ($1, $2, 'pendente', 'nao_verificado')
-        ON CONFLICT ({_COL_CNPJ}) DO NOTHING
+        ON CONFLICT ({_COL_CNPJ}, numero_telefone) DO NOTHING
         RETURNING *
         """,
         cnpj,
