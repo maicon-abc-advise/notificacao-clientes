@@ -33,6 +33,7 @@ from app.reenvio.repositorios.postgres_telefone_engajamento import (
 )
 from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as IDX_SMS_PEND
 from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_pend
+from app.config.config import obter_configuracao
 from app.reenvio.servicos.n8n_claims import claim_n8n_ativo
 
 router = APIRouter(
@@ -2257,6 +2258,58 @@ async def metricas_engajamento(pool: PoolOrquestracao) -> dict[str, Any]:
     }
 
 
+async def _contar_aparicoes_por_cnpjs(pool: PoolOrquestracao, cnpjs: list[str]) -> dict[str, int]:
+    if not cnpjs:
+        return {}
+    p = obter_identificadores_postgres()
+    ta = p.qual("aparicoes")
+    try:
+        rows = await pool.fetch(
+            f"""
+            SELECT cnpj_basico, COUNT(*)::int AS n
+            FROM {ta}
+            WHERE cnpj_basico = ANY($1::text[])
+            GROUP BY cnpj_basico
+            """,
+            cnpjs,
+        )
+    except Exception:
+        return {}
+    return {str(r["cnpj_basico"]): int(r["n"] or 0) for r in rows}
+
+
+async def _whatsapp_resumo_por_cnpjs(pool: PoolOrquestracao, cnpjs: list[str]) -> dict[str, dict[str, Any]]:
+    if not cnpjs:
+        return {}
+    p = obter_identificadores_postgres()
+    tw = p.qual("whatsapp_envios")
+    try:
+        rows = await pool.fetch(
+            f"""
+            SELECT DISTINCT ON (cnpj_empresa)
+                cnpj_empresa AS cnpj_basico,
+                status,
+                numero_telefone,
+                whatsapp_status
+            FROM {tw}
+            WHERE cnpj_empresa = ANY($1::text[])
+            ORDER BY cnpj_empresa, updated_at DESC NULLS LAST
+            """,
+            cnpjs,
+        )
+    except Exception:
+        return {}
+    out: dict[str, dict[str, Any]] = {}
+    for r in rows:
+        cnpj = str(r["cnpj_basico"])
+        out[cnpj] = {
+            "status": r["status"],
+            "numero_telefone": r["numero_telefone"],
+            "whatsapp_status": r["whatsapp_status"],
+        }
+    return out
+
+
 def _filtro_apenas_convertidos(convertidos: str | None) -> bool:
     s = (convertidos or "").strip().lower()
     return s in ("1", "true", "sim", "yes", "on")
@@ -2307,8 +2360,13 @@ async def lista_engajamento_fornecedores(
         *params,
     )
     cnpjs = [str(r["cnpj_basico"]) for r in rows]
-    contatos_sms_por_cnpj = await listar_contatos_sms_por_cnpjs(pool, cnpjs)
-    telefones_por_cnpj = await listar_telefones_agrupados_por_cnpjs(pool, cnpjs)
+    contatos_sms_por_cnpj, telefones_por_cnpj, aparicoes_por_cnpj, whatsapp_por_cnpj = await asyncio.gather(
+        listar_contatos_sms_por_cnpjs(pool, cnpjs),
+        listar_telefones_agrupados_por_cnpjs(pool, cnpjs),
+        _contar_aparicoes_por_cnpjs(pool, cnpjs),
+        _whatsapp_resumo_por_cnpjs(pool, cnpjs),
+    )
+    min_aparicoes_wa = obter_configuracao().routine_min_buscas
     itens: list[dict[str, Any]] = []
     for r in rows:
         item = registo_para_json(r)
@@ -2319,6 +2377,11 @@ async def lista_engajamento_fornecedores(
         telefones = telefones_por_cnpj.get(cnpj) or []
         if telefones:
             item["telefones_engajamento"] = telefones
+        item["aparicoes_total"] = aparicoes_por_cnpj.get(cnpj, int(r.get("aparicoes_busca") or 0))
+        item["aparicoes_minimo_whatsapp"] = min_aparicoes_wa
+        wa = whatsapp_por_cnpj.get(cnpj)
+        if wa:
+            item["whatsapp_resumo"] = wa
         itens.append(item)
     return {
         "origem": "postgres",
