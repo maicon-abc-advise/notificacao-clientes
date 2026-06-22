@@ -70,8 +70,11 @@ async def _contar_aparicoes(
 
 
 async def _fornecedor_cadastrou(pool: asyncpg.Pool, cnpj_basico: str) -> bool:
-    row = await buscar_usuario_fornecedor_por_cnpj_basico(pool, cnpj_basico=cnpj_basico)
-    return row is not None
+    try:
+        await buscar_usuario_fornecedor_por_cnpj_basico(pool, cnpj_basico=cnpj_basico)
+        return True
+    except LookupError:
+        return False
 
 
 def _resposta_entrada(
