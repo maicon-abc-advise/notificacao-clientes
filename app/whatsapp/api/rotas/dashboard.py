@@ -281,6 +281,24 @@ async def post_validar_whatsapp(
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail=str(e)) from e
 
 
+@router.post("/{envio_id}/atualizar-conversa")
+async def post_atualizar_conversa_whatsapp(
+    envio_id: int,
+    pool: PoolOrquestracao,
+    config: Annotated[Configuracao, Depends(obter_configuracao)],
+) -> dict[str, Any]:
+    """Lê chat Evolution e atualiza funil de um único registro ``contatado``."""
+    row = await repo.buscar_por_id(pool, envio_id)
+    if not row:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="Envio não encontrado")
+    if str(row["status"]) != "contatado":
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="Envio não está contatado",
+        )
+    return (await executar_atualizar_conversas_whatsapp(pool, config, envio_id=str(envio_id))).to_dict()
+
+
 @router.patch("/{envio_id}/status")
 async def patch_status_whatsapp(
     envio_id: int,
