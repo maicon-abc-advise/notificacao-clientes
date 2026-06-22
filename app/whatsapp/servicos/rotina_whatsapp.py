@@ -96,7 +96,7 @@ async def _fetch_conversation(cfg: Configuracao, telefone: str) -> list[dict]:
 
 
 async def _cadastrou(pool: asyncpg.Pool, cnpj_basico: str) -> bool:
-    return await buscar_usuario_fornecedor_por_cnpj_basico(pool, cnpj_basico) is not None
+    return await buscar_usuario_fornecedor_por_cnpj_basico(pool, cnpj_basico=cnpj_basico) is not None
 
 
 def _mesclar_resultados(*partes: RoutineResult) -> RoutineResult:
