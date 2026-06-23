@@ -6,7 +6,9 @@ from typing import Any
 
 MESSAGE_TEMPLATE = """Oi, tudo bem?
 
-Vi que vocês atendem o segmento de {segmento}. Estamos com alguns compradores corporativos buscando fornecedores desse nicho na nossa rede esta semana.
+Somos o BuscaFornecedor, uma plataforma que conecta compradores e fornecedores.
+
+Entramos em contato porque sua empresa foi identificada como uma possível fornecedora para uma busca realizada recentemente em nossa rede.
 
 Vocês teriam capacidade para receber novos pedidos de cotação atualmente?"""
 
@@ -23,8 +25,8 @@ def _segmento_label(segmento: str | None) -> str:
     return (segmento or "").strip() or "seu segmento"
 
 
-def montar_mensagem_inicial(segmento: str | None) -> str:
-    return MESSAGE_TEMPLATE.format(segmento=_segmento_label(segmento))
+def montar_mensagem_inicial(_segmento: str | None = None) -> str:
+    return MESSAGE_TEMPLATE
 
 
 def montar_mensagem_followup_cadastro(segmento: str | None) -> str:
