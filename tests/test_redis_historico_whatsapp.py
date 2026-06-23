@@ -23,7 +23,7 @@ def test_formatar_linha_agente_historico() -> None:
 
 def test_append_mensagem_agente_historico_redis_usa_chave_do_banco_sem_nove() -> None:
     mock_redis = AsyncMock()
-    mock_redis.lpush = AsyncMock(return_value=1)
+    mock_redis.rpush = AsyncMock(return_value=1)
 
     async def _run():
         with patch(
@@ -38,7 +38,7 @@ def test_append_mensagem_agente_historico_redis_usa_chave_do_banco_sem_nove() ->
 
     key = asyncio.run(_run())
     assert key == "553592373421@s.whatsapp.net"
-    mock_redis.lpush.assert_awaited_once_with(
+    mock_redis.rpush.assert_awaited_once_with(
         "553592373421@s.whatsapp.net",
         "Agent: Oi, tudo bem?\n\nVi que vocês atendem o segmento.",
     )
@@ -46,7 +46,7 @@ def test_append_mensagem_agente_historico_redis_usa_chave_do_banco_sem_nove() ->
 
 def test_append_mensagem_agente_historico_redis_usa_chave_do_banco_com_nove() -> None:
     mock_redis = AsyncMock()
-    mock_redis.lpush = AsyncMock(return_value=1)
+    mock_redis.rpush = AsyncMock(return_value=1)
 
     async def _run():
         with patch(
@@ -58,59 +58,18 @@ def test_append_mensagem_agente_historico_redis_usa_chave_do_banco_com_nove() ->
 
     key = asyncio.run(_run())
     assert key == "5535992373421@s.whatsapp.net"
-    mock_redis.lpush.assert_awaited_once_with(
+    mock_redis.rpush.assert_awaited_once_with(
         "5535992373421@s.whatsapp.net",
         "Agent: mensagem inicial",
     )
 
 
-def test_merge_historico_duas_listas_prepend_agente_na_variante_alternativa() -> None:
-    from app.whatsapp.repositorios.redis_historico_whatsapp import _merge_historico_duas_listas
-
-    msgs_canon = [
-        {"key": {"fromMe": False}, "message": {"conversation": "sim, tenho interesse"}},
-    ]
-    msgs_alt = [
-        {"key": {"fromMe": True}, "message": {"conversation": "mensagem inicial"}},
-    ]
-    merged = _merge_historico_duas_listas(msgs_canon, msgs_alt)
-    assert len(merged) == 2
-    assert merged[0]["message"]["conversation"] == "mensagem inicial"
-    assert merged[1]["message"]["conversation"] == "sim, tenho interesse"
-
-
-def test_buscar_historico_redis_n8n_unifica_duas_chaves() -> None:
-    mock_redis = AsyncMock()
-    mock_redis.lrange = AsyncMock(
-        side_effect=[
-            ["sim, tenho interesse", "Agent: primeira mensagem"],
-            ["Agent: mensagem inicial"],
-        ],
-    )
-
-    async def _run():
-        with patch(
-            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
-            new_callable=AsyncMock,
-            return_value=mock_redis,
-        ):
-            return await buscar_historico_redis_n8n("553592373421")
-
-    result = asyncio.run(_run())
-    assert result.raw_total == 3
-    assert len(result.messages) == 3
-    assert result.messages[0]["message"]["conversation"] == "mensagem inicial"
-    assert result.messages[1]["message"]["conversation"] == "primeira mensagem"
-    assert result.messages[2]["message"]["conversation"] == "sim, tenho interesse"
-    assert mock_redis.lrange.await_count == 2
-
-
-def test_parse_lista_redis_n8n_ordem_cronologica() -> None:
+def test_parse_lista_redis_n8n_ordem_cronologica_rpush() -> None:
     jid = "553592373421@s.whatsapp.net"
     raw = [
-        "Agent: segunda mensagem",
-        "sim, tenho interesse",
         "Agent: primeira mensagem",
+        "sim, tenho interesse",
+        "Agent: segunda mensagem",
     ]
     msgs = parse_lista_redis_n8n(raw, jid)
     assert len(msgs) == 3
@@ -122,9 +81,29 @@ def test_parse_lista_redis_n8n_ordem_cronologica() -> None:
     assert msgs[2]["key"]["fromMe"] is True
 
 
+def test_parse_lista_redis_n8n_conversa_intercalada() -> None:
+    """Thread intercalado Cláudia ↔ Fornecedor (ordem RPUSH / WhatsApp real)."""
+    jid = "553592373421@s.whatsapp.net"
+    raw = [
+        "Agent: Oi, tudo bem? Vi que vocês atendem o segmento.",
+        "sim, tenho interesse",
+        "Agent: Ótimo! Consegue se cadastrar no portal?",
+        "Me cadastrei",
+        "já finalizei",
+    ]
+    msgs = parse_lista_redis_n8n(raw, jid)
+    assert len(msgs) == 5
+    assert msgs[0]["key"]["fromMe"] is True
+    assert msgs[1]["key"]["fromMe"] is False
+    assert msgs[2]["key"]["fromMe"] is True
+    assert msgs[3]["key"]["fromMe"] is False
+    assert msgs[4]["key"]["fromMe"] is False
+    assert msgs[3]["message"]["conversation"] == "Me cadastrei"
+
+
 def test_parse_lista_redis_n8n_prefixos_opcionais() -> None:
     jid = "5511999999999@s.whatsapp.net"
-    raw = ["Fornecedor: olá", "Agent:Oi!"]
+    raw = ["Agent:Oi!", "Fornecedor: olá"]
     msgs = parse_lista_redis_n8n(raw, jid)
     assert msgs[0]["message"]["conversation"] == "Oi!"
     assert msgs[0]["key"]["fromMe"] is True
@@ -132,12 +111,12 @@ def test_parse_lista_redis_n8n_prefixos_opcionais() -> None:
     assert msgs[1]["key"]["fromMe"] is False
 
 
-def test_buscar_historico_redis_n8n_lrange_variantes() -> None:
+def test_buscar_historico_redis_n8n_chave_unica() -> None:
     mock_redis = AsyncMock()
     mock_redis.lrange = AsyncMock(
-        side_effect=[
-            [],
-            ["Agent: mensagem inicial", "pode enviar"],
+        return_value=[
+            "Agent: mensagem inicial",
+            "pode enviar",
         ],
     )
 
@@ -153,11 +132,11 @@ def test_buscar_historico_redis_n8n_lrange_variantes() -> None:
     assert result.redis_key == "553592373421@s.whatsapp.net"
     assert result.raw_total == 2
     assert len(result.messages) == 2
-    assert result.messages[0]["message"]["conversation"] == "pode enviar"
-    assert result.messages[0]["key"]["fromMe"] is False
-    assert result.messages[1]["message"]["conversation"] == "mensagem inicial"
-    assert result.messages[1]["key"]["fromMe"] is True
-    assert mock_redis.lrange.await_count == 2
+    assert result.messages[0]["message"]["conversation"] == "mensagem inicial"
+    assert result.messages[0]["key"]["fromMe"] is True
+    assert result.messages[1]["message"]["conversation"] == "pode enviar"
+    assert result.messages[1]["key"]["fromMe"] is False
+    mock_redis.lrange.assert_awaited_once_with("553592373421@s.whatsapp.net", 0, -1)
 
 
 def test_fetch_conversation_prioriza_redis() -> None:
@@ -177,7 +156,7 @@ def test_fetch_conversation_prioriza_redis() -> None:
             "messages": redis_msgs,
             "debug_dict": lambda self: {
                 "redis_key": "553592373421@s.whatsapp.net",
-                "redis_variantes_tentadas": [],
+                "redis_variantes_tentadas": ["553592373421@s.whatsapp.net"],
                 "redis_mensagens_raw": 1,
             },
         },
@@ -214,7 +193,7 @@ def test_fetch_conversation_fallback_evolution() -> None:
             "messages": [],
             "debug_dict": lambda self: {
                 "redis_key": None,
-                "redis_variantes_tentadas": ["5535992373421@s.whatsapp.net"],
+                "redis_variantes_tentadas": ["553592373421@s.whatsapp.net"],
                 "redis_mensagens_raw": 0,
             },
         },
