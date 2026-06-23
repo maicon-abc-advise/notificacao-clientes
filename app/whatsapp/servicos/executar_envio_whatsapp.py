@@ -26,7 +26,7 @@ from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
 from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import entrada_whatsapp_apos_falha_email
 from app.whatsapp.repositorios.redis_contato_fornecedores import enfileirar_contato_fornecedor
 from app.whatsapp.repositorios.redis_historico_whatsapp import append_mensagem_agente_historico_redis
-from app.whatsapp.servicos.mensagem_inicial import montar_mensagem_inicial
+from app.whatsapp.servicos.mensagem_inicial import escolher_mensagem_contato
 from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp
 from app.whatsapp.servicos.tocar_engajamento_whatsapp import tocar_engajamento_whatsapp, WhatsappEngajamentoEstado
 
@@ -166,7 +166,8 @@ async def enviar_mensagem_inicial(
         prox = await _tentar_proximo_telefone(pool, cfg, row)
         return prox or validacao
 
-    texto = (mensagem or "").strip() or montar_mensagem_inicial(await _resolver_segmento(pool, cnpj))
+    segmento = await _resolver_segmento(pool, cnpj)
+    texto = (mensagem or "").strip() or escolher_mensagem_contato(row, segmento)
 
     try:
         await enviar_texto(cfg, tel, texto)

@@ -14,7 +14,13 @@ from app.config.postgres_identificadores import obter_identificadores_postgres
 # Schema Supabase (produção): cnpj_empresa, id bigint, etapas text — sem criado_em / motivo_falha / fornecedor_id.
 _COL_CNPJ = "cnpj_empresa"
 
-RESULTADOS_ETAPA = frozenset({"sucesso", "falha", "ignorado", "inconclusivo"})
+RESULTADOS_ETAPA = frozenset({
+    "sucesso",
+    "sucesso_sem_cadastro",
+    "falha",
+    "ignorado",
+    "inconclusivo",
+})
 
 
 def _tabela() -> str:
@@ -172,6 +178,7 @@ async def registrar_resultado_etapa(
             status,
         )
 
+    # ignorado, inconclusivo, sucesso_sem_cadastro → recontato (pendente) ou encerra na última etapa
     if n >= max_etapas:
         return await atualizar_status(pool, envio_id, status="concluido_falha")
     col = f"etapa{n + 1}"

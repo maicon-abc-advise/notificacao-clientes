@@ -354,17 +354,35 @@ async def _aplicar_decisao(
     dbg = decision.debug
 
     if step == "concluir_sucesso":
-        await _concluir_com_etapa(
-            pool, row["id"], resultado="sucesso", max_etapas=cfg.routine_max_falhas
-        )
-        await tocar_engajamento_whatsapp(
-            pool, row.get("fornecedor_id"), cnpj, WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_SUCESSO, telefone=tel
-        )
-        result.actions.append(
-            RoutineAction(
-                rid, cnpj, "concluir_sucesso", detail, status, "concluido_sucesso", decision.source, dbg
+        if await _cadastrou(pool, cnpj):
+            await _concluir_com_etapa(
+                pool, row["id"], resultado="sucesso", max_etapas=cfg.routine_max_falhas
             )
-        )
+            await tocar_engajamento_whatsapp(
+                pool, row.get("fornecedor_id"), cnpj, WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_SUCESSO, telefone=tel
+            )
+            result.actions.append(
+                RoutineAction(
+                    rid, cnpj, "concluir_sucesso", detail, status, "concluido_sucesso", decision.source, dbg
+                )
+            )
+        else:
+            atualizado = await _concluir_com_etapa(
+                pool, row["id"], resultado="sucesso_sem_cadastro", max_etapas=cfg.routine_max_falhas
+            )
+            novo = str(atualizado["status"]) if atualizado else "pendente"
+            result.actions.append(
+                RoutineAction(
+                    rid,
+                    cnpj,
+                    "sucesso_sem_cadastro_retorna_pendente",
+                    f"{detail} (cadastro não confirmado no banco)",
+                    status,
+                    novo,
+                    decision.source,
+                    dbg,
+                )
+            )
         return
 
     if step == "concluir_falha":
