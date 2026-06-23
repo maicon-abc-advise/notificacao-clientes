@@ -21,33 +21,8 @@ def test_formatar_linha_agente_historico() -> None:
     assert formatar_linha_agente_historico("Oi, tudo bem?") == "Agent: Oi, tudo bem?"
 
 
-def test_append_mensagem_agente_historico_redis_lpush_chave_existente() -> None:
+def test_append_mensagem_agente_historico_redis_usa_chave_do_banco_sem_nove() -> None:
     mock_redis = AsyncMock()
-    mock_redis.llen = AsyncMock(side_effect=[3, 0])
-    mock_redis.lpush = AsyncMock(return_value=4)
-
-    async def _run():
-        with patch(
-            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
-            new_callable=AsyncMock,
-            return_value=mock_redis,
-        ):
-            return await append_mensagem_agente_historico_redis(
-                "35992373421",
-                "Oi, tudo bem?\n\nVi que vocês atendem o segmento.",
-            )
-
-    key = asyncio.run(_run())
-    assert key == "5535992373421@s.whatsapp.net"
-    mock_redis.lpush.assert_awaited_once_with(
-        "5535992373421@s.whatsapp.net",
-        "Agent: Oi, tudo bem?\n\nVi que vocês atendem o segmento.",
-    )
-
-
-def test_append_mensagem_agente_historico_redis_lista_vazia_usa_primeira_variante() -> None:
-    mock_redis = AsyncMock()
-    mock_redis.llen = AsyncMock(return_value=0)
     mock_redis.lpush = AsyncMock(return_value=1)
 
     async def _run():
@@ -56,7 +31,30 @@ def test_append_mensagem_agente_historico_redis_lista_vazia_usa_primeira_variant
             new_callable=AsyncMock,
             return_value=mock_redis,
         ):
-            return await append_mensagem_agente_historico_redis("35992373421", "mensagem inicial")
+            return await append_mensagem_agente_historico_redis(
+                "553592373421",
+                "Oi, tudo bem?\n\nVi que vocês atendem o segmento.",
+            )
+
+    key = asyncio.run(_run())
+    assert key == "553592373421@s.whatsapp.net"
+    mock_redis.lpush.assert_awaited_once_with(
+        "553592373421@s.whatsapp.net",
+        "Agent: Oi, tudo bem?\n\nVi que vocês atendem o segmento.",
+    )
+
+
+def test_append_mensagem_agente_historico_redis_usa_chave_do_banco_com_nove() -> None:
+    mock_redis = AsyncMock()
+    mock_redis.lpush = AsyncMock(return_value=1)
+
+    async def _run():
+        with patch(
+            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ):
+            return await append_mensagem_agente_historico_redis("5535992373421", "mensagem inicial")
 
     key = asyncio.run(_run())
     assert key == "5535992373421@s.whatsapp.net"
@@ -64,6 +62,47 @@ def test_append_mensagem_agente_historico_redis_lista_vazia_usa_primeira_variant
         "5535992373421@s.whatsapp.net",
         "Agent: mensagem inicial",
     )
+
+
+def test_merge_historico_duas_listas_prepend_agente_na_variante_alternativa() -> None:
+    from app.whatsapp.repositorios.redis_historico_whatsapp import _merge_historico_duas_listas
+
+    msgs_canon = [
+        {"key": {"fromMe": False}, "message": {"conversation": "sim, tenho interesse"}},
+    ]
+    msgs_alt = [
+        {"key": {"fromMe": True}, "message": {"conversation": "mensagem inicial"}},
+    ]
+    merged = _merge_historico_duas_listas(msgs_canon, msgs_alt)
+    assert len(merged) == 2
+    assert merged[0]["message"]["conversation"] == "mensagem inicial"
+    assert merged[1]["message"]["conversation"] == "sim, tenho interesse"
+
+
+def test_buscar_historico_redis_n8n_unifica_duas_chaves() -> None:
+    mock_redis = AsyncMock()
+    mock_redis.lrange = AsyncMock(
+        side_effect=[
+            ["sim, tenho interesse", "Agent: primeira mensagem"],
+            ["Agent: mensagem inicial"],
+        ],
+    )
+
+    async def _run():
+        with patch(
+            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ):
+            return await buscar_historico_redis_n8n("553592373421")
+
+    result = asyncio.run(_run())
+    assert result.raw_total == 3
+    assert len(result.messages) == 3
+    assert result.messages[0]["message"]["conversation"] == "mensagem inicial"
+    assert result.messages[1]["message"]["conversation"] == "primeira mensagem"
+    assert result.messages[2]["message"]["conversation"] == "sim, tenho interesse"
+    assert mock_redis.lrange.await_count == 2
 
 
 def test_parse_lista_redis_n8n_ordem_cronologica() -> None:
@@ -108,7 +147,7 @@ def test_buscar_historico_redis_n8n_lrange_variantes() -> None:
             new_callable=AsyncMock,
             return_value=mock_redis,
         ):
-            return await buscar_historico_redis_n8n("35992373421")
+            return await buscar_historico_redis_n8n("553592373421")
 
     result = asyncio.run(_run())
     assert result.redis_key == "553592373421@s.whatsapp.net"

@@ -26,6 +26,38 @@ def formatar_linha_agente_historico(texto: str) -> str:
     return f"Agent: {(texto or '').strip()}"
 
 
+def _par_chaves_historico(telefone: str) -> tuple[str, str, list[str]]:
+    """
+    Chave canônica = variante que coincide com os dígitos do telefone no banco.
+    Chave alternativa = outra variante com/sem 9 no celular.
+    """
+    sem_nove, com_nove = variantes_telefone_whatsapp(telefone)
+    key_sem = jid_historico_whatsapp(sem_nove)
+    key_com = jid_historico_whatsapp(com_nove)
+    digits_raw = "".join(ch for ch in telefone if ch.isdigit())
+    if digits_raw == com_nove:
+        key_canon, key_alt = key_com, key_sem
+    elif digits_raw == sem_nove:
+        key_canon, key_alt = key_sem, key_com
+    else:
+        key_canon, key_alt = key_sem, key_com
+    return key_canon, key_alt, [key_canon, key_alt]
+
+
+def _merge_historico_duas_listas(msgs_canon: list[dict], msgs_alt: list[dict]) -> list[dict]:
+    """Une históricos partidos entre variantes com/sem 9 (dedup + ordem heurística)."""
+    if not msgs_alt:
+        return msgs_canon
+    if not msgs_canon:
+        return msgs_alt
+
+    seen = {(m["key"]["fromMe"], m["message"]["conversation"]) for m in msgs_canon}
+    alt_only = [m for m in msgs_alt if (m["key"]["fromMe"], m["message"]["conversation"]) not in seen]
+    prepend = [m for m in alt_only if m["key"]["fromMe"]]
+    append = [m for m in alt_only if not m["key"]["fromMe"]]
+    return prepend + msgs_canon + append
+
+
 def _parse_entrada_n8n(linha: str, remote_jid: str) -> dict | None:
     texto = linha.strip()
     if not texto:
@@ -70,50 +102,46 @@ class RedisHistoricoResult:
 
 
 async def buscar_historico_redis_n8n(telefone: str) -> RedisHistoricoResult:
-    """LRANGE na lista n8n; tenta variantes com/sem 9 no DDD."""
+    """LRANGE nas variantes com/sem 9 e une o histórico quando ambas tiverem itens."""
     try:
-        sem_nove, com_nove = variantes_telefone_whatsapp(telefone)
+        key_canon, key_alt, keys_tentadas = _par_chaves_historico(telefone)
     except ValueError as exc:
         _log.warning("Telefone inválido para histórico Redis: %s", exc)
         return RedisHistoricoResult([], None, [], 0)
 
-    variantes = [com_nove, sem_nove]
-    keys_tentadas = [jid_historico_whatsapp(v) for v in variantes]
     redis = await obter_cliente_redis()
+    raw_por_chave: dict[str, list[str]] = {}
 
-    for key in keys_tentadas:
+    for key in (key_canon, key_alt):
         try:
             raw = await redis.lrange(key, 0, -1)
         except Exception as exc:
             _log.warning("Falha LRANGE Redis key=%s: %s", key, exc)
             continue
         if raw:
-            messages = parse_lista_redis_n8n(raw, key)
-            _log.info(
-                "Histórico Redis n8n key=%s itens=%s mensagens=%s",
-                key,
-                len(raw),
-                len(messages),
-            )
-            return RedisHistoricoResult(messages, key, keys_tentadas, len(raw))
+            raw_por_chave[key] = raw
 
-    return RedisHistoricoResult([], None, keys_tentadas, 0)
+    if not raw_por_chave:
+        return RedisHistoricoResult([], None, keys_tentadas, 0)
 
+    msgs_canon = parse_lista_redis_n8n(raw_por_chave.get(key_canon, []), key_canon)
+    msgs_alt = parse_lista_redis_n8n(raw_por_chave.get(key_alt, []), key_alt)
+    messages = _merge_historico_duas_listas(msgs_canon, msgs_alt)
+    raw_total = sum(len(raw) for raw in raw_por_chave.values())
+    redis_key = key_canon
 
-async def _resolver_chave_historico_redis(redis: Any, keys_tentadas: list[str]) -> str:
-    """Mesma preferência da leitura: primeira chave com itens, senão a primeira variante."""
-    for key in keys_tentadas:
-        try:
-            if int(await redis.llen(key) or 0) > 0:
-                return key
-        except Exception:
-            continue
-    return keys_tentadas[0]
+    _log.info(
+        "Histórico Redis n8n keys=%s itens=%s mensagens=%s",
+        list(raw_por_chave),
+        raw_total,
+        len(messages),
+    )
+    return RedisHistoricoResult(messages, redis_key, keys_tentadas, raw_total)
 
 
 async def append_mensagem_agente_historico_redis(telefone: str, texto: str) -> str | None:
     """
-    Grava mensagem outbound da plataforma na lista n8n (Redis principal).
+    Grava mensagem outbound na chave canônica (dígitos do telefone como no banco).
 
     Usa ``LPUSH`` e prefixo ``Agent:`` — compatível com ``parse_lista_redis_n8n``.
     """
@@ -121,19 +149,17 @@ async def append_mensagem_agente_historico_redis(telefone: str, texto: str) -> s
     if not conteudo:
         return None
     try:
-        sem_nove, com_nove = variantes_telefone_whatsapp(telefone)
+        key_canon, _, _ = _par_chaves_historico(telefone)
     except ValueError as exc:
         _log.warning("Telefone inválido para gravar histórico Redis: %s", exc)
         return None
 
-    keys_tentadas = [jid_historico_whatsapp(v) for v in (com_nove, sem_nove)]
     linha = formatar_linha_agente_historico(conteudo)
     redis = await obter_cliente_redis()
-    key = await _resolver_chave_historico_redis(redis, keys_tentadas)
     try:
-        await redis.lpush(key, linha)
+        await redis.lpush(key_canon, linha)
     except Exception as exc:
-        _log.warning("Falha LPUSH histórico Redis key=%s: %s", key, exc)
+        _log.warning("Falha LPUSH histórico Redis key=%s: %s", key_canon, exc)
         return None
-    _log.info("Histórico Redis agente gravado key=%s chars=%s", key, len(conteudo))
-    return key
+    _log.info("Histórico Redis agente gravado key=%s chars=%s", key_canon, len(conteudo))
+    return key_canon
