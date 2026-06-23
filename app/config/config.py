@@ -210,6 +210,11 @@ class Configuracao(BaseSettings):
     routine_max_falhas: int = Field(default=3, ge=1, le=10, validation_alias="ROUTINE_MAX_FALHAS")
     routine_cooldown_hours: int = Field(default=48, ge=0, validation_alias="ROUTINE_COOLDOWN_HOURS")
     routine_min_buscas: int = Field(default=5, ge=1, validation_alias="ROUTINE_MIN_BUSCAS")
+    routine_min_buscas_primeira_entrada: int = Field(
+        default=1,
+        ge=1,
+        validation_alias="ROUTINE_MIN_BUSCAS_PRIMEIRA_ENTRADA",
+    )
     whatsapp_validacao_cache_dias: int = Field(default=30, ge=1, validation_alias="WHATSAPP_VALIDACAO_CACHE_DIAS")
 
     @field_validator("ambiente", mode="before")

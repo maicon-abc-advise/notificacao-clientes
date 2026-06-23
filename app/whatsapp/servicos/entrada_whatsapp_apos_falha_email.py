@@ -134,7 +134,7 @@ async def _bloquear_poucas_aparicoes_primeira_entrada(
         return None
     if ultimo is not None:
         return None
-    min_buscas = cfg.routine_min_buscas
+    min_buscas = cfg.routine_min_buscas_primeira_entrada
     n = await _contar_aparicoes(pool, cnpj_basico)
     if n >= min_buscas:
         return None

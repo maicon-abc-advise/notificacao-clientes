@@ -13,9 +13,10 @@ from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import (
 )
 
 
-def _cfg(*, min_buscas: int = 5) -> MagicMock:
+def _cfg(*, min_buscas: int = 5, min_buscas_primeira: int = 1) -> MagicMock:
     cfg = MagicMock()
     cfg.routine_min_buscas = min_buscas
+    cfg.routine_min_buscas_primeira_entrada = min_buscas_primeira
     return cfg
 
 
@@ -33,15 +34,15 @@ async def _test_contar_aparicoes_total() -> None:
     assert "created_at" not in sql
 
 
-def test_bloquear_primeira_entrada_com_poucas_aparicoes() -> None:
-    asyncio.run(_test_bloquear_primeira_entrada_com_poucas_aparicoes())
+def test_bloquear_primeira_entrada_sem_aparicoes() -> None:
+    asyncio.run(_test_bloquear_primeira_entrada_sem_aparicoes())
 
 
-async def _test_bloquear_primeira_entrada_com_poucas_aparicoes() -> None:
+async def _test_bloquear_primeira_entrada_sem_aparicoes() -> None:
     pool = AsyncMock()
     with patch(
         "app.whatsapp.servicos.entrada_whatsapp_apos_falha_email._contar_aparicoes",
-        AsyncMock(return_value=3),
+        AsyncMock(return_value=0),
     ):
         out = await _bloquear_poucas_aparicoes_primeira_entrada(
             pool,
@@ -52,8 +53,28 @@ async def _test_bloquear_primeira_entrada_com_poucas_aparicoes() -> None:
         )
     assert out is not None
     assert out["retorno"] == "whatsapp_ignorado_poucas_buscas"
-    assert out["aparicoes"] == 3
-    assert out["minimo"] == 5
+    assert out["aparicoes"] == 0
+    assert out["minimo"] == 1
+
+
+def test_bloquear_primeira_entrada_libera_com_uma_aparicao() -> None:
+    asyncio.run(_test_bloquear_primeira_entrada_libera_com_uma_aparicao())
+
+
+async def _test_bloquear_primeira_entrada_libera_com_uma_aparicao() -> None:
+    pool = AsyncMock()
+    with patch(
+        "app.whatsapp.servicos.entrada_whatsapp_apos_falha_email._contar_aparicoes",
+        AsyncMock(return_value=1),
+    ):
+        out = await _bloquear_poucas_aparicoes_primeira_entrada(
+            pool,
+            _cfg(),
+            cnpj_basico="12345678",
+            origem="bounce_email",
+            ultimo=None,
+        )
+    assert out is None
 
 
 def test_isenta_proximo_telefone_invalido() -> None:
@@ -72,11 +93,11 @@ async def _test_isenta_proximo_telefone_invalido() -> None:
     assert out is None
 
 
-def test_entrada_bounce_bloqueada_sem_aparicoes_suficientes() -> None:
-    asyncio.run(_test_entrada_bounce_bloqueada_sem_aparicoes_suficientes())
+def test_entrada_bounce_bloqueada_sem_aparicoes() -> None:
+    asyncio.run(_test_entrada_bounce_bloqueada_sem_aparicoes())
 
 
-async def _test_entrada_bounce_bloqueada_sem_aparicoes_suficientes() -> None:
+async def _test_entrada_bounce_bloqueada_sem_aparicoes() -> None:
     pool = AsyncMock()
     cfg = _cfg()
 
@@ -91,7 +112,7 @@ async def _test_entrada_bounce_bloqueada_sem_aparicoes_suficientes() -> None:
         ),
         patch(
             "app.whatsapp.servicos.entrada_whatsapp_apos_falha_email._contar_aparicoes",
-            AsyncMock(return_value=2),
+            AsyncMock(return_value=0),
         ),
     ):
         out = await entrada_whatsapp_apos_falha_email(
@@ -104,14 +125,14 @@ async def _test_entrada_bounce_bloqueada_sem_aparicoes_suficientes() -> None:
         )
 
     assert out["retorno"] == "whatsapp_ignorado_poucas_buscas"
-    assert out["aparicoes"] == 2
+    assert out["aparicoes"] == 0
 
 
-def test_entrada_sweep_insere_com_aparicoes_suficientes() -> None:
-    asyncio.run(_test_entrada_sweep_insere_com_aparicoes_suficientes())
+def test_entrada_sweep_insere_com_uma_aparicao() -> None:
+    asyncio.run(_test_entrada_sweep_insere_com_uma_aparicao())
 
 
-async def _test_entrada_sweep_insere_com_aparicoes_suficientes() -> None:
+async def _test_entrada_sweep_insere_com_uma_aparicao() -> None:
     pool = AsyncMock()
     cfg = _cfg()
     row = {"id": 99, "numero_telefone": "5511999999999"}
@@ -127,7 +148,7 @@ async def _test_entrada_sweep_insere_com_aparicoes_suficientes() -> None:
         ),
         patch(
             "app.whatsapp.servicos.entrada_whatsapp_apos_falha_email._contar_aparicoes",
-            AsyncMock(return_value=6),
+            AsyncMock(return_value=1),
         ),
         patch(
             "app.whatsapp.servicos.entrada_whatsapp_apos_falha_email.repo.inserir_se_ausente",
