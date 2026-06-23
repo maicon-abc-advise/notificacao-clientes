@@ -55,11 +55,16 @@ async def executar_sweep_emails_pendentes(
     pool: asyncpg.Pool,
     redis: Redis,
     cfg: Configuracao,
-) -> dict[str, int]:
+    *,
+    limite: int | None = None,
+) -> dict[str, int | None]:
     repo_e = RepositorioEmailsEsperandoConfirmacaoRedis()
     repo_s = RepositorioSmsPendenteRedis()
     agora = int(time.time())
     ids = await repo_e.listar_sweep_elegiveis(redis, ate_ts=agora)
+    total_candidatos = len(ids)
+    if limite is not None:
+        ids = ids[:limite]
     inseridos = 0
     ignorados = 0
     for message_id in ids:
@@ -172,4 +177,10 @@ async def executar_sweep_emails_pendentes(
             )
             ignorados += 1
 
-    return {"inseridos": inseridos, "ignorados": ignorados, "candidatos": len(ids)}
+    return {
+        "inseridos": inseridos,
+        "ignorados": ignorados,
+        "processados": inseridos + ignorados,
+        "candidatos": total_candidatos,
+        "limite": limite,
+    }

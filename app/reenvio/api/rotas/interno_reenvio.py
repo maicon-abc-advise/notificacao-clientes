@@ -39,8 +39,10 @@ async def _executar_sweep_emails_esperando_confirmacao(
     pool: asyncpg.Pool,
     redis: Redis,
     config: Configuracao,
+    *,
+    limite: int | None = None,
 ) -> dict:
-    return await executar_sweep_emails_pendentes(pool, redis, config)
+    return await executar_sweep_emails_pendentes(pool, redis, config, limite=limite)
 
 
 @router.post(
@@ -65,8 +67,9 @@ async def post_sweep_emails_esperando_confirmacao(
     pool: Annotated[asyncpg.Pool, Depends(_pool)],
     redis: Annotated[Redis, Depends(_redis)],
     config: Annotated[Configuracao, Depends(obter_configuracao)],
+    limite: Annotated[int | None, Query(ge=1, le=5000, description="Máximo de e-mails a processar nesta execução")] = None,
 ) -> dict:
-    return await _executar_sweep_emails_esperando_confirmacao(pool, redis, config)
+    return await _executar_sweep_emails_esperando_confirmacao(pool, redis, config, limite=limite)
 
 
 @router.post(

@@ -85,11 +85,48 @@ async def _test_sweep_encerra_sem_telefone_sem_reagendar() -> None:
     ):
         out = await executar_sweep_emails_pendentes(pool, redis, cfg)
 
-    assert out == {"inseridos": 0, "ignorados": 1, "candidatos": 1}
+    assert out == {
+        "inseridos": 0,
+        "ignorados": 1,
+        "processados": 1,
+        "candidatos": 1,
+        "limite": None,
+    }
     repo_e.reagendar_sweep.assert_not_called()
     repo_e.remover.assert_awaited_once_with(redis, "msg-1")
     tocar.assert_awaited_once()
     assert tocar.await_args.args[3] == EngajamentoEmailEstado.EMAIL_SWEEP_SEM_CANAL
+
+
+def test_sweep_emails_respeita_limite() -> None:
+    asyncio.run(_test_sweep_emails_respeita_limite())
+
+
+async def _test_sweep_emails_respeita_limite() -> None:
+    redis = AsyncMock()
+    pool = AsyncMock()
+    cfg = AsyncMock()
+
+    repo_e = AsyncMock()
+    repo_e.listar_sweep_elegiveis = AsyncMock(return_value=["msg-1", "msg-2", "msg-3"])
+    repo_e.obter = AsyncMock(return_value=None)
+    repo_e.remover = AsyncMock()
+
+    with (
+        patch(
+            "app.reenvio.servicos.sweep_emails_pendentes.RepositorioEmailsEsperandoConfirmacaoRedis",
+            return_value=repo_e,
+        ),
+        patch(
+            "app.reenvio.servicos.sweep_emails_pendentes.RepositorioSmsPendenteRedis",
+        ),
+    ):
+        out = await executar_sweep_emails_pendentes(pool, redis, cfg, limite=2)
+
+    assert out["candidatos"] == 3
+    assert out["limite"] == 2
+    assert out["processados"] == 2
+    assert repo_e.obter.await_count == 2
 
 
 def test_rollup_sms_sweep_sem_canal_agregado_inativo() -> None:
