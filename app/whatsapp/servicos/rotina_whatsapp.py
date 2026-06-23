@@ -18,6 +18,7 @@ from app.whatsapp.api.externo.evolution.adaptador_evolution import (
 )
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
 from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
+from app.whatsapp.repositorios.redis_historico_whatsapp import buscar_historico_redis_n8n
 from app.whatsapp.servicos.conversation_agent import AgentDecision, decide_next_step
 from app.whatsapp.servicos.executar_envio_whatsapp import enviar_mensagem_inicial
 from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp, variantes_telefone_whatsapp
@@ -86,19 +87,35 @@ def _cooldown_passed(updated_at: datetime | None, now: datetime, hours: int) -> 
     return (now - updated_at).total_seconds() / 3600 >= hours
 
 
-async def _fetch_conversation(cfg: Configuracao, telefone: str) -> list[dict]:
+@dataclass
+class ConversationFetchResult:
+    messages: list[dict]
+    source: str
+    fetch_debug: dict[str, Any] = field(default_factory=dict)
+
+
+async def _fetch_conversation(cfg: Configuracao, telefone: str) -> ConversationFetchResult:
+    redis_result = await buscar_historico_redis_n8n(telefone)
+    fetch_debug: dict[str, Any] = dict(redis_result.debug_dict())
+    if redis_result.messages:
+        return ConversationFetchResult(redis_result.messages, "redis_n8n", fetch_debug)
+
+    fetch_debug["redis_fallback_evolution"] = True
     try:
         sem_nove, com_nove = variantes_telefone_whatsapp(telefone)
     except ValueError:
-        return []
+        return ConversationFetchResult([], "nenhuma", fetch_debug)
+
     for variant in (com_nove, sem_nove):
         try:
             messages = await buscar_mensagens_chat(cfg, variant)
             if messages:
-                return messages
+                fetch_debug["evolution_variant"] = variant
+                fetch_debug["evolution_mensagens_total"] = len(messages)
+                return ConversationFetchResult(messages, "evolution", fetch_debug)
         except ErroEvolutionAPI as exc:
-            _log.warning("Falha ao buscar conversa %s: %s", variant, exc)
-    return []
+            _log.warning("Falha ao buscar conversa Evolution %s: %s", variant, exc)
+    return ConversationFetchResult([], "nenhuma", fetch_debug)
 
 
 async def _cadastrou(pool: asyncpg.Pool, cnpj_basico: str) -> bool:
@@ -210,7 +227,7 @@ async def executar_atualizar_conversas_whatsapp(
     *,
     envio_id: str | None = None,
 ) -> RoutineResult:
-    """Lê chat Evolution e atualiza funil para registros ``contatado``.
+    """Lê chat (Redis n8n, fallback Evolution) e atualiza funil para registros ``contatado``.
 
     Com ``envio_id`` (ação manual por registro), ignora o cooldown configurado.
     """
@@ -269,15 +286,17 @@ async def executar_atualizar_conversas_whatsapp(
                 )
                 continue
 
-            messages = await _fetch_conversation(cfg, tel)
+            fetch = await _fetch_conversation(cfg, tel)
             ctx = {
                 "cnpj_basico": cnpj,
                 "status": status,
                 "cadastrado": False,
                 "telefone": tel,
                 "remote_jid": jid_whatsapp(tel),
+                "conversation_source": fetch.source,
+                "conversation_fetch_debug": fetch.fetch_debug,
             }
-            decision = decide_next_step(messages, ctx, since=row["updated_at"], cfg=cfg)
+            decision = decide_next_step(fetch.messages, ctx, since=row["updated_at"], cfg=cfg)
             await _aplicar_decisao(pool, cfg, row, decision, result)
 
         except Exception as exc:

@@ -52,13 +52,21 @@ def _format_thread(messages: list[dict]) -> str:
 
 
 def _debug_base(messages: list[dict], ctx: dict) -> dict[str, Any]:
-    return {
+    source = ctx.get("conversation_source") or "desconhecida"
+    debug: dict[str, Any] = {
         "telefone": ctx.get("telefone"),
         "remote_jid": ctx.get("remote_jid"),
-        "evolution_filtro": {"where": {"key": {"remoteJid": ctx.get("remote_jid")}}},
-        "evolution_mensagens_total": len(messages),
+        "conversation_source": source,
+        "mensagens_total": len(messages),
         "thread": _format_thread(messages),
     }
+    fetch_debug = ctx.get("conversation_fetch_debug")
+    if isinstance(fetch_debug, dict):
+        debug.update(fetch_debug)
+    if source == "evolution" or ctx.get("redis_fallback_evolution"):
+        debug["evolution_filtro"] = {"where": {"key": {"remoteJid": ctx.get("remote_jid")}}}
+        debug["evolution_mensagens_total"] = len(messages)
+    return debug
 
 
 def _legacy_decision(analysis: AnalyzedConversation) -> AgentDecision:
