@@ -14,6 +14,8 @@ from app.config.postgres_identificadores import obter_identificadores_postgres
 # Schema Supabase (produção): cnpj_empresa, id bigint, etapas text — sem criado_em / motivo_falha / fornecedor_id.
 _COL_CNPJ = "cnpj_empresa"
 
+RESULTADOS_ETAPA = frozenset({"sucesso", "falha", "ignorado", "inconclusivo"})
+
 
 def _tabela() -> str:
     return obter_identificadores_postgres().qual("whatsapp_envios")
@@ -133,22 +135,48 @@ async def atualizar_status(
     )
 
 
-async def incrementar_etapa_falha(
+def _contar_etapas_preenchidas(row: asyncpg.Record | dict[str, Any]) -> int:
+    etapas = [row["etapa1"], row["etapa2"], row["etapa3"]]
+    return sum(1 for e in etapas if e is not None and str(e).strip())
+
+
+async def registrar_resultado_etapa(
     pool: asyncpg.Pool,
     envio_id: uuid.UUID | str | int,
+    resultado: str,
     *,
-    max_falhas: int = 3,
+    max_etapas: int = 3,
 ) -> asyncpg.Record | None:
+    """Grava resultado da tentativa atual em ``etapa1``/``etapa2``/``etapa3`` e atualiza o funil."""
+    if resultado not in RESULTADOS_ETAPA:
+        raise ValueError(f"resultado de etapa inválido: {resultado!r}")
     row = await buscar_por_id(pool, envio_id)
     if not row:
         return None
-    etapas = [row["etapa1"], row["etapa2"], row["etapa3"]]
-    n = sum(1 for e in etapas if e is not None and str(e).strip())
-    if n >= max_falhas:
+    n = _contar_etapas_preenchidas(row)
+
+    if resultado in ("sucesso", "falha"):
+        status = "concluido_sucesso" if resultado == "sucesso" else "concluido_falha"
+        if n >= max_etapas:
+            return await atualizar_status(pool, envio_id, status=status)
+        col = f"etapa{n + 1}"
+        return await pool.fetchrow(
+            f"""
+            UPDATE {_tabela()}
+            SET {col} = $2, updated_at = now(), status = $3
+            WHERE id = $1
+            RETURNING *
+            """,
+            _parse_id(envio_id),
+            resultado,
+            status,
+        )
+
+    if n >= max_etapas:
         return await atualizar_status(pool, envio_id, status="concluido_falha")
     col = f"etapa{n + 1}"
-    novo_status = "pendente" if n + 1 < max_falhas else "concluido_falha"
-    marca = datetime.now(UTC).isoformat()
+    novo_n = n + 1
+    novo_status = "concluido_falha" if novo_n >= max_etapas else "pendente"
     return await pool.fetchrow(
         f"""
         UPDATE {_tabela()}
@@ -157,8 +185,20 @@ async def incrementar_etapa_falha(
         RETURNING *
         """,
         _parse_id(envio_id),
-        marca,
+        resultado,
         novo_status,
+    )
+
+
+async def incrementar_etapa_falha(
+    pool: asyncpg.Pool,
+    envio_id: uuid.UUID | str | int,
+    *,
+    max_falhas: int = 3,
+) -> asyncpg.Record | None:
+    """Compatibilidade: inconclusivo legado (timestamps antigos)."""
+    return await registrar_resultado_etapa(
+        pool, envio_id, "inconclusivo", max_etapas=max_falhas
     )
 
 

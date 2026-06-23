@@ -18,7 +18,10 @@ from app.whatsapp.api.externo.evolution.adaptador_evolution import (
 )
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
 from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
-from app.whatsapp.repositorios.redis_historico_whatsapp import buscar_historico_redis_n8n
+from app.whatsapp.repositorios.redis_historico_whatsapp import (
+    append_mensagem_agente_historico_redis,
+    buscar_historico_redis_n8n,
+)
 from app.whatsapp.servicos.conversation_agent import AgentDecision, decide_next_step
 from app.whatsapp.servicos.executar_envio_whatsapp import enviar_mensagem_inicial
 from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp, variantes_telefone_whatsapp
@@ -252,7 +255,9 @@ async def executar_atualizar_conversas_whatsapp(
 
         try:
             if await _cadastrou(pool, cnpj):
-                await repo.atualizar_status(pool, row["id"], status="concluido_sucesso")
+                await _concluir_com_etapa(
+                    pool, row["id"], resultado="sucesso", max_etapas=cfg.routine_max_falhas
+                )
                 await tocar_engajamento_whatsapp(
                     pool,
                     row.get("fornecedor_id"),
@@ -323,6 +328,16 @@ async def executar_rotina_whatsapp(
     return merged
 
 
+async def _concluir_com_etapa(
+    pool: asyncpg.Pool,
+    envio_id: Any,
+    *,
+    resultado: str,
+    max_etapas: int,
+) -> asyncpg.Record | None:
+    return await repo.registrar_resultado_etapa(pool, envio_id, resultado, max_etapas=max_etapas)
+
+
 async def _aplicar_decisao(
     pool: asyncpg.Pool,
     cfg: Configuracao,
@@ -339,7 +354,9 @@ async def _aplicar_decisao(
     dbg = decision.debug
 
     if step == "concluir_sucesso":
-        await repo.atualizar_status(pool, row["id"], status="concluido_sucesso")
+        await _concluir_com_etapa(
+            pool, row["id"], resultado="sucesso", max_etapas=cfg.routine_max_falhas
+        )
         await tocar_engajamento_whatsapp(
             pool, row.get("fornecedor_id"), cnpj, WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_SUCESSO, telefone=tel
         )
@@ -351,7 +368,7 @@ async def _aplicar_decisao(
         return
 
     if step == "concluir_falha":
-        await repo.atualizar_status(pool, row["id"], status="concluido_falha", motivo_falha="conversacional")
+        await _concluir_com_etapa(pool, row["id"], resultado="falha", max_etapas=cfg.routine_max_falhas)
         await tocar_engajamento_whatsapp(
             pool, row.get("fornecedor_id"), cnpj, WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_FALHA, telefone=tel
         )
@@ -361,10 +378,15 @@ async def _aplicar_decisao(
         return
 
     if step == "marcar_falha_retornar_pendente":
-        atualizado = await repo.incrementar_etapa_falha(pool, row["id"], max_falhas=cfg.routine_max_falhas)
+        resultado = decision.resultado_etapa or "inconclusivo"
+        if resultado not in ("ignorado", "inconclusivo"):
+            resultado = "inconclusivo"
+        atualizado = await repo.registrar_resultado_etapa(
+            pool, row["id"], resultado, max_etapas=cfg.routine_max_falhas
+        )
         novo = str(atualizado["status"]) if atualizado else status
         result.actions.append(
-            RoutineAction(rid, cnpj, "falha_retorna_pendente", detail, status, novo, decision.source, dbg)
+            RoutineAction(rid, cnpj, "etapa_retorna_pendente", detail, status, novo, decision.source, dbg)
         )
         return
 
@@ -374,6 +396,10 @@ async def _aplicar_decisao(
             from app.whatsapp.api.externo.evolution.adaptador_evolution import enviar_texto
 
             await enviar_texto(cfg, tel, decision.mensagem_resposta)
+            try:
+                await append_mensagem_agente_historico_redis(tel, decision.mensagem_resposta)
+            except Exception as exc:
+                _log.warning("Histórico Redis não gravado após enviar_resposta id=%s: %s", rid, exc)
             await repo.atualizar_status(pool, row["id"], status="contatado")
             result.actions.append(
                 RoutineAction(rid, cnpj, "enviar_resposta", detail, status, "contatado", decision.source, dbg)

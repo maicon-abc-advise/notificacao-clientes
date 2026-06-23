@@ -21,6 +21,11 @@ def jid_historico_whatsapp(numero: str) -> str:
     return jid_whatsapp(numero)
 
 
+def formatar_linha_agente_historico(texto: str) -> str:
+    """Linha no formato n8n para mensagem da Cláudia (``fromMe=true`` no parser)."""
+    return f"Agent: {(texto or '').strip()}"
+
+
 def _parse_entrada_n8n(linha: str, remote_jid: str) -> dict | None:
     texto = linha.strip()
     if not texto:
@@ -93,3 +98,42 @@ async def buscar_historico_redis_n8n(telefone: str) -> RedisHistoricoResult:
             return RedisHistoricoResult(messages, key, keys_tentadas, len(raw))
 
     return RedisHistoricoResult([], None, keys_tentadas, 0)
+
+
+async def _resolver_chave_historico_redis(redis: Any, keys_tentadas: list[str]) -> str:
+    """Mesma preferência da leitura: primeira chave com itens, senão a primeira variante."""
+    for key in keys_tentadas:
+        try:
+            if int(await redis.llen(key) or 0) > 0:
+                return key
+        except Exception:
+            continue
+    return keys_tentadas[0]
+
+
+async def append_mensagem_agente_historico_redis(telefone: str, texto: str) -> str | None:
+    """
+    Grava mensagem outbound da plataforma na lista n8n (Redis principal).
+
+    Usa ``LPUSH`` e prefixo ``Agent:`` — compatível com ``parse_lista_redis_n8n``.
+    """
+    conteudo = (texto or "").strip()
+    if not conteudo:
+        return None
+    try:
+        sem_nove, com_nove = variantes_telefone_whatsapp(telefone)
+    except ValueError as exc:
+        _log.warning("Telefone inválido para gravar histórico Redis: %s", exc)
+        return None
+
+    keys_tentadas = [jid_historico_whatsapp(v) for v in (com_nove, sem_nove)]
+    linha = formatar_linha_agente_historico(conteudo)
+    redis = await obter_cliente_redis()
+    key = await _resolver_chave_historico_redis(redis, keys_tentadas)
+    try:
+        await redis.lpush(key, linha)
+    except Exception as exc:
+        _log.warning("Falha LPUSH histórico Redis key=%s: %s", key, exc)
+        return None
+    _log.info("Histórico Redis agente gravado key=%s chars=%s", key, len(conteudo))
+    return key

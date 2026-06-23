@@ -52,6 +52,7 @@ Retorne APENAS um JSON válido, sem markdown, sem texto fora do JSON:
 
 {
   "proximo_passo": "<um dos valores abaixo, EXATAMENTE como escrito>",
+  "resultado_etapa": null,
   "motivo": "explicação curta em português (1-2 frases)",
   "mensagem_resposta": null
 }
@@ -79,8 +80,10 @@ Qualquer valor fora da lista invalida a rotina.
   ("não tenho interesse", "pare de mandar", "não atendemos esse segmento").
 
 "marcar_falha_retornar_pendente"
-  Conversa inconclusiva: fornecedor não respondeu de forma útil, ignorou, respondeu só com emoji/vago,
-  ou o diálogo esfriou sem confirmação nem recusa — deve ser recontatado depois.
+  Fornecedor ignorou a proposta (sem resposta útil) ou manteve a conversa sem confirmação nem recusa
+  clara — deve ser recontatado depois. Preencha "resultado_etapa" com "ignorado" ou "inconclusivo":
+  - "ignorado": não respondeu, resposta irrelevante ou só emoji/vago sem diálogo
+  - "inconclusivo": respondeu e manteve a conversa, mas sem aceitar nem recusar
 
 "aguardar_resposta"
   Fornecedor respondeu recentemente com dúvida ou abertura, a Cláudia já respondeu adequadamente,
@@ -105,14 +108,18 @@ Qualquer valor fora da lista invalida a rotina.
 6. Se cadastrado=true no contexto → "concluir_sucesso" (não redija mensagem).
 7. Se proximo_passo ≠ "enviar_resposta" → mensagem_resposta DEVE ser null.
 8. Se proximo_passo = "enviar_resposta" → mensagem_resposta é OBRIGATÓRIA (texto pronto para WhatsApp).
+9. Se proximo_passo = "concluir_sucesso" → resultado_etapa = "sucesso".
+10. Se proximo_passo = "concluir_falha" → resultado_etapa = "falha".
+11. Se proximo_passo = "marcar_falha_retornar_pendente" → resultado_etapa = "ignorado" ou "inconclusivo".
+12. Caso contrário → resultado_etapa = null.
 
 ## EXEMPLOS DE SAÍDA CORRETA
 
 Fornecedor: "Já criei minha conta, obrigado"
-→ {"proximo_passo": "concluir_sucesso", "motivo": "Fornecedor confirmou cadastro.", "mensagem_resposta": null}
+→ {"proximo_passo": "concluir_sucesso", "resultado_etapa": "sucesso", "motivo": "Fornecedor confirmou cadastro.", "mensagem_resposta": null}
 
 Fornecedor: "Não tenho interesse, pare de mandar"
-→ {"proximo_passo": "concluir_falha", "motivo": "Recusa explícita.", "mensagem_resposta": null}
+→ {"proximo_passo": "concluir_falha", "resultado_etapa": "falha", "motivo": "Recusa explícita.", "mensagem_resposta": null}
 
 Fornecedor: "Como funciona? É pago?"
 → {"proximo_passo": "enviar_resposta", "motivo": "Dúvidas sobre funcionamento e custo sem resposta adequada.", "mensagem_resposta": "Oi! Sou a Cláudia do BuscaFornecedor.com.br. O cadastro e o painel são 100% gratuitos — você vê as indicações do seu setor. Planos avançados existem só se quiser contato direto ativo. Pode criar seu perfil aqui 👉 https://buscafornecedor.com.br/fornecedores"}
@@ -121,7 +128,7 @@ Fornecedor respondeu, Cláudia já explicou tudo, fornecedor não falou de novo
 → {"proximo_passo": "aguardar_resposta", "motivo": "Aguardando retorno após resposta enviada.", "mensagem_resposta": null}
 
 Só mensagens da Cláudia, nenhuma do fornecedor
-→ {"proximo_passo": "sem_acao", "motivo": "Sem resposta do fornecedor no histórico.", "mensagem_resposta": null}
+→ {"proximo_passo": "marcar_falha_retornar_pendente", "resultado_etapa": "ignorado", "motivo": "Fornecedor ignorou a proposta.", "mensagem_resposta": null}
 """
 
 _SYSTEM_PROMPT = _CLAUDIA_CONTEXT.strip() + "\n\n" + _ANALYSIS_INSTRUCTIONS.strip()
@@ -146,7 +153,7 @@ def _build_user_prompt(ctx: dict, thread: str, since: datetime | None) -> str:
         f"{thread}\n"
         f"--- FIM DO HISTÓRICO ---\n"
         "Com base no histórico acima, decida proximo_passo (valor exato da lista permitida), "
-        "motivo e mensagem_resposta se aplicável."
+        "resultado_etapa quando aplicável, motivo e mensagem_resposta se aplicável."
     )
 
 
@@ -155,9 +162,39 @@ class AgentDecision:
     proximo_passo: str
     motivo: str
     mensagem_resposta: str | None = None
+    resultado_etapa: str | None = None
     outcome: ConversationOutcome = ConversationOutcome.INCONCLUSIVO
     source: str = "heuristica"
     debug: dict[str, Any] | None = None
+
+
+def _resultado_etapa_de_outcome(outcome: ConversationOutcome) -> str | None:
+    mapping = {
+        ConversationOutcome.SUCESSO: "sucesso",
+        ConversationOutcome.FALHA: "falha",
+        ConversationOutcome.IGNORADO: "ignorado",
+        ConversationOutcome.INCONCLUSIVO: "inconclusivo",
+    }
+    return mapping.get(outcome)
+
+
+def _legacy_decision(analysis: AnalyzedConversation) -> AgentDecision:
+    mapping = {
+        ConversationOutcome.SUCESSO: "concluir_sucesso",
+        ConversationOutcome.FALHA: "concluir_falha",
+        ConversationOutcome.IGNORADO: "marcar_falha_retornar_pendente",
+        ConversationOutcome.INCONCLUSIVO: "marcar_falha_retornar_pendente",
+        ConversationOutcome.SEM_CONVERSA: "sem_acao",
+    }
+    step = mapping[analysis.outcome]
+    return AgentDecision(
+        proximo_passo=step,
+        motivo=analysis.reason,
+        mensagem_resposta=None,
+        resultado_etapa=_resultado_etapa_de_outcome(analysis.outcome),
+        outcome=analysis.outcome,
+        source="heuristica",
+    )
 
 
 def _format_thread(messages: list[dict]) -> str:
@@ -190,23 +227,6 @@ def _debug_base(messages: list[dict], ctx: dict) -> dict[str, Any]:
     return debug
 
 
-def _legacy_decision(analysis: AnalyzedConversation) -> AgentDecision:
-    mapping = {
-        ConversationOutcome.SUCESSO: "concluir_sucesso",
-        ConversationOutcome.FALHA: "concluir_falha",
-        ConversationOutcome.INCONCLUSIVO: "marcar_falha_retornar_pendente",
-        ConversationOutcome.SEM_CONVERSA: "sem_acao",
-    }
-    step = mapping[analysis.outcome]
-    return AgentDecision(
-        proximo_passo=step,
-        motivo=analysis.reason,
-        mensagem_resposta=None,
-        outcome=analysis.outcome,
-        source="heuristica",
-    )
-
-
 def decide_next_step(
     messages: list[dict],
     ctx: dict,
@@ -218,6 +238,7 @@ def decide_next_step(
         return AgentDecision(
             proximo_passo="concluir_sucesso",
             motivo="Fornecedor já cadastrado na plataforma",
+            resultado_etapa="sucesso",
             outcome=ConversationOutcome.SUCESSO,
             source="regra",
             debug={
@@ -278,10 +299,24 @@ def decide_next_step(
         if step != "enviar_resposta":
             mensagem = None
 
+        resultado_etapa = parsed.get("resultado_etapa")
+        if resultado_etapa is not None:
+            resultado_etapa = str(resultado_etapa).strip().lower() or None
+        if step == "concluir_sucesso":
+            resultado_etapa = "sucesso"
+        elif step == "concluir_falha":
+            resultado_etapa = "falha"
+        elif step == "marcar_falha_retornar_pendente":
+            if resultado_etapa not in ("ignorado", "inconclusivo"):
+                resultado_etapa = "inconclusivo"
+        else:
+            resultado_etapa = None
+
         return AgentDecision(
             proximo_passo=step,
             motivo=motivo,
             mensagem_resposta=mensagem,
+            resultado_etapa=resultado_etapa,
             source="openai",
             debug=debug,
         )

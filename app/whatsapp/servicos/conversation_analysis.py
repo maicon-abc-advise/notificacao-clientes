@@ -11,6 +11,7 @@ from enum import Enum
 class ConversationOutcome(str, Enum):
     SUCESSO = "sucesso"
     FALHA = "falha"
+    IGNORADO = "ignorado"
     INCONCLUSIVO = "inconclusivo"
     SEM_CONVERSA = "sem_conversa"
 
@@ -89,10 +90,10 @@ def analyze_conversation(
 
     if not incoming:
         return AnalyzedConversation(
-            outcome=ConversationOutcome.SEM_CONVERSA,
+            outcome=ConversationOutcome.IGNORADO,
             incoming_count=0,
             last_incoming_at=None,
-            reason="Sem mensagens do fornecedor desde o último contato",
+            reason="Fornecedor ignorou a proposta (sem resposta desde o último contato)",
         )
 
     texts = " ".join(t for _, t in incoming)
@@ -116,5 +117,5 @@ def analyze_conversation(
         outcome=ConversationOutcome.INCONCLUSIVO,
         incoming_count=len(incoming),
         last_incoming_at=last_ts,
-        reason="Resposta inconclusiva ou silêncio após contato",
+        reason="Fornecedor manteve a conversa sem fechamento claro",
     )

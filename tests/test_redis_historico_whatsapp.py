@@ -4,7 +4,9 @@ import asyncio
 from unittest.mock import AsyncMock, patch
 
 from app.whatsapp.repositorios.redis_historico_whatsapp import (
+    append_mensagem_agente_historico_redis,
     buscar_historico_redis_n8n,
+    formatar_linha_agente_historico,
     jid_historico_whatsapp,
     parse_lista_redis_n8n,
 )
@@ -13,6 +15,55 @@ from app.whatsapp.servicos.rotina_whatsapp import ConversationFetchResult, _fetc
 
 def test_jid_historico_whatsapp() -> None:
     assert jid_historico_whatsapp("553592373421") == "553592373421@s.whatsapp.net"
+
+
+def test_formatar_linha_agente_historico() -> None:
+    assert formatar_linha_agente_historico("Oi, tudo bem?") == "Agent: Oi, tudo bem?"
+
+
+def test_append_mensagem_agente_historico_redis_lpush_chave_existente() -> None:
+    mock_redis = AsyncMock()
+    mock_redis.llen = AsyncMock(side_effect=[3, 0])
+    mock_redis.lpush = AsyncMock(return_value=4)
+
+    async def _run():
+        with patch(
+            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ):
+            return await append_mensagem_agente_historico_redis(
+                "35992373421",
+                "Oi, tudo bem?\n\nVi que vocês atendem o segmento.",
+            )
+
+    key = asyncio.run(_run())
+    assert key == "5535992373421@s.whatsapp.net"
+    mock_redis.lpush.assert_awaited_once_with(
+        "5535992373421@s.whatsapp.net",
+        "Agent: Oi, tudo bem?\n\nVi que vocês atendem o segmento.",
+    )
+
+
+def test_append_mensagem_agente_historico_redis_lista_vazia_usa_primeira_variante() -> None:
+    mock_redis = AsyncMock()
+    mock_redis.llen = AsyncMock(return_value=0)
+    mock_redis.lpush = AsyncMock(return_value=1)
+
+    async def _run():
+        with patch(
+            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ):
+            return await append_mensagem_agente_historico_redis("35992373421", "mensagem inicial")
+
+    key = asyncio.run(_run())
+    assert key == "5535992373421@s.whatsapp.net"
+    mock_redis.lpush.assert_awaited_once_with(
+        "5535992373421@s.whatsapp.net",
+        "Agent: mensagem inicial",
+    )
 
 
 def test_parse_lista_redis_n8n_ordem_cronologica() -> None:

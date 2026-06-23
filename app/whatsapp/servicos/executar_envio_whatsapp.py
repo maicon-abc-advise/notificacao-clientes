@@ -25,6 +25,7 @@ from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
 from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
 from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import entrada_whatsapp_apos_falha_email
 from app.whatsapp.repositorios.redis_contato_fornecedores import enfileirar_contato_fornecedor
+from app.whatsapp.repositorios.redis_historico_whatsapp import append_mensagem_agente_historico_redis
 from app.whatsapp.servicos.mensagem_inicial import montar_mensagem_inicial
 from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp
 from app.whatsapp.servicos.tocar_engajamento_whatsapp import tocar_engajamento_whatsapp, WhatsappEngajamentoEstado
@@ -183,6 +184,12 @@ async def enviar_mensagem_inicial(
             "erro": str(exc),
         }
 
+    redis_historico_key: str | None = None
+    try:
+        redis_historico_key = await append_mensagem_agente_historico_redis(tel, texto)
+    except Exception as exc:
+        _log.warning("Histórico Redis não gravado (envio WhatsApp ok): %s", exc)
+
     atualizado = await repo.atualizar_status(
         pool, row["id"], status="contatado", whatsapp_status="valido"
     )
@@ -210,6 +217,7 @@ async def enviar_mensagem_inicial(
         "mensagem_enviada": True,
         "redis_enqueued": redis_enqueued,
         "redis_telefones": redis_telefones,
+        "redis_historico_key": redis_historico_key,
         "numero_telefone": tel,
         "registro": dict(atualizado) if atualizado else None,
     }
