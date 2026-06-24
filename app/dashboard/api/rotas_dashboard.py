@@ -16,6 +16,13 @@ from app.dashboard.servicos.exibicao import (
     enriquecer_redis_sms_esperando,
     enriquecer_redis_sms_pendente,
 )
+from app.dashboard.servicos.ordenar_engajamento_lista import (
+    expr_aparicoes_30d,
+    expr_aparicoes_total,
+    filtros_sql_por_ordenar,
+    normalizar_ordenar_engajamento,
+    order_by_sql_engajamento,
+)
 from app.dashboard.servicos.serializacao import decodificar_contexto_json_bruto, registo_para_json
 from app.iam.rotas.dashboard_rotas import usuario_logado
 from app.orquestracao.api.dependencias import PoolOrquestracao, RedisOrquestracao
@@ -45,6 +52,7 @@ router = APIRouter(
 PAGE_SIZE = 10
 
 _coluna_data_fornecedor_cache: str | None | bool = False
+_tabela_aparicoes_cache: bool | None = None
 
 
 def _page_clamped(page: int) -> int:
@@ -2258,8 +2266,43 @@ async def metricas_engajamento(pool: PoolOrquestracao) -> dict[str, Any]:
     }
 
 
+async def _tabela_aparicoes_disponivel(pool: PoolOrquestracao) -> bool:
+    global _tabela_aparicoes_cache
+    if _tabela_aparicoes_cache is not None:
+        return _tabela_aparicoes_cache
+    p = obter_identificadores_postgres()
+    ta = p.qual("aparicoes")
+    try:
+        await pool.fetchval(f"SELECT 1 FROM {ta} LIMIT 1")
+        _tabela_aparicoes_cache = True
+    except Exception:
+        _tabela_aparicoes_cache = False
+    return _tabela_aparicoes_cache
+
+
+def _joins_aparicoes_engajamento(p: Any, *, aparicoes_disponivel: bool) -> str:
+    if not aparicoes_disponivel:
+        return ""
+    ta = p.qual("aparicoes")
+    return f"""
+        LEFT JOIN (
+            SELECT cnpj_basico, COUNT(*)::int AS n
+            FROM {ta}
+            GROUP BY cnpj_basico
+        ) AS ap_tot ON ap_tot.cnpj_basico = e.cnpj_basico
+        LEFT JOIN (
+            SELECT cnpj_basico, COUNT(*)::int AS n
+            FROM {ta}
+            WHERE created_at >= now() - interval '30 days'
+            GROUP BY cnpj_basico
+        ) AS ap_30 ON ap_30.cnpj_basico = e.cnpj_basico
+    """
+
+
 async def _contar_aparicoes_por_cnpjs(pool: PoolOrquestracao, cnpjs: list[str]) -> dict[str, int]:
     if not cnpjs:
+        return {}
+    if not await _tabela_aparicoes_disponivel(pool):
         return {}
     p = obter_identificadores_postgres()
     ta = p.qual("aparicoes")
@@ -2269,6 +2312,29 @@ async def _contar_aparicoes_por_cnpjs(pool: PoolOrquestracao, cnpjs: list[str]) 
             SELECT cnpj_basico, COUNT(*)::int AS n
             FROM {ta}
             WHERE cnpj_basico = ANY($1::text[])
+            GROUP BY cnpj_basico
+            """,
+            cnpjs,
+        )
+    except Exception:
+        return {}
+    return {str(r["cnpj_basico"]): int(r["n"] or 0) for r in rows}
+
+
+async def _contar_aparicoes_30d_por_cnpjs(pool: PoolOrquestracao, cnpjs: list[str]) -> dict[str, int]:
+    if not cnpjs:
+        return {}
+    if not await _tabela_aparicoes_disponivel(pool):
+        return {}
+    p = obter_identificadores_postgres()
+    ta = p.qual("aparicoes")
+    try:
+        rows = await pool.fetch(
+            f"""
+            SELECT cnpj_basico, COUNT(*)::int AS n
+            FROM {ta}
+            WHERE cnpj_basico = ANY($1::text[])
+              AND created_at >= now() - interval '30 days'
             GROUP BY cnpj_basico
             """,
             cnpjs,
@@ -2342,12 +2408,19 @@ async def lista_engajamento_fornecedores(
     status: str | None = None,
     cnpj_basico: str | None = None,
     convertidos: str | None = None,
+    ordenar: str | None = None,
 ) -> dict[str, Any]:
     p = obter_identificadores_postgres()
     te = p.qual("engajamento_fornecedores")
     tf = p.qual("fornecedores")
     page = _page_clamped(page)
     offset = (page - 1) * PAGE_SIZE
+    orden = normalizar_ordenar_engajamento(ordenar)
+
+    aparicoes_disponivel, col_data_fornecedor = await asyncio.gather(
+        _tabela_aparicoes_disponivel(pool),
+        _coluna_data_fornecedores_cached(pool),
+    )
 
     filtros: list[str] = []
     params: list[Any] = []
@@ -2363,18 +2436,42 @@ async def lista_engajamento_fornecedores(
         filtros.append(
             f"EXISTS (SELECT 1 FROM {tf} AS fx WHERE fx.cnpj_basico = e.cnpj_basico)",
         )
+    filtros.extend(
+        filtros_sql_por_ordenar(
+            orden,
+            aparicoes_disponivel=aparicoes_disponivel,
+            qual_fornecedores=tf,
+        ),
+    )
     where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
 
-    total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {te} AS e {where_sql}", *params) or 0)
+    joins_sql = f"LEFT JOIN {tf} AS f ON f.cnpj_basico = e.cnpj_basico"
+    joins_sql += _joins_aparicoes_engajamento(p, aparicoes_disponivel=aparicoes_disponivel)
+    if orden == "cadastro_recente" and not col_data_fornecedor:
+        ufid = p.col_usuario_fornecedor_id
+        joins_sql += f"\nLEFT JOIN auth.users AS au ON au.id = f.{ufid}"
+
+    from_sql = f"FROM {te} AS e\n{joins_sql}"
+    order_sql = order_by_sql_engajamento(
+        orden,
+        aparicoes_disponivel=aparicoes_disponivel,
+        col_data_fornecedor=col_data_fornecedor,
+    )
+    select_aparicoes = (
+        f"{expr_aparicoes_total(aparicoes_disponivel=aparicoes_disponivel)} AS _aparicoes_total,"
+        f"\n            {expr_aparicoes_30d(aparicoes_disponivel=aparicoes_disponivel)} AS _aparicoes_30d"
+    )
+
+    total = int(await pool.fetchval(f"SELECT COUNT(*) {from_sql} {where_sql}", *params) or 0)
     rows = await pool.fetch(
         f"""
         SELECT
             e.*,
-            COALESCE(NULLIF(f.nome, ''), NULLIF(e.nome_fantasia, ''), e.cnpj_basico) AS nome_fornecedor
-        FROM {te} AS e
-        LEFT JOIN {tf} AS f ON f.cnpj_basico = e.cnpj_basico
+            COALESCE(NULLIF(f.nome, ''), NULLIF(e.nome_fantasia, ''), e.cnpj_basico) AS nome_fornecedor,
+            {select_aparicoes}
+        {from_sql}
         {where_sql}
-        ORDER BY e.engajamento_atualizado_em DESC NULLS LAST, e.cnpj_basico DESC
+        ORDER BY {order_sql}
         LIMIT {PAGE_SIZE} OFFSET {offset}
         """,
         *params,
@@ -2384,12 +2481,14 @@ async def lista_engajamento_fornecedores(
         contatos_sms_por_cnpj,
         telefones_por_cnpj,
         aparicoes_por_cnpj,
+        aparicoes_30d_por_cnpj,
         whatsapp_por_cnpj,
         cadastrados_plataforma,
     ) = await asyncio.gather(
         listar_contatos_sms_por_cnpjs(pool, cnpjs),
         listar_telefones_agrupados_por_cnpjs(pool, cnpjs),
         _contar_aparicoes_por_cnpjs(pool, cnpjs),
+        _contar_aparicoes_30d_por_cnpjs(pool, cnpjs),
         _whatsapp_resumo_por_cnpjs(pool, cnpjs),
         _cadastrados_plataforma_por_cnpjs(pool, cnpjs),
     )
@@ -2404,7 +2503,16 @@ async def lista_engajamento_fornecedores(
         telefones = telefones_por_cnpj.get(cnpj) or []
         if telefones:
             item["telefones_engajamento"] = telefones
-        item["aparicoes_total"] = aparicoes_por_cnpj.get(cnpj, int(r.get("aparicoes_busca") or 0))
+        item["aparicoes_total"] = int(
+            r.get("_aparicoes_total")
+            if r.get("_aparicoes_total") is not None
+            else aparicoes_por_cnpj.get(cnpj, int(r.get("aparicoes_busca") or 0)),
+        )
+        item["aparicoes_30d"] = int(
+            r.get("_aparicoes_30d")
+            if r.get("_aparicoes_30d") is not None
+            else aparicoes_30d_por_cnpj.get(cnpj, 0),
+        )
         item["aparicoes_minimo_whatsapp"] = min_aparicoes_wa
         item["cadastrado_plataforma"] = cnpj in cadastrados_plataforma
         wa = whatsapp_por_cnpj.get(cnpj)
@@ -2414,6 +2522,7 @@ async def lista_engajamento_fornecedores(
     return {
         "origem": "postgres",
         "tabela_logica": "engajamento_fornecedores",
+        "ordenar": orden,
         "itens": itens,
         **_meta(total, page),
     }
