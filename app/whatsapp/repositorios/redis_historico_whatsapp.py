@@ -48,12 +48,20 @@ def _chaves_variantes_historico(telefone: str) -> tuple[str, str, str]:
     return key_registro, key_sem, key_com
 
 
+def ordem_cronologica_lista_n8n(raw: list[str]) -> list[str]:
+    """n8n grava com ``LPUSH``; ``LRANGE 0 -1`` retorna do mais novo ao mais antigo."""
+    return list(reversed(raw))
+
+
 def mesclar_raw_historico_variantes(
     raw_registro: list[str],
     raw_outra: list[str],
 ) -> list[str]:
     """
-    Une listas RPUSH de duas chaves ``@s.whatsapp.net`` (com/sem 9).
+    Une listas de duas chaves ``@s.whatsapp.net`` (com/sem 9).
+
+    ``raw_registro`` vem da API (``RPUSH``, já cronológico).
+    ``raw_outra`` deve vir normalizado via ``ordem_cronologica_lista_n8n``.
 
     - Só uma com dados: retorna essa.
     - Uma com 1 item e outra com vários: a de 1 item vem primeiro.
@@ -154,7 +162,8 @@ async def buscar_historico_redis_n8n(telefone: str) -> RedisHistoricoResult:
     if not raw_registro and not raw_outra:
         return RedisHistoricoResult([], None, variantes, 0, raw_por_chave)
 
-    mesclado = mesclar_raw_historico_variantes(raw_registro, raw_outra)
+    raw_outra_cronologico = ordem_cronologica_lista_n8n(raw_outra)
+    mesclado = mesclar_raw_historico_variantes(raw_registro, raw_outra_cronologico)
     redis_key = key_registro if raw_registro else key_outra
     if raw_registro and raw_outra:
         redis_key = key_registro
@@ -180,7 +189,7 @@ async def append_mensagem_agente_historico_redis(telefone: str, texto: str) -> s
     """
     Grava mensagem outbound na chave do telefone (dígitos como no banco).
 
-    Usa ``RPUSH`` e prefixo ``Agent:`` — mesma ordem cronológica do n8n.
+    Usa ``RPUSH`` e prefixo ``Agent:`` (n8n externo usa ``LPUSH`` na chave complementar).
     """
     conteudo = (texto or "").strip()
     if not conteudo:

@@ -9,6 +9,7 @@ from app.whatsapp.repositorios.redis_historico_whatsapp import (
     formatar_linha_agente_historico,
     jid_historico_whatsapp,
     mesclar_raw_historico_variantes,
+    ordem_cronologica_lista_n8n,
     parse_lista_redis_n8n,
 )
 from app.whatsapp.servicos.rotina_whatsapp import ConversationFetchResult, _fetch_conversation
@@ -112,6 +113,15 @@ def test_parse_lista_redis_n8n_prefixos_opcionais() -> None:
     assert msgs[1]["key"]["fromMe"] is False
 
 
+def test_ordem_cronologica_lista_n8n_inverte_lpush() -> None:
+    lpush = ["Agent: mais nova", "Agent: meio", "fornecedor antigo"]
+    assert ordem_cronologica_lista_n8n(lpush) == [
+        "fornecedor antigo",
+        "Agent: meio",
+        "Agent: mais nova",
+    ]
+
+
 def test_mesclar_raw_historico_variantes_apenas_uma_chave() -> None:
     assert mesclar_raw_historico_variantes([], ["a"]) == ["a"]
     assert mesclar_raw_historico_variantes(["a"], []) == ["a"]
@@ -181,10 +191,11 @@ def test_buscar_historico_redis_n8n_mescla_variantes_divergentes() -> None:
         if key == key_sem:
             return ["Agent: Oi, tudo bem?\n\nVocês teriam capacidade?"]
         if key == key_com:
+            # Ordem LPUSH do n8n (mais nova primeiro)
             return [
-                "Oi, boa tarde",
-                "Sim, estamos aceitando",
                 "Agent: O cadastro é gratuito...",
+                "Sim, estamos aceitando",
+                "Oi, boa tarde",
             ]
         return []
 
@@ -206,6 +217,44 @@ def test_buscar_historico_redis_n8n_mescla_variantes_divergentes() -> None:
     assert result.messages[1]["key"]["fromMe"] is False
     assert result.messages[2]["message"]["conversation"] == "Sim, estamos aceitando"
     assert result.raw_por_chave == {key_sem: 1, key_com: 3}
+
+
+def test_buscar_historico_redis_n8n_inverte_lpush_chave_n8n() -> None:
+    """Caso 551192716560: n8n LPUSH na chave com 9."""
+    mock_redis = AsyncMock()
+    key_sem = "551192716560@s.whatsapp.net"
+    key_com = "5511992716560@s.whatsapp.net"
+
+    async def _lrange(key: str, start: int, end: int) -> list[str]:
+        if key == key_sem:
+            return [
+                "Agent: Oi, tudo bem?\n\nVocês teriam capacidade para receber novos pedidos?",
+            ]
+        if key == key_com:
+            return [
+                "Agent:Para se cadastrar, é só acessar https://buscafornecedor.com.br/fornecedores",
+                "Agent:Lembre-se que o cadastro no BuscaFornecedor é totalmente gratuito",
+                "Agent:Boa tarde! Que bom que você confirmou.",
+                "Boa tarde !!  Sim.",
+            ]
+        return []
+
+    mock_redis.lrange = AsyncMock(side_effect=_lrange)
+
+    async def _run():
+        with patch(
+            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ):
+            return await buscar_historico_redis_n8n("551192716560")
+
+    result = asyncio.run(_run())
+    assert result.raw_total == 5
+    assert result.messages[1]["message"]["conversation"] == "Boa tarde !!  Sim."
+    assert result.messages[1]["key"]["fromMe"] is False
+    assert result.messages[2]["message"]["conversation"] == "Boa tarde! Que bom que você confirmou."
+    assert "Para se cadastrar" in result.messages[4]["message"]["conversation"]
 
 
 def test_fetch_conversation_prioriza_redis() -> None:
