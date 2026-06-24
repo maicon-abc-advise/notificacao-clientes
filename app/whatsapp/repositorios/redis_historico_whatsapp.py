@@ -39,6 +39,44 @@ def _chave_historico_whatsapp(telefone: str) -> str:
     return jid_historico_whatsapp(digits)
 
 
+def _chaves_variantes_historico(telefone: str) -> tuple[str, str, str]:
+    """Retorna ``(chave_registro, chave_sem_nove, chave_com_nove)``."""
+    sem_nove, com_nove = variantes_telefone_whatsapp(telefone)
+    key_sem = jid_historico_whatsapp(sem_nove)
+    key_com = jid_historico_whatsapp(com_nove)
+    key_registro = _chave_historico_whatsapp(telefone)
+    return key_registro, key_sem, key_com
+
+
+def mesclar_raw_historico_variantes(
+    raw_registro: list[str],
+    raw_outra: list[str],
+) -> list[str]:
+    """
+    Une listas RPUSH de duas chaves ``@s.whatsapp.net`` (com/sem 9).
+
+    - Só uma com dados: retorna essa.
+    - Uma com 1 item e outra com vários: a de 1 item vem primeiro.
+    - Ambas com 2+ ou ambas com 1 distinta: ``registro + outra``.
+    - Ambas com 1 idêntica: deduplica.
+    """
+    if not raw_registro and not raw_outra:
+        return []
+    if raw_registro and not raw_outra:
+        return list(raw_registro)
+    if raw_outra and not raw_registro:
+        return list(raw_outra)
+
+    len_r, len_o = len(raw_registro), len(raw_outra)
+    if len_r == 1 and len_o > 1:
+        return list(raw_registro) + list(raw_outra)
+    if len_o == 1 and len_r > 1:
+        return list(raw_outra) + list(raw_registro)
+    if len_r == 1 and len_o == 1 and raw_registro[0] == raw_outra[0]:
+        return list(raw_registro)
+    return list(raw_registro) + list(raw_outra)
+
+
 def _parse_entrada_n8n(linha: str, remote_jid: str) -> dict | None:
     texto = linha.strip()
     if not texto:
@@ -73,41 +111,69 @@ class RedisHistoricoResult:
     redis_key: str | None
     variantes_tentadas: list[str]
     raw_total: int
+    raw_por_chave: dict[str, int] | None = None
 
     def debug_dict(self) -> dict[str, Any]:
-        return {
+        out: dict[str, Any] = {
             "redis_key": self.redis_key,
             "redis_variantes_tentadas": self.variantes_tentadas,
             "redis_mensagens_raw": self.raw_total,
         }
+        if self.raw_por_chave:
+            out["redis_mensagens_raw_por_chave"] = self.raw_por_chave
+        return out
 
 
 async def buscar_historico_redis_n8n(telefone: str) -> RedisHistoricoResult:
-    """LRANGE na chave única do telefone (ordem cronológica, sem merge)."""
+    """LRANGE nas variantes com/sem 9 e mescla quando o histórico está dividido."""
     try:
-        redis_key = _chave_historico_whatsapp(telefone)
+        key_registro, key_sem, key_com = _chaves_variantes_historico(telefone)
     except ValueError as exc:
         _log.warning("Telefone inválido para histórico Redis: %s", exc)
         return RedisHistoricoResult([], None, [], 0)
 
+    variantes = [key_sem, key_com]
+    key_outra = key_com if key_registro == key_sem else key_sem
+
     redis = await obter_cliente_redis()
+    raw_registro: list[str] = []
+    raw_outra: list[str] = []
     try:
-        raw = await redis.lrange(redis_key, 0, -1)
+        raw_registro = await redis.lrange(key_registro, 0, -1)
+        raw_outra = await redis.lrange(key_outra, 0, -1)
     except Exception as exc:
-        _log.warning("Falha LRANGE Redis key=%s: %s", redis_key, exc)
-        return RedisHistoricoResult([], redis_key, [redis_key], 0)
+        _log.warning(
+            "Falha LRANGE Redis keys=%s/%s: %s",
+            key_registro,
+            key_outra,
+            exc,
+        )
+        return RedisHistoricoResult([], key_registro, variantes, 0)
 
-    if not raw:
-        return RedisHistoricoResult([], None, [redis_key], 0)
+    raw_por_chave = {key_registro: len(raw_registro), key_outra: len(raw_outra)}
+    if not raw_registro and not raw_outra:
+        return RedisHistoricoResult([], None, variantes, 0, raw_por_chave)
 
-    messages = parse_lista_redis_n8n(raw, redis_key)
+    mesclado = mesclar_raw_historico_variantes(raw_registro, raw_outra)
+    redis_key = key_registro if raw_registro else key_outra
+    if raw_registro and raw_outra:
+        redis_key = key_registro
+
+    messages = parse_lista_redis_n8n(mesclado, redis_key)
     _log.info(
-        "Histórico Redis n8n key=%s itens=%s mensagens=%s",
-        redis_key,
-        len(raw),
+        "Histórico Redis n8n registro=%s outra=%s itens=%s mensagens=%s",
+        len(raw_registro),
+        len(raw_outra),
+        len(mesclado),
         len(messages),
     )
-    return RedisHistoricoResult(messages, redis_key, [redis_key], len(raw))
+    return RedisHistoricoResult(
+        messages,
+        redis_key,
+        variantes,
+        len(mesclado),
+        raw_por_chave,
+    )
 
 
 async def append_mensagem_agente_historico_redis(telefone: str, texto: str) -> str | None:

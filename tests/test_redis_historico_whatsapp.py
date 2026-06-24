@@ -8,6 +8,7 @@ from app.whatsapp.repositorios.redis_historico_whatsapp import (
     buscar_historico_redis_n8n,
     formatar_linha_agente_historico,
     jid_historico_whatsapp,
+    mesclar_raw_historico_variantes,
     parse_lista_redis_n8n,
 )
 from app.whatsapp.servicos.rotina_whatsapp import ConversationFetchResult, _fetch_conversation
@@ -111,14 +112,41 @@ def test_parse_lista_redis_n8n_prefixos_opcionais() -> None:
     assert msgs[1]["key"]["fromMe"] is False
 
 
+def test_mesclar_raw_historico_variantes_apenas_uma_chave() -> None:
+    assert mesclar_raw_historico_variantes([], ["a"]) == ["a"]
+    assert mesclar_raw_historico_variantes(["a"], []) == ["a"]
+
+
+def test_mesclar_raw_historico_variantes_diverge_um_vs_varios() -> None:
+    inicial = ["Agent: Oi, tudo bem?"]
+    resto = ["Oi, boa tarde", "Sim, estamos aceitando", "Agent: Ótimo!"]
+    assert mesclar_raw_historico_variantes(inicial, resto) == inicial + resto
+    assert mesclar_raw_historico_variantes(resto, inicial) == inicial + resto
+
+
+def test_mesclar_raw_historico_variantes_ambas_duplicada() -> None:
+    linha = ["Agent: Oi"]
+    assert mesclar_raw_historico_variantes(linha, linha) == linha
+
+
+def test_mesclar_raw_historico_variantes_ambas_multiplas() -> None:
+    registro = ["Agent: a", "Agent: b"]
+    outra = ["c", "Agent: d"]
+    assert mesclar_raw_historico_variantes(registro, outra) == registro + outra
+
+
 def test_buscar_historico_redis_n8n_chave_unica() -> None:
     mock_redis = AsyncMock()
-    mock_redis.lrange = AsyncMock(
-        return_value=[
-            "Agent: mensagem inicial",
-            "pode enviar",
-        ],
-    )
+
+    async def _lrange(key: str, start: int, end: int) -> list[str]:
+        if key == "553592373421@s.whatsapp.net":
+            return [
+                "Agent: mensagem inicial",
+                "pode enviar",
+            ]
+        return []
+
+    mock_redis.lrange = AsyncMock(side_effect=_lrange)
 
     async def _run():
         with patch(
@@ -136,7 +164,48 @@ def test_buscar_historico_redis_n8n_chave_unica() -> None:
     assert result.messages[0]["key"]["fromMe"] is True
     assert result.messages[1]["message"]["conversation"] == "pode enviar"
     assert result.messages[1]["key"]["fromMe"] is False
-    mock_redis.lrange.assert_awaited_once_with("553592373421@s.whatsapp.net", 0, -1)
+    assert result.variantes_tentadas == [
+        "553592373421@s.whatsapp.net",
+        "5535992373421@s.whatsapp.net",
+    ]
+    assert mock_redis.lrange.await_count == 2
+
+
+def test_buscar_historico_redis_n8n_mescla_variantes_divergentes() -> None:
+    """Caso real: API na chave sem 9 (1 msg), n8n na chave com 9 (resto)."""
+    mock_redis = AsyncMock()
+    key_sem = "551199404152@s.whatsapp.net"
+    key_com = "5511999404152@s.whatsapp.net"
+
+    async def _lrange(key: str, start: int, end: int) -> list[str]:
+        if key == key_sem:
+            return ["Agent: Oi, tudo bem?\n\nVocês teriam capacidade?"]
+        if key == key_com:
+            return [
+                "Oi, boa tarde",
+                "Sim, estamos aceitando",
+                "Agent: O cadastro é gratuito...",
+            ]
+        return []
+
+    mock_redis.lrange = AsyncMock(side_effect=_lrange)
+
+    async def _run():
+        with patch(
+            "app.whatsapp.repositorios.redis_historico_whatsapp.obter_cliente_redis",
+            new_callable=AsyncMock,
+            return_value=mock_redis,
+        ):
+            return await buscar_historico_redis_n8n("551199404152")
+
+    result = asyncio.run(_run())
+    assert result.raw_total == 4
+    assert len(result.messages) == 4
+    assert result.messages[0]["key"]["fromMe"] is True
+    assert result.messages[1]["message"]["conversation"] == "Oi, boa tarde"
+    assert result.messages[1]["key"]["fromMe"] is False
+    assert result.messages[2]["message"]["conversation"] == "Sim, estamos aceitando"
+    assert result.raw_por_chave == {key_sem: 1, key_com: 3}
 
 
 def test_fetch_conversation_prioriza_redis() -> None:
@@ -156,7 +225,10 @@ def test_fetch_conversation_prioriza_redis() -> None:
             "messages": redis_msgs,
             "debug_dict": lambda self: {
                 "redis_key": "553592373421@s.whatsapp.net",
-                "redis_variantes_tentadas": ["553592373421@s.whatsapp.net"],
+                "redis_variantes_tentadas": [
+                    "553592373421@s.whatsapp.net",
+                    "5535992373421@s.whatsapp.net",
+                ],
                 "redis_mensagens_raw": 1,
             },
         },
@@ -193,7 +265,10 @@ def test_fetch_conversation_fallback_evolution() -> None:
             "messages": [],
             "debug_dict": lambda self: {
                 "redis_key": None,
-                "redis_variantes_tentadas": ["553592373421@s.whatsapp.net"],
+                "redis_variantes_tentadas": [
+                    "553592373421@s.whatsapp.net",
+                    "5535992373421@s.whatsapp.net",
+                ],
                 "redis_mensagens_raw": 0,
             },
         },
