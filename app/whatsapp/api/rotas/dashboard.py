@@ -230,8 +230,9 @@ async def detalhe_execucao_rotina(pool: PoolOrquestracao, execucao_id: uuid.UUID
 async def post_enviar_pendentes_dashboard(
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
+    limite: Annotated[int | None, Query(ge=1, le=200)] = None,
 ) -> dict[str, Any]:
-    return (await executar_envio_pendentes_whatsapp(pool, config)).to_dict()
+    return (await executar_envio_pendentes_whatsapp(pool, config, limite=limite)).to_dict()
 
 
 @router.post("/rotina/atualizar-conversas")
@@ -246,9 +247,10 @@ async def post_atualizar_conversas_dashboard(
 async def post_rotina_dashboard(
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
+    limite: Annotated[int | None, Query(ge=1, le=200)] = None,
 ) -> dict[str, Any]:
-    """Wrapper completo (envio + conversas)."""
-    return (await executar_rotina_whatsapp(pool, config)).to_dict()
+    """Wrapper completo (envio + conversas). ``limite`` aplica-se só ao envio."""
+    return (await executar_rotina_whatsapp(pool, config, limite_envio=limite)).to_dict()
 
 
 @router.post("/{envio_id}/enviar")

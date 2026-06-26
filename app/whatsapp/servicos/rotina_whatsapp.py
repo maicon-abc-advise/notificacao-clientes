@@ -165,8 +165,12 @@ async def executar_envio_pendentes_whatsapp(
     cfg: Configuracao,
     *,
     envio_id: str | None = None,
+    limite: int | None = None,
 ) -> RoutineResult:
-    """Valida número e envia mensagem inicial para registros ``pendente``."""
+    """Valida número e envia mensagem inicial para registros ``pendente``.
+
+    Com ``limite``, processa só os N pendentes mais recentes (``updated_at``).
+    """
     result = RoutineResult(tipo="enviar_pendentes", started_at=_utcnow())
     telefones_contatados: set[str] = set()
 
@@ -174,7 +178,7 @@ async def executar_envio_pendentes_whatsapp(
         row = await repo.buscar_por_id(pool, envio_id)
         candidatos = [row] if row and str(row["status"]) == "pendente" else []
     else:
-        candidatos = await repo.listar_pendentes_para_envio(pool)
+        candidatos = await repo.listar_pendentes_para_envio(pool, limite=limite)
 
     for row in candidatos:
         if row is None:
@@ -317,9 +321,12 @@ async def executar_rotina_whatsapp(
     cfg: Configuracao,
     *,
     envio_id: str | None = None,
+    limite_envio: int | None = None,
 ) -> RoutineResult:
     """Wrapper: envio de pendentes + atualização de conversas."""
-    envio = await executar_envio_pendentes_whatsapp(pool, cfg, envio_id=envio_id)
+    envio = await executar_envio_pendentes_whatsapp(
+        pool, cfg, envio_id=envio_id, limite=limite_envio
+    )
     envio.execucao_id = None
     conversas = await executar_atualizar_conversas_whatsapp(pool, cfg, envio_id=envio_id)
     conversas.execucao_id = None

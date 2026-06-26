@@ -209,7 +209,18 @@ async def incrementar_etapa_falha(
     )
 
 
-async def listar_pendentes_para_envio(pool: asyncpg.Pool) -> list[asyncpg.Record]:
+async def listar_pendentes_para_envio(
+    pool: asyncpg.Pool,
+    *,
+    limite: int | None = None,
+) -> list[asyncpg.Record]:
+    """Pendentes para envio. Com ``limite``, os mais recentes (``updated_at DESC``)."""
+    order = "w.updated_at DESC" if limite is not None else "w.updated_at ASC"
+    params: list[Any] = []
+    limit_sql = ""
+    if limite is not None:
+        limit_sql = "LIMIT $1"
+        params.append(int(limite))
     return await pool.fetch(
         f"""
         SELECT w.*,
@@ -219,8 +230,10 @@ async def listar_pendentes_para_envio(pool: asyncpg.Pool) -> list[asyncpg.Record
                   AND w2.id <> w.id) AS outros_contatados_mesmo_tel
         FROM {_tabela()} w
         WHERE w.status = 'pendente'
-        ORDER BY w.updated_at ASC
+        ORDER BY {order}
+        {limit_sql}
         """,
+        *params,
     )
 
 

@@ -5,7 +5,7 @@ from __future__ import annotations
 import uuid
 from typing import Annotated, Any
 
-from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi import APIRouter, Depends, HTTPException, Query, status
 
 from app.config.config import Configuracao, obter_configuracao
 from app.iam.dependencias import verificar_chamada_interna
@@ -28,9 +28,13 @@ router = APIRouter(
 async def post_enviar_pendentes_whatsapp(
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
+    limite: Annotated[int | None, Query(ge=1, le=200)] = None,
 ) -> dict[str, Any]:
-    """Valida número e envia mensagem inicial para fila ``pendente``."""
-    return (await executar_envio_pendentes_whatsapp(pool, config)).to_dict()
+    """Valida número e envia mensagem inicial para fila ``pendente``.
+
+    Com ``limite``, envia só os N pendentes mais recentes (por ``updated_at``).
+    """
+    return (await executar_envio_pendentes_whatsapp(pool, config, limite=limite)).to_dict()
 
 
 @router.post("/enviar-pendentes/{envio_id}")
@@ -74,9 +78,13 @@ async def post_atualizar_conversas_whatsapp_um(
 async def post_rotina_whatsapp(
     pool: PoolOrquestracao,
     config: Annotated[Configuracao, Depends(obter_configuracao)],
+    limite: Annotated[int | None, Query(ge=1, le=200)] = None,
 ) -> dict[str, Any]:
-    """Wrapper: enviar-pendentes + atualizar-conversas (compatibilidade)."""
-    return (await executar_rotina_whatsapp(pool, config)).to_dict()
+    """Wrapper: enviar-pendentes + atualizar-conversas (compatibilidade).
+
+    ``limite`` aplica-se só ao envio de pendentes.
+    """
+    return (await executar_rotina_whatsapp(pool, config, limite_envio=limite)).to_dict()
 
 
 @router.post("/rotina/{envio_id}")
