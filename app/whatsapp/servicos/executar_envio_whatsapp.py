@@ -11,9 +11,9 @@ import asyncpg
 
 from app.config.config import Configuracao
 from app.config.postgres_identificadores import obter_identificadores_postgres
+from app.ligacoes.servicos.entrada_ligacao_apos_falha_whatsapp import convidar_ligacao_apos_falha_whatsapp
 from app.orquestracao.repositorios.engajamento_consulta_repo import carregar_por_cnpj_basico
 from app.orquestracao.repositorios.company_profile_repo import buscar_full_profile_por_cnpj_basico
-from app.reenvio.servicos.engajamento_contatos import proximo_telefone_tentavel_apos_contato
 from app.whatsapp.api.externo.evolution.adaptador_evolution import (
     ErroEvolutionAPI,
     aplicar_label_chat,
@@ -23,11 +23,9 @@ from app.whatsapp.api.externo.evolution.adaptador_evolution import (
 )
 from app.whatsapp.repositorios import postgres_whatsapp_envios as repo
 from app.whatsapp.repositorios.postgres_whatsapp_envios import cnpj_de_row
-from app.whatsapp.servicos.entrada_whatsapp_apos_falha_email import entrada_whatsapp_apos_falha_email
 from app.whatsapp.repositorios.redis_contato_fornecedores import enfileirar_contato_fornecedor
 from app.whatsapp.repositorios.redis_historico_whatsapp import append_mensagem_agente_historico_redis
 from app.whatsapp.servicos.mensagem_inicial import escolher_mensagem_contato
-from app.whatsapp.servicos.telefone_whatsapp import normalizar_telefone_whatsapp
 from app.whatsapp.servicos.tocar_engajamento_whatsapp import tocar_engajamento_whatsapp, WhatsappEngajamentoEstado
 
 _log = logging.getLogger(__name__)
@@ -107,41 +105,37 @@ async def validar_e_atualizar_numero(
     }
 
 
-async def _tentar_proximo_telefone(
+async def _finalizar_whatsapp_numero_invalido(
     pool: asyncpg.Pool,
-    cfg: Configuracao,
     row: asyncpg.Record,
-) -> dict[str, Any] | None:
+) -> dict[str, Any]:
+    """Número sem WhatsApp: encerra funil (1 linha por CNPJ) e convida ligação."""
     cnpj = cnpj_de_row(row)
     tel_atual = str(row["numero_telefone"])
-    snap = await carregar_por_cnpj_basico(pool, cnpj)
-    prox = proximo_telefone_tentavel_apos_contato(snap.contatos_sms, tel_atual)
-    if not prox:
-        await repo.atualizar_status(
-            pool,
-            row["id"],
-            status="concluido_falha",
-            whatsapp_status="invalido",
-            motivo_falha="sem_whatsapp_valido",
-        )
-        await tocar_engajamento_whatsapp(
-            pool,
-            row.get("fornecedor_id"),
-            cnpj,
-            WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_FALHA,
-            telefone=tel_atual,
-        )
-        return {"acao": "whatsapp_sem_whatsapp_valido", "id": str(row["id"])}
-
-    entrada = await entrada_whatsapp_apos_falha_email(
+    atualizado = await repo.atualizar_status(
         pool,
-        cfg,
-        cnpj_basico=cnpj,
-        fornecedor_id=row.get("fornecedor_id"),
-        origem="proximo_telefone_invalido",
-        telefone=prox,
+        row["id"],
+        status="concluido_falha",
+        whatsapp_status="invalido",
+        motivo_falha="sem_whatsapp_valido",
     )
-    return {"acao": "whatsapp_numero_invalido_proximo", "id": str(row["id"]), **entrada}
+    await tocar_engajamento_whatsapp(
+        pool,
+        row.get("fornecedor_id"),
+        cnpj,
+        WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_FALHA,
+        telefone=tel_atual,
+    )
+    ligacao = await convidar_ligacao_apos_falha_whatsapp(
+        pool,
+        atualizado or row,
+        origem="whatsapp_sem_numero_valido",
+    )
+    return {
+        "acao": "whatsapp_sem_whatsapp_valido",
+        "id": str(row["id"]),
+        "ligacao": ligacao,
+    }
 
 
 async def enviar_mensagem_inicial(
@@ -163,8 +157,7 @@ async def enviar_mensagem_inicial(
     if validacao.get("acao") == "whatsapp_erro_api_retry":
         return validacao
     if not validacao.get("exists"):
-        prox = await _tentar_proximo_telefone(pool, cfg, row)
-        return prox or validacao
+        return await _finalizar_whatsapp_numero_invalido(pool, row)
 
     segmento = await _resolver_segmento(pool, cnpj)
     texto = (mensagem or "").strip() or escolher_mensagem_contato(row, segmento)

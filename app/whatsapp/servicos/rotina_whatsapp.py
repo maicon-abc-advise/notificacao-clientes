@@ -10,6 +10,7 @@ from typing import Any, Literal
 import asyncpg
 
 from app.config.config import Configuracao
+from app.ligacoes.servicos.entrada_ligacao_apos_falha_whatsapp import convidar_ligacao_apos_falha_whatsapp
 from app.orquestracao.repositorios.fornecedores_repo import buscar_usuario_fornecedor_por_cnpj_basico
 from app.whatsapp.api.externo.evolution.adaptador_evolution import (
     ErroEvolutionAPI,
@@ -410,8 +411,31 @@ async def _aplicar_decisao(
             pool, row["id"], resultado, max_etapas=cfg.routine_max_falhas
         )
         novo = str(atualizado["status"]) if atualizado else status
+        ligacao: dict[str, Any] | None = None
+        if novo == "concluido_falha" and atualizado is not None:
+            await tocar_engajamento_whatsapp(
+                pool,
+                row.get("fornecedor_id"),
+                cnpj,
+                WhatsappEngajamentoEstado.WHATSAPP_CONCLUIDO_FALHA,
+                telefone=tel,
+            )
+            ligacao = await convidar_ligacao_apos_falha_whatsapp(
+                pool,
+                atualizado,
+                origem="whatsapp_etapas_esgotadas",
+            )
         result.actions.append(
-            RoutineAction(rid, cnpj, "etapa_retorna_pendente", detail, status, novo, decision.source, dbg)
+            RoutineAction(
+                rid,
+                cnpj,
+                "etapa_retorna_pendente",
+                f"{detail}; ligacao={ligacao['retorno'] if ligacao else '—'}",
+                status,
+                novo,
+                decision.source,
+                dbg,
+            )
         )
         return
 
