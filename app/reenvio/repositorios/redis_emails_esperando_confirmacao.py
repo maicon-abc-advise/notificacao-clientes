@@ -13,6 +13,7 @@ import time
 import uuid
 from redis.asyncio import Redis
 
+from app.experimentos.variante_email import VARIANTE_PADRAO, normalizar_variante
 from app.reenvio.repositorios.redis_consulta_notificacao import (
     fase_esperando_email,
     liberar_trava_se_fase,
@@ -52,6 +53,8 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
         fornecedor_id: str | None = None,
         cnpj_basico: str | None = None,
         consulta_id: uuid.UUID | None = None,
+        variante: str = "simples",
+        experimento_id: str | None = None,
     ) -> None:
         agora = str(int(time.time()))
         mapping: dict[str, str] = {
@@ -67,6 +70,8 @@ class RepositorioEmailsEsperandoConfirmacaoRedis:
             "status_atual": "AGUARDANDO_ABERTURA",
             "criado_em": agora,
             "atualizado_em": agora,
+            "variante": normalizar_variante(variante),
+            "experimento_id": (experimento_id or "").strip(),
         }
         pipe = redis.pipeline(transaction=True)
         pipe.hset(chave_hash(message_id), mapping=mapping)

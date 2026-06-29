@@ -50,6 +50,7 @@ from app.reenvio.servicos.engajamento_contatos import (
 from app.reenvio.servicos.engajamento_fornecedor import persistir_contatos_iniciais_engajamento
 from app.reenvio.servicos.n8n_claims import claim_n8n_ativo, liberar_claim_item_n8n
 from app.reenvio.servicos.validacao_telefone_sms_br import normalizar_telefone_movel_br_para_sms
+from app.experimentos.variante_email import VARIANTE_PADRAO, normalizar_variante
 from app.templates.modelo import CodigoTipoTemplate
 
 _ORIGEM_DASHBOARD = "dashboard-manual"
@@ -236,6 +237,8 @@ def _pedido_email_de_hash(raw: dict[str, str], id_externo: str) -> PedidoEnvioEm
         fornecedor_id=fid,
         cnpj_basico=(raw.get("cnpj_basico") or "").strip() or None,
         remetente=(raw.get("remetente") or "").strip() or None,
+        variante=normalizar_variante(raw.get("variante") or VARIANTE_PADRAO),
+        experimento_id=(raw.get("experimento_id") or "").strip() or None,
     )
 
 

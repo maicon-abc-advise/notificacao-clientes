@@ -9,6 +9,7 @@ from typing import Any
 import asyncpg
 
 from app.config.postgres_identificadores import obter_identificadores_postgres
+from app.experimentos.variante_email import VARIANTE_PADRAO, normalizar_variante
 
 
 async def buscar_enviados_por_ids_externos(
@@ -102,18 +103,22 @@ async def inserir_ou_atualizar_apos_envio_api(
     id_mensagem_zenvia: str,
     fornecedor_id: uuid.UUID | None,
     cnpj_basico: str | None,
+    variante: str = VARIANTE_PADRAO,
+    experimento_id: str | None = None,
 ) -> None:
     """Chamado após ``POST /v1/mensagens/email`` com sucesso."""
     p = obter_identificadores_postgres()
     te = p.qual("emails_enviados")
     cf = p.col_fornecedor_id
+    var = normalizar_variante(variante)
+    exp = (experimento_id or "").strip() or None
     await pool.execute(
         f"""
         INSERT INTO {te} (
             id_externo, email_destinatario, tipo_template, contexto, remetente,
-            id_mensagem_zenvia, {cf}, cnpj_basico, status_ultimo
+            id_mensagem_zenvia, {cf}, cnpj_basico, status_ultimo, variante, experimento_id
         )
-        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, 'processando')
+        VALUES ($1, $2, $3, $4::jsonb, $5, $6, $7, $8, 'processando', $9, $10)
         ON CONFLICT (id_externo) DO UPDATE SET
             id_mensagem_zenvia = EXCLUDED.id_mensagem_zenvia,
             email_destinatario = EXCLUDED.email_destinatario,
@@ -122,6 +127,8 @@ async def inserir_ou_atualizar_apos_envio_api(
             remetente = EXCLUDED.remetente,
             {cf} = COALESCE(EXCLUDED.{cf}, {te}.{cf}),
             cnpj_basico = COALESCE(EXCLUDED.cnpj_basico, {te}.cnpj_basico),
+            variante = EXCLUDED.variante,
+            experimento_id = COALESCE(EXCLUDED.experimento_id, {te}.experimento_id),
             status_ultimo = 'processando',
             atualizado_em = now()
         """,
@@ -133,4 +140,6 @@ async def inserir_ou_atualizar_apos_envio_api(
         id_mensagem_zenvia,
         fornecedor_id,
         cnpj_basico,
+        var,
+        exp,
     )

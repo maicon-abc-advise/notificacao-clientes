@@ -56,7 +56,7 @@ def _montar_payload_envio(item: dict[str, Any], *, destinatario: str) -> dict[st
         "contexto": item.get("contexto") if isinstance(item.get("contexto"), dict) else {},
         "id_externo": item.get("id_externo"),
     }
-    for campo in ("remetente", "fornecedor_id", "cnpj_basico", "consulta_id"):
+    for campo in ("remetente", "fornecedor_id", "cnpj_basico", "consulta_id", "variante", "experimento_id"):
         valor = item.get(campo)
         if valor:
             payload[campo] = valor

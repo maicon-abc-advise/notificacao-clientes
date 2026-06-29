@@ -88,6 +88,15 @@ async def _templates_fixos() -> object:
                 sms="sms",
             )
 
+        async def obter_por_tipo_e_variante(self, codigo: str, variante: str) -> TemplateNotificacao:
+            return TemplateNotificacao(
+                id="1",
+                tipo=codigo,
+                email=f"<p>{variante}</p>",
+                sms="sms",
+                variante=variante,
+            )
+
         async def listar_todos(self) -> list[TemplateNotificacao]:
             return []
 

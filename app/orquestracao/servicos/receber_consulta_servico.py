@@ -29,6 +29,8 @@ from app.orquestracao.servicos.auxiliares.fragmentar_contatos_recebe_consulta im
     telefones_normalizados_do_payload,
 )
 from app.clique.token_clique import gerar_id_externo
+from app.experimentos.growthbook_servico import resolver_variante_email_busca
+from app.experimentos.variante_email import normalizar_variante
 from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
     montar_pedido_email_apareceu_busca,
     montar_pedido_sms_consultado_sem_email,
@@ -207,6 +209,16 @@ async def executar_receber_consulta(
             tipo_template=decisao.tipo_template,
             uf=uf_ctx,
             segmento=segmento_ctx,
+        )
+        variante, experimento_id = await resolver_variante_email_busca(
+            corpo.cnpj_basico,
+            tipo_template=decisao.tipo_template,
+        )
+        pedido = pedido.model_copy(
+            update={
+                "variante": normalizar_variante(variante),
+                "experimento_id": experimento_id,
+            }
         )
         ok = await enfileirar_email_pendente(redis, pedido, id_externo=ext, origem=_ORIGEM)
         _log.info(

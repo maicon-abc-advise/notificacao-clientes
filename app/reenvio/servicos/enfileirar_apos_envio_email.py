@@ -45,6 +45,8 @@ async def enfileirar_email_enviado_apos_sucesso(
             fornecedor_id=str(pedido.fornecedor_id) if pedido.fornecedor_id else None,
             cnpj_basico=pedido.cnpj_basico,
             consulta_id=pedido.consulta_id,
+            variante=pedido.variante,
+            experimento_id=pedido.experimento_id,
         )
     except Exception:
         _log.exception(

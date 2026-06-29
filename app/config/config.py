@@ -217,6 +217,28 @@ class Configuracao(BaseSettings):
     )
     whatsapp_validacao_cache_dias: int = Field(default=30, ge=1, validation_alias="WHATSAPP_VALIDACAO_CACHE_DIAS")
 
+    growthbook_client_key: str = Field(default="", validation_alias="GROWTHBOOK_CLIENT_KEY")
+    growthbook_enabled: bool = Field(default=False, validation_alias="GROWTHBOOK_ENABLED")
+    growthbook_feature_key: str = Field(
+        default="email-apareceu-busca-template-teste",
+        validation_alias="GROWTHBOOK_FEATURE_KEY",
+    )
+    growthbook_experimento_id: str = Field(
+        default="email-apareceu-busca-variacao-teste",
+        validation_alias="GROWTHBOOK_EXPERIMENTO_ID",
+    )
+
+    @field_validator("growthbook_enabled", mode="before")
+    @classmethod
+    def _bool_growthbook(cls, v: Any) -> Any:
+        if isinstance(v, str):
+            s = v.strip().lower()
+            if s in ("1", "true", "yes", "on"):
+                return True
+            if s in ("0", "false", "no", "off", ""):
+                return False
+        return v
+
     @field_validator("ambiente", mode="before")
     @classmethod
     def _normalizar_ambiente(cls, v: Any) -> Any:

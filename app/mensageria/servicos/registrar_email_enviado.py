@@ -46,4 +46,6 @@ async def registrar_email_enviado_apos_sucesso(
         id_mensagem_zenvia=msg_id,
         fornecedor_id=pedido.fornecedor_id,
         cnpj_basico=cnpj,
+        variante=pedido.variante,
+        experimento_id=pedido.experimento_id,
     )

@@ -46,6 +46,14 @@ class PedidoEnvioEmail(BaseModel):
         default=None,
         description="Opcional: trava deduplicação na orquestração (recebe-consulta); repassado às filas Redis.",
     )
+    variante: str = Field(
+        default="simples",
+        description="Variante do template de e-mail (ex.: simples, elaborado).",
+    )
+    experimento_id: str | None = Field(
+        default=None,
+        description="Tracking key GrowthBook quando o envio entrou em experimento A/B.",
+    )
 
 class PedidoEnvioSms(BaseModel):
     destinatario: str = Field(

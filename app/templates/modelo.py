@@ -15,3 +15,5 @@ class TemplateNotificacao:
     tipo: str
     email: str | None
     sms: str
+    variante: str = "simples"
+    assunto: str | None = None

@@ -7,6 +7,7 @@ from typing import Any
 
 from redis.asyncio import Redis
 
+from app.experimentos.variante_email import VARIANTE_PADRAO, normalizar_variante
 from app.orquestracao.excecoes import ConsultaJaNotificadaError
 from app.reenvio.repositorios.redis_consulta_notificacao import (
     fase_pendente_email,
@@ -38,6 +39,8 @@ class RepositorioEmailsPendenteRedis:
         cnpj_basico: str | None,
         origem: str,
         consulta_id: uuid.UUID | None = None,
+        variante: str = "simples",
+        experimento_id: str | None = None,
     ) -> bool:
         key = chave_hash(id_externo)
         reservou_trava = False
@@ -64,6 +67,8 @@ class RepositorioEmailsPendenteRedis:
                 "origem": origem,
                 "consulta_id": str(consulta_id) if consulta_id is not None else "",
                 "criado_em": str(agora),
+                "variante": normalizar_variante(variante),
+                "experimento_id": (experimento_id or "").strip(),
             }
             pipe = redis.pipeline(transaction=True)
             pipe.hset(key, mapping=mapping)
@@ -135,6 +140,8 @@ class RepositorioEmailsPendenteRedis:
                     "origem": raw.get("origem", ""),
                     "consulta_id": raw.get("consulta_id") or None,
                     "criado_em": raw.get("criado_em"),
+                    "variante": normalizar_variante(raw.get("variante") or VARIANTE_PADRAO),
+                    "experimento_id": (raw.get("experimento_id") or "").strip() or None,
                 },
             )
         return saida

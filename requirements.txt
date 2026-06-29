@@ -6,3 +6,4 @@ redis>=5.2
 httpx>=0.28
 asyncpg>=0.30
 openai>=1.0
+growthbook>=1.1.0

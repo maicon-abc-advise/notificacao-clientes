@@ -26,6 +26,8 @@ async def enfileirar_email_pendente(
         cnpj_basico=pedido.cnpj_basico,
         consulta_id=pedido.consulta_id,
         origem=origem,
+        variante=pedido.variante,
+        experimento_id=pedido.experimento_id,
     )
 
 

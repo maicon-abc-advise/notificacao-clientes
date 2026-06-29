@@ -10,6 +10,7 @@ from redis.asyncio import Redis
 
 from app.clique.token_clique import TAMANHO_ID_EXTERNO, gerar_id_externo
 from app.mensageria.api.dto.modelos import PedidoEnvioEmail
+from app.experimentos.variante_email import VARIANTE_PADRAO, normalizar_variante
 from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import url_login_rastreado_para_id
 from app.orquestracao.repositorios.engajamento_consulta_repo import SnapshotEngajamentoOrquestracao
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import RepositorioEmailsPendenteRedis
@@ -56,6 +57,8 @@ def pedido_envio_email_de_metadados_redis(
         fornecedor_id=uid,
         cnpj_basico=cnpj,
         consulta_id=cid,
+        variante=normalizar_variante(dados.get("variante") or VARIANTE_PADRAO),
+        experimento_id=(dados.get("experimento_id") or "").strip() or None,
     )
 
 
@@ -94,6 +97,8 @@ async def tentar_enfileirar_proximo_email_engajamento(
         cnpj_basico=pedido.cnpj_basico,
         consulta_id=pedido.consulta_id,
         origem=origem,
+        variante=pedido.variante,
+        experimento_id=pedido.experimento_id,
     )
     if ok:
         _log.info(

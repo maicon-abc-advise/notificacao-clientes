@@ -53,8 +53,12 @@ def _configurar_logging() -> None:
 @asynccontextmanager
 async def lifespan(_app: FastAPI):
     _configurar_logging()
+    from app.experimentos.growthbook_servico import encerrar_growthbook, iniciar_growthbook
+
     await obter_cliente_redis()
+    await iniciar_growthbook()
     yield
+    await encerrar_growthbook()
     await fechar_pool()
     await fechar_cliente_redis()
     await fechar_cliente_contato_fornecedores()
