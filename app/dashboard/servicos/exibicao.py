@@ -28,6 +28,23 @@ def estado_postgres_mensagem(status_ultimo: str) -> dict[str, str]:
     return _badge(status_ultimo, "neutral")
 
 
+def estado_engajamento_comprador(*, converteu: bool, primeira_consulta_sem_cadastro: bool) -> dict[str, str]:
+    if converteu:
+        return _badge("Convertido", "success")
+    if primeira_consulta_sem_cadastro:
+        return _badge("Elegível — aguardando", "info")
+    return _badge("Já usava plataforma", "neutral")
+
+
+def enriquecer_linha_engajamento_comprador(linha: dict[str, Any]) -> dict[str, Any]:
+    out = dict(linha)
+    out["estado_exibicao"] = estado_engajamento_comprador(
+        converteu=bool(out.get("converteu")),
+        primeira_consulta_sem_cadastro=bool(out.get("primeira_consulta_sem_cadastro")),
+    )
+    return out
+
+
 def estado_redis_email_pendente() -> dict[str, str]:
     return _badge("Na fila (pré-envio)", "neutral")
 

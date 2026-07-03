@@ -8,6 +8,7 @@ class CodigoTipoTemplate(StrEnum):
     LEMBRETE_CREDITOS_ESGOTADOS = "LEMBRETE_CREDITOS_ESGOTADOS"
     CONSULTADO_SEM_EMAIL = "CONSULTADO_SEM_EMAIL"
     APRESENTACAO = "APRESENTACAO"
+    BUSCA_COMPRADOR = "BUSCA_COMPRADOR"
 
 @dataclass(frozen=True, slots=True)
 class TemplateNotificacao:

@@ -20,6 +20,7 @@ _MIGRACOES_ORQUESTRACAO_INCREMENTAIS: tuple[str, ...] = (
     "telefone_engajamento.sql",
     "telefone_engajamento_sem_canal.sql",
     "engajamento_whatsapp_ligacao.sql",
+    "engajamento_compradores.sql",
 )
 
 def _sql_arquivo(nome: str) -> str:

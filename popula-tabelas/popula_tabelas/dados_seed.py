@@ -9,7 +9,12 @@ IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
     CodigoTipoTemplate.LEMBRETE_CREDITOS_ESGOTADOS: "c3d4e5f6-a7b8-4901-c234-56789abcdef0",
     CodigoTipoTemplate.CONSULTADO_SEM_EMAIL: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
     CodigoTipoTemplate.APRESENTACAO: "f1a2b3c4-d5e6-4789-a012-345678abcdef",
+    CodigoTipoTemplate.BUSCA_COMPRADOR: "a7b8c9d0-e1f2-4345-a678-901234567890",
 }
+
+SMS_BUSCA_COMPRADOR = (
+    "BuscaFornecedor: Veja o resultado da sua busca: {{ url }}"
+)
 
 SMS_APARECEU_BUSCA = (
     "Clientes em {{ uf }} buscaram fornecedores de {{ segmento }}. "
@@ -314,5 +319,11 @@ def linhas_seed() -> list[tuple[str, str, str | None, str]]:
             CodigoTipoTemplate.APRESENTACAO.value,
             EMAIL_APRESENTACAO,
             SMS_APRESENTACAO,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.BUSCA_COMPRADOR],
+            CodigoTipoTemplate.BUSCA_COMPRADOR.value,
+            None,
+            SMS_BUSCA_COMPRADOR,
         ),
     ]

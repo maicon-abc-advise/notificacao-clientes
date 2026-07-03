@@ -8,6 +8,7 @@ from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from app.config.postgres_identificadores import obter_identificadores_postgres
 from app.dashboard.servicos.exibicao import (
+    enriquecer_linha_engajamento_comprador,
     enriquecer_linha_postgres,
     enriquecer_linha_postgres_ligacao,
     enriquecer_redis_email_esperando,
@@ -364,6 +365,39 @@ def _barra_status_sms(
             _segmento_barra("erros", "erros", erros, "error", status="falha_definitiva"),
         ],
     }
+
+
+def _barra_status_compradores(
+    total: int,
+    elegiveis: int,
+    convertidos: int,
+    ja_usava: int,
+) -> dict[str, Any]:
+    pendentes = max(elegiveis - convertidos, 0)
+    return {
+        "total_rotulo": "compradores",
+        "total": int(total),
+        "segmentos": [
+            _segmento_barra("convertidos", "Convertidos", convertidos, "success", status="converteu_true"),
+            _segmento_barra("pendentes", "Elegíveis pendentes", pendentes, "info", status="elegivel_pendente"),
+            _segmento_barra("ja_usava", "Já usava plataforma", ja_usava, "neutral", status="nao_elegivel"),
+        ],
+    }
+
+
+def _where_status_comprador(status: str | None) -> str | None:
+    s = (status or "").strip().lower()
+    if s == "converteu_true":
+        return "converteu = true"
+    if s == "converteu_false":
+        return "converteu = false"
+    if s == "elegivel":
+        return "primeira_consulta_sem_cadastro = true"
+    if s == "nao_elegivel":
+        return "primeira_consulta_sem_cadastro = false"
+    if s == "elegivel_pendente":
+        return "primeira_consulta_sem_cadastro = true AND converteu = false"
+    return None
 
 
 def _barra_status_ligacoes(
@@ -2529,3 +2563,94 @@ async def lista_engajamento_fornecedores(
 
 
 # WhatsApp: rotas em app/whatsapp/api/rotas/dashboard.py (whatsapp_envios)
+
+
+@router.get("/compradores/metricas")
+async def metricas_compradores(
+    pool: PoolOrquestracao,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
+) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
+    p = obter_identificadores_postgres()
+    tc = p.qual("engajamento_compradores")
+    total = await _pg_count_periodo(pool, tc, periodo)
+    elegiveis = await _pg_count_periodo(
+        pool,
+        tc,
+        periodo,
+        "primeira_consulta_sem_cadastro = true",
+    )
+    convertidos = await _pg_count_periodo(pool, tc, periodo, "converteu = true")
+    ja_usava = await _pg_count_periodo(
+        pool,
+        tc,
+        periodo,
+        "primeira_consulta_sem_cadastro = false",
+    )
+    pendentes = max(elegiveis - convertidos, 0)
+    return {
+        **_meta_periodo_metricas(periodo),
+        "compradores_total": total,
+        "compradores_elegiveis": elegiveis,
+        "compradores_convertidos": convertidos,
+        "compradores_pendentes": pendentes,
+        "barra_status": _barra_status_compradores(total, elegiveis, convertidos, ja_usava),
+        "cartoes": [
+            _cartao("total", total, "Compradores contactados"),
+            _cartao("elegiveis", elegiveis, "Elegíveis (1ª busca sem plataforma)"),
+            _cartao("convertidos", convertidos, "Convertidos"),
+            _cartao("pendentes", pendentes, "Elegíveis aguardando conversão"),
+        ],
+    }
+
+
+@router.get("/compradores/postgres")
+async def lista_compradores_postgres(
+    pool: PoolOrquestracao,
+    page: Annotated[int, Query(ge=1)] = 1,
+    status: str | None = None,
+    telefone: str | None = None,
+    convertidos: bool | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
+) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
+    p = obter_identificadores_postgres()
+    tc = p.qual("engajamento_compradores")
+    page = _page_clamped(page)
+    offset = (page - 1) * PAGE_SIZE
+
+    filtros: list[str] = []
+    params: list[Any] = []
+    status_f = _texto(status)
+    tel_f = _texto(telefone)
+    if convertidos is True:
+        filtros.append("converteu = true")
+    elif status_f:
+        where_status = _where_status_comprador(status_f)
+        if where_status:
+            filtros.append(where_status)
+    if tel_f:
+        filtros.append(f"telefone ILIKE {_append_param(params, f'%{tel_f}%')}")
+    _append_filtro_periodo_sql(filtros, params, periodo)
+    where_sql = f"WHERE {' AND '.join(filtros)}" if filtros else ""
+
+    total = int(await pool.fetchval(f"SELECT COUNT(*) FROM {tc} {where_sql}", *params) or 0)
+    rows = await pool.fetch(
+        f"""
+        SELECT *
+        FROM {tc}
+        {where_sql}
+        ORDER BY criado_em DESC NULLS LAST, telefone ASC
+        LIMIT {PAGE_SIZE} OFFSET {offset}
+        """,
+        *params,
+    )
+    itens = [enriquecer_linha_engajamento_comprador(registo_para_json(r)) for r in rows]
+    return {
+        "origem": "postgres",
+        "tabela_logica": "engajamento_compradores",
+        "itens": itens,
+        **_meta(total, page),
+    }

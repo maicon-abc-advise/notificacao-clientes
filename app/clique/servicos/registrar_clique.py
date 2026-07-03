@@ -29,6 +29,7 @@ from app.reenvio.repositorios.redis_emails_esperando_confirmacao import (
 from app.reenvio.repositorios.redis_sms_esperando_confirmacao import (
     RepositorioSmsEsperandoConfirmacaoRedis,
 )
+from app.orquestracao.servicos.comprador_busca_constantes import eh_sms_comprador
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, EngajamentoSmsEstado
 from app.reenvio.servicos.engajamento_fornecedor import parse_fornecedor_id, tocar_engajamento_email, tocar_engajamento_sms
 
@@ -259,9 +260,10 @@ async def registrar_primeiro_clique_sms(
         await atualizar_status_sms_por_id_externo(
             pool, id_externo=id_externo, status_ultimo=_STATUS_CLICADO
         )
-    await tocar_engajamento_sms(
-        pool, fid, cnpj, EngajamentoSmsEstado.SMS_LINK_CLICADO, endereco=dest
-    )
+    if not eh_sms_comprador(str(row.get("tipo_template") or "")):
+        await tocar_engajamento_sms(
+            pool, fid, cnpj, EngajamentoSmsEstado.SMS_LINK_CLICADO, endereco=dest
+        )
     await _remover_redis_sms(redis, id_externo=id_externo, message_id=mid)
     _log.info("Primeiro clique SMS registrado id_externo=%s", id_externo)
     return True
