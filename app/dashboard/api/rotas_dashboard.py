@@ -18,6 +18,10 @@ from app.dashboard.servicos.exibicao import (
     enriquecer_redis_sms_esperando,
     enriquecer_redis_sms_pendente,
 )
+from app.dashboard.servicos.redis_pendentes_dashboard import (
+    carregar_pendentes_redis_em_lote,
+    remover_fantasmas_indice,
+)
 from app.dashboard.servicos.ordenar_engajamento_lista import (
     expr_aparicoes_30d,
     expr_aparicoes_total,
@@ -43,7 +47,6 @@ from app.reenvio.repositorios.postgres_telefone_engajamento import (
 from app.reenvio.repositorios.redis_sms_pendente import KEY_INDEX as IDX_SMS_PEND
 from app.reenvio.repositorios.redis_sms_pendente import chave_hash as chave_sms_pend
 from app.config.config import obter_configuracao
-from app.reenvio.servicos.n8n_claims import claim_n8n_ativo
 
 router = APIRouter(
     prefix="/v1/interno/dashboard",
@@ -1815,14 +1818,18 @@ async def lista_emails_redis_pendentes(
     busca = _texto(cnpj_basico)
     filtro_p = _texto(filtro_pendente)
     ids_raw = await redis.zrevrange(IDX_EMAIL_PEND, 0, -1)
+    carregados = await carregar_pendentes_redis_em_lote(
+        redis,
+        ids_raw=ids_raw,
+        chave_hash_fn=chave_email_pend,
+        canal="email",
+    )
+    fantasmas: list[str] = []
     itens: list[dict[str, Any]] = []
-    for ext in ids_raw:
-        ext_s = ext.decode() if isinstance(ext, bytes) else str(ext)
-        raw = await redis.hgetall(chave_email_pend(ext_s))
+    for ext_s, raw, claim in carregados:
         if not raw:
-            await redis.zrem(IDX_EMAIL_PEND, ext_s)
+            fantasmas.append(ext_s)
             continue
-        claim = await claim_n8n_ativo(redis, canal="email", id_externo=ext_s)
         if not _passa_filtro_pendente(claim, filtro_p):
             continue
         ctx = decodificar_contexto_json_bruto(_h(raw, "contexto_json"))
@@ -1845,6 +1852,7 @@ async def lista_emails_redis_pendentes(
         if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
             continue
         itens.append(enriquecer_redis_email_pendente(linha))
+    await remover_fantasmas_indice(redis, idx_key=IDX_EMAIL_PEND, ids=fantasmas)
     itens_pagina, total = _pagina_itens(itens, page)
     return {"origem": "redis", "tabela_logica": "emails_pendentes", "itens": itens_pagina, **_meta(total, page)}
 
@@ -2013,14 +2021,18 @@ async def lista_sms_redis_pendentes(
     busca = _texto(cnpj_basico)
     filtro_p = _texto(filtro_pendente)
     ids_raw = await redis.zrevrange(IDX_SMS_PEND, 0, -1)
+    carregados = await carregar_pendentes_redis_em_lote(
+        redis,
+        ids_raw=ids_raw,
+        chave_hash_fn=chave_sms_pend,
+        canal="sms",
+    )
+    fantasmas: list[str] = []
     itens: list[dict[str, Any]] = []
-    for ext in ids_raw:
-        ext_s = ext.decode() if isinstance(ext, bytes) else str(ext)
-        raw = await redis.hgetall(chave_sms_pend(ext_s))
+    for ext_s, raw, claim in carregados:
         if not raw:
-            await redis.zrem(IDX_SMS_PEND, ext_s)
+            fantasmas.append(ext_s)
             continue
-        claim = await claim_n8n_ativo(redis, canal="sms", id_externo=ext_s)
         if not _passa_filtro_pendente(claim, filtro_p):
             continue
         ctx = decodificar_contexto_json_bruto(_h(raw, "contexto_json"))
@@ -2042,6 +2054,7 @@ async def lista_sms_redis_pendentes(
         if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
             continue
         itens.append(enriquecer_redis_sms_pendente(linha))
+    await remover_fantasmas_indice(redis, idx_key=IDX_SMS_PEND, ids=fantasmas)
     itens_pagina, total = _pagina_itens(itens, page)
     return {"origem": "redis", "tabela_logica": "sms_pendentes", "itens": itens_pagina, **_meta(total, page)}
 
@@ -2191,14 +2204,18 @@ async def lista_ligacoes_redis_pendentes(
     busca = _texto(cnpj_basico)
     filtro_p = _texto(filtro_pendente)
     ids_raw = await redis.zrevrange(IDX_LIG_PEND, 0, -1)
+    carregados = await carregar_pendentes_redis_em_lote(
+        redis,
+        ids_raw=ids_raw,
+        chave_hash_fn=chave_lig_pend,
+        canal="ligacao",
+    )
+    fantasmas: list[str] = []
     itens: list[dict[str, Any]] = []
-    for ext in ids_raw:
-        ext_s = ext.decode() if isinstance(ext, bytes) else str(ext)
-        raw = await redis.hgetall(chave_lig_pend(ext_s))
+    for ext_s, raw, claim in carregados:
         if not raw:
-            await redis.zrem(IDX_LIG_PEND, ext_s)
+            fantasmas.append(ext_s)
             continue
-        claim = await claim_n8n_ativo(redis, canal="ligacao", id_externo=ext_s)
         if not _passa_filtro_pendente(claim, filtro_p):
             continue
         qtd_raw = _h(raw, "quantidade_buscas") or "0"
@@ -2224,6 +2241,7 @@ async def lista_ligacoes_redis_pendentes(
         if not _linha_dentro_periodo(linha.get("criado_em"), periodo):
             continue
         itens.append(enriquecer_redis_ligacao_pendente(linha))
+    await remover_fantasmas_indice(redis, idx_key=IDX_LIG_PEND, ids=fantasmas)
     itens_pagina, total = _pagina_itens(itens, page)
     return {"origem": "redis", "tabela_logica": "ligacoes_pendentes", "itens": itens_pagina, **_meta(total, page)}
 

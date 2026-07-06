@@ -53,11 +53,11 @@ def _parse_tipo_template(valor: str | None) -> CodigoTipoTemplate | None:
 
 
 async def decidir_variantes_email_pendentes(redis: Redis) -> dict[str, int]:
-    """Preenche ``variante`` e ``experimento_id`` nos pendentes que ainda não têm variante."""
+    """Recalcula ``variante`` e ``experimento_id`` em todos os pendentes de busca."""
     stats = {
         "total_analisados": 0,
         "atualizados": 0,
-        "ja_tinham_variante": 0,
+        "sobrescritos": 0,
         "simples": 0,
         "elaborado": 0,
         "ignorados_tipo": 0,
@@ -74,15 +74,12 @@ async def decidir_variantes_email_pendentes(redis: Redis) -> dict[str, int]:
             stats["total_analisados"] -= 1
             continue
 
-        if _variante_ja_definida(raw):
-            stats["ja_tinham_variante"] += 1
-            continue
-
         tipo = _parse_tipo_template(_h(raw, "tipo_template"))
         if tipo is None or tipo not in _TIPOS_EMAIL_BUSCA:
             stats["ignorados_tipo"] += 1
             continue
 
+        tinha_variante = _variante_ja_definida(raw)
         cnpj = (_h(raw, "cnpj_basico") or "").strip() or None
         try:
             variante, experimento_id = await resolver_variante_email_busca(
@@ -104,15 +101,18 @@ async def decidir_variantes_email_pendentes(redis: Redis) -> dict[str, int]:
             },
         )
         stats["atualizados"] += 1
+        if tinha_variante:
+            stats["sobrescritos"] += 1
         if var == "elaborado":
             stats["elaborado"] += 1
         else:
             stats["simples"] += 1
         _log.info(
-            "Variante definida no pendente id_externo=%s variante=%s experimento_id=%s",
+            "Variante definida no pendente id_externo=%s variante=%s experimento_id=%s sobrescrito=%s",
             ext_s,
             var,
             exp or None,
+            tinha_variante,
         )
 
     return stats

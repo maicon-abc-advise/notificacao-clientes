@@ -68,7 +68,7 @@ def test_decidir_variantes_atualiza_sem_variante() -> None:
     assert stats == {
         "total_analisados": 1,
         "atualizados": 1,
-        "ja_tinham_variante": 0,
+        "sobrescritos": 0,
         "simples": 0,
         "elaborado": 1,
         "ignorados_tipo": 0,
@@ -79,7 +79,7 @@ def test_decidir_variantes_atualiza_sem_variante() -> None:
     assert raw["experimento_id"] == "exp-test"
 
 
-def test_decidir_variantes_ignora_ja_definida_e_tipo_nao_busca() -> None:
+def test_decidir_variantes_recalcula_quem_ja_tinha_e_ignora_tipo_nao_busca() -> None:
     redis = _RedisFake()
     redis.seed_pendente(
         "ext2",
@@ -94,8 +94,10 @@ def test_decidir_variantes_ignora_ja_definida_e_tipo_nao_busca() -> None:
     ) as mock_resolver:
         stats = asyncio.run(decidir_variantes_email_pendentes(redis))  # type: ignore[arg-type]
 
-    mock_resolver.assert_not_called()
+    mock_resolver.assert_called_once()
     assert stats["total_analisados"] == 2
-    assert stats["atualizados"] == 0
-    assert stats["ja_tinham_variante"] == 1
+    assert stats["atualizados"] == 1
+    assert stats["sobrescritos"] == 1
     assert stats["ignorados_tipo"] == 1
+    raw = asyncio.run(redis.hgetall(chave_hash("ext2")))
+    assert raw["variante"] == "elaborado"
