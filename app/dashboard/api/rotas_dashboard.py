@@ -13,6 +13,7 @@ from app.dashboard.servicos.exibicao import (
     enriquecer_linha_postgres_ligacao,
     enriquecer_redis_email_esperando,
     enriquecer_redis_email_pendente,
+    variante_para_exibicao,
     enriquecer_redis_ligacao_pendente,
     enriquecer_redis_sms_esperando,
     enriquecer_redis_sms_pendente,
@@ -1837,6 +1838,7 @@ async def lista_emails_redis_pendentes(
             "consulta_id": _h(raw, "consulta_id") or None,
             "criado_em": _h(raw, "criado_em"),
             "claim_n8n_ativo": claim,
+            "variante": variante_para_exibicao(_h(raw, "variante")),
         }
         if busca and busca not in str(linha.get("cnpj_basico") or ""):
             continue

@@ -76,10 +76,18 @@ def estado_redis_sms_esperando(status_atual: str | None) -> dict[str, str]:
     return _badge(rotulo, cor)
 
 
+def variante_para_exibicao(valor: str | None) -> str | None:
+    """Retorna a variante para a UI; ausente/vazia → ``None`` (célula em branco)."""
+    v = (valor or "").strip()
+    return v if v else None
+
+
 def enriquecer_linha_postgres(linha: dict[str, Any], *, canal: str) -> dict[str, Any]:
     out = dict(linha)
     if canal in ("email", "sms"):
         out["estado_exibicao"] = estado_postgres_mensagem(str(out.get("status_ultimo") or ""))
+    if canal == "email":
+        out["variante"] = variante_para_exibicao(out.get("variante"))
     return out
 
 

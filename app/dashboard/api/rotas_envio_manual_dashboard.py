@@ -11,6 +11,7 @@ from app.dashboard.api.dto.envio_manual_dashboard import (
     CorpoCriarPendenteDashboard,
     CorpoEnviarPendenteDashboard,
 )
+from app.dashboard.servicos import decidir_variantes_email_servico as decidir_var
 from app.dashboard.servicos import envio_manual_dashboard_servico as s
 from app.dashboard.servicos import ligacoes_dashboard_servico as lig
 from app.iam.rotas.dashboard_rotas import usuario_logado
@@ -29,6 +30,14 @@ async def get_templates_notificacao(
 ) -> dict[str, Any]:
     itens = await s.listar_templates_dashboard(pool, canal=canal)
     return {"itens": itens}
+
+
+@router.post("/emails/decidir-variantes")
+async def post_decidir_variantes_email_pendentes(
+    redis: RedisOrquestracao,
+) -> dict[str, Any]:
+    stats = await decidir_var.decidir_variantes_email_pendentes(redis)
+    return {"ok": True, **stats}
 
 
 @router.post("/emails/redis-pendentes", status_code=201)
