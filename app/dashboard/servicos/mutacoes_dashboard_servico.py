@@ -19,7 +19,9 @@ from app.dashboard.servicos.exibicao import (
     enriquecer_redis_email_pendente,
     enriquecer_redis_sms_esperando,
     enriquecer_redis_sms_pendente,
+    variante_para_exibicao,
 )
+from app.experimentos.variante_email import normalizar_variante
 from app.dashboard.servicos.serializacao import decodificar_contexto_json_bruto, registo_para_json
 from app.iam.dashboard.dashboard_auth import validar_login
 from app.orquestracao.repositorios.redis_emails_pendentes_repo import (
@@ -35,6 +37,7 @@ from app.reenvio.repositorios.redis_sms_esperando_confirmacao import (
     chave_hash as chave_sms_esp_hash,
 )
 from app.reenvio.repositorios.redis_sms_pendente import RepositorioSmsPendenteRedis, chave_hash as chave_sms_pend_hash
+from app.reenvio.servicos.n8n_claims import claim_n8n_ativo
 
 _repo_email_pend = RepositorioEmailsPendenteRedis()
 _repo_email_esp = RepositorioEmailsEsperandoConfirmacaoRedis()
@@ -215,6 +218,9 @@ def _montar_patch_redis_hash(body: dict[str, Any], *, permitidas: set[str], bloq
         if k == "contexto":
             out["contexto_json"] = _str_redis(v)
             continue
+        if k == "variante":
+            out[k] = normalizar_variante(_str_redis(v) or None)
+            continue
         if k not in permitidas:
             raise HTTPException(status_code=400, detail=f"Campo não permitido: {k}")
         out[k] = _str_redis(v)
@@ -231,6 +237,8 @@ _WHITELIST_EMAIL_PEND = {
     "origem",
     "consulta_id",
     "criado_em",
+    "variante",
+    "experimento_id",
 }
 _BLOCK_EMAIL_PEND = {"id_externo", "external_id", "message_id_zenvia"}
 
@@ -310,6 +318,9 @@ async def _linha_email_pendente_apos_patch(redis: Redis, id_externo: str) -> dic
         "origem": _redis_h(raw, "origem"),
         "consulta_id": _redis_h(raw, "consulta_id") or None,
         "criado_em": _redis_h(raw, "criado_em"),
+        "variante": variante_para_exibicao(_redis_h(raw, "variante")),
+        "experimento_id": (_redis_h(raw, "experimento_id") or "").strip() or None,
+        "claim_n8n_ativo": await claim_n8n_ativo(redis, canal="email", id_externo=ext_s),
     }
     return enriquecer_redis_email_pendente(linha)
 

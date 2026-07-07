@@ -25,6 +25,27 @@ def test_montar_patch_redis_rejeita_id_externo() -> None:
     assert ei.value.status_code == 400
 
 
+def test_montar_patch_redis_hash_variante_normaliza() -> None:
+    got = m._montar_patch_redis_hash(
+        {"variante": "elaborado", "experimento_id": "exp-1"},
+        permitidas=m._WHITELIST_EMAIL_PEND,
+        bloqueadas=m._BLOCK_EMAIL_PEND,
+    )
+    assert got["variante"] == "elaborado"
+    assert got["experimento_id"] == "exp-1"
+
+
+def test_montar_patch_redis_rejeita_claim_n8n_ativo() -> None:
+    with pytest.raises(HTTPException) as ei:
+        m._montar_patch_redis_hash(
+            {"claim_n8n_ativo": True},
+            permitidas=m._WHITELIST_EMAIL_PEND,
+            bloqueadas=m._BLOCK_EMAIL_PEND,
+        )
+    assert ei.value.status_code == 400
+    assert "claim_n8n_ativo" in str(ei.value.detail)
+
+
 def test_valor_sql_param_timestamp_iso_string() -> None:
     dt = m._valor_sql_param(
         "engajamento_atualizado_em",
