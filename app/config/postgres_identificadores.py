@@ -33,6 +33,8 @@ class PostgresIdentificadores:
             return "usuario_fornecedor" + self.tabela_suffix
         if base == "consultas":
             return base + self.tabela_suffix
+        if base == "usuario_comprador":
+            return "usuario_comprador" + self.tabela_suffix
         return base
 
     def qual(self, base: str) -> str:

@@ -31,3 +31,31 @@ async def upsert_apos_envio_sms(
         comprador_id,
         primeira_consulta_sem_cadastro,
     )
+
+
+async def marcar_convertido_por_telefone(
+    pool: asyncpg.Pool,
+    *,
+    telefone: str,
+) -> bool:
+    """Marca convertido se elegível (primeira consulta sem cadastro) e ainda não convertido."""
+    tel = (telefone or "").strip()
+    if not tel:
+        return False
+    p = obter_identificadores_postgres()
+    t = p.qual("engajamento_compradores")
+    row = await pool.fetchrow(
+        f"""
+        UPDATE {t}
+        SET
+            converteu = true,
+            converteu_em = COALESCE(converteu_em, now()),
+            atualizado_em = now()
+        WHERE telefone = $1
+          AND primeira_consulta_sem_cadastro = true
+          AND converteu = false
+        RETURNING telefone
+        """,
+        tel,
+    )
+    return row is not None

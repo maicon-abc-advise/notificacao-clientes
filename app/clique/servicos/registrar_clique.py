@@ -33,6 +33,7 @@ from app.orquestracao.servicos.comprador_busca_constantes import eh_sms_comprado
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado, EngajamentoSmsEstado
 from app.reenvio.servicos.engajamento_fornecedor import parse_fornecedor_id, tocar_engajamento_email, tocar_engajamento_sms
 
+
 _log = logging.getLogger(__name__)
 
 _STATUS_CLICADO = "clicado"
@@ -267,3 +268,4 @@ async def registrar_primeiro_clique_sms(
     await _remover_redis_sms(redis, id_externo=id_externo, message_id=mid)
     _log.info("Primeiro clique SMS registrado id_externo=%s", id_externo)
     return True
+
