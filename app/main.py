@@ -19,6 +19,7 @@ from app.dashboard.api import (
     dashboard_envio_manual_router,
     dashboard_mutacoes_router,
     dashboard_router,
+    dashboard_variaveis_router,
 )
 from app.clique.api.rotas_clique import router as clique_router
 from app.ligacoes.api.rotas import (
@@ -57,6 +58,14 @@ async def lifespan(_app: FastAPI):
 
     await obter_cliente_redis()
     await iniciar_growthbook()
+    try:
+        from app.config.variaveis_sistema.servico import recarregar_cache_variaveis
+        from app.templates.conexao import obter_pool
+
+        pool = await obter_pool()
+        await recarregar_cache_variaveis(pool)
+    except Exception:
+        _log.warning("Cache variaveis_sistema não carregado no startup; fallbacks .env", exc_info=True)
     yield
     await encerrar_growthbook()
     await fechar_pool()
@@ -165,6 +174,7 @@ app.include_router(dashboard_auth_router)
 app.include_router(dashboard_router)
 app.include_router(dashboard_mutacoes_router)
 app.include_router(dashboard_envio_manual_router)
+app.include_router(dashboard_variaveis_router)
 app.include_router(calls_dispatch_router)
 app.include_router(ligacoes_disparar_router)
 app.include_router(ligacoes_dashboard_router)

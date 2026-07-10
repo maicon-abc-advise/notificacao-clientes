@@ -117,8 +117,47 @@ async def aplicar_schema_orquestracao(dsn: str) -> None:
         await conn.close()
 
 
+async def aplicar_schema_variaveis_sistema(dsn: str) -> None:
+    schema = _sql_arquivo("variaveis_sistema.sql")
+    conn = await asyncpg.connect(dsn)
+    try:
+        await conn.execute(schema)
+    finally:
+        await conn.close()
+
+
+async def aplicar_seed_variaveis_sistema(dsn: str) -> None:
+    from popula_tabelas.dados_seed_variaveis import linhas_seed_variaveis
+
+    p = obter_identificadores_postgres()
+    tt = p.qual("variaveis_sistema")
+    sql = f"""
+    INSERT INTO {tt} (chave, valor, tipo, grupo, descricao, editavel)
+    VALUES ($1, $2, $3, $4, $5, $6)
+    ON CONFLICT (chave) DO UPDATE SET
+        valor = EXCLUDED.valor,
+        tipo = EXCLUDED.tipo,
+        grupo = EXCLUDED.grupo,
+        descricao = EXCLUDED.descricao,
+        editavel = EXCLUDED.editavel,
+        atualizado_em = now()
+    """
+    conn = await asyncpg.connect(dsn)
+    try:
+        for linha in linhas_seed_variaveis():
+            await conn.execute(sql, *linha)
+    finally:
+        await conn.close()
+
+
+async def aplicar_variaveis_schema_e_seed(dsn: str) -> None:
+    await aplicar_schema_variaveis_sistema(dsn)
+    await aplicar_seed_variaveis_sistema(dsn)
+
+
 async def aplicar_tudo(dsn: str) -> None:
-    """Ordem: templates (tabela + linhas), tabelas de reenvio, tabelas de orquestração."""
+    """Ordem: templates (tabela + linhas), tabelas de reenvio, tabelas de orquestração, variáveis."""
     await aplicar_templates_schema_e_seed(dsn)
     await aplicar_schema_reenvio(dsn)
     await aplicar_schema_orquestracao(dsn)
+    await aplicar_variaveis_schema_e_seed(dsn)

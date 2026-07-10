@@ -9,7 +9,7 @@ import asyncpg
 from fastapi import HTTPException, status
 from redis.asyncio import Redis
 
-from app.config.config import obter_configuracao
+from app.config.variaveis_sistema.servico import obter_int
 from app.mensageria.api.dto.modelos import (
     CanalMensagem,
     PedidoEnvioSms,
@@ -144,8 +144,7 @@ async def _registrar_redis_esperando_confirmacao(
     if not id_provedor_valido_para_idempotencia(msg_id):
         return
 
-    cfg = obter_configuracao()
-    sweep_ts = int(time.time()) + cfg.sweep_emails_esperando_confirmacao_dias * 86400
+    sweep_ts = int(time.time()) + obter_int("sweep_esperando_confirmacao_dias") * 86400
     repo_esp = RepositorioSmsEsperandoConfirmacaoRedis()
     try:
         await repo_esp.criar_apos_envio(

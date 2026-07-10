@@ -2,7 +2,15 @@
 
 from __future__ import annotations
 
+from enum import StrEnum
+
 from app.templates.modelo import CodigoTipoTemplate
+
+
+class CanalCompradorBusca(StrEnum):
+    SMS = "sms"
+    RCS = "rcs"
+    WHATSAPP = "whatsapp"
 
 TIPO_TEMPLATE_BUSCA_COMPRADOR = CodigoTipoTemplate.BUSCA_COMPRADOR.value
 
