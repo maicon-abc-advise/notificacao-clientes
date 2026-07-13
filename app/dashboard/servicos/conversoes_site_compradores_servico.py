@@ -19,11 +19,11 @@ def _filtro_shortlinks_site_sem_cadastro(*, alias_sl: str = "sl", alias_c: str =
 
 def _filtro_consulta_convertida(*, alias_c: str = "c", tabela_usuario: str) -> str:
     return f"""
-        {alias_c}.comprador_id IS NOT NULL
+        {alias_c}.comprador IS NOT NULL
         AND EXISTS (
             SELECT 1
             FROM {tabela_usuario} uc_chk
-            WHERE uc_chk.id = {alias_c}.comprador_id
+            WHERE uc_chk.id = {alias_c}.comprador
         )
     """
 
@@ -122,14 +122,14 @@ async def listar_conversoes_site_compradores(
             sl.created_at AS shortlink_criado_em,
             sl.view_count,
             c.id AS consulta_id,
-            c.comprador_id,
+            c.comprador AS comprador_id,
             uc.nome AS comprador_nome,
             uc.empresa_nome,
             uc.created_at AS comprador_cadastrado_em,
             ({convertido_sql}) AS converteu
         FROM {t_sl} sl
         INNER JOIN {t_c} c ON c.id = sl.consulta_id
-        LEFT JOIN {t_uc} uc ON uc.id = c.comprador_id
+        LEFT JOIN {t_uc} uc ON uc.id = c.comprador
         WHERE {where_sql}
         ORDER BY sl.created_at DESC NULLS LAST, sl.code ASC
         LIMIT {page_size} OFFSET {offset}
