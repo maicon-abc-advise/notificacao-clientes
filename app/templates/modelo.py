@@ -9,6 +9,7 @@ class CodigoTipoTemplate(StrEnum):
     CONSULTADO_SEM_EMAIL = "CONSULTADO_SEM_EMAIL"
     APRESENTACAO = "APRESENTACAO"
     BUSCA_COMPRADOR = "BUSCA_COMPRADOR"
+    CODIGO_VERIFICACAO = "CODIGO_VERIFICACAO"
 
 @dataclass(frozen=True, slots=True)
 class TemplateNotificacao:

@@ -6,7 +6,7 @@ from app.templates.modelo import CodigoTipoTemplate
 
 def test_seed_cinco_linhas() -> None:
     linhas = linhas_seed()
-    assert len(linhas) == 6
+    assert len(linhas) == 8
     tipos = {t[1] for t in linhas}
     assert tipos == {e.value for e in CodigoTipoTemplate}
 

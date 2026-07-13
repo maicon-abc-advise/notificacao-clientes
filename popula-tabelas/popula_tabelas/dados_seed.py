@@ -10,7 +10,12 @@ IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
     CodigoTipoTemplate.CONSULTADO_SEM_EMAIL: "d4e5f6a7-b8c9-4012-d345-6789abcdef01",
     CodigoTipoTemplate.APRESENTACAO: "f1a2b3c4-d5e6-4789-a012-345678abcdef",
     CodigoTipoTemplate.BUSCA_COMPRADOR: "a7b8c9d0-e1f2-4345-a678-901234567890",
+    CodigoTipoTemplate.CODIGO_VERIFICACAO: "b8c9d0e1-f2a3-4456-b789-012345678901",
 }
+
+SMS_CODIGO_VERIFICACAO = (
+    "Seu código de verificação para BuscaFornecedor é: {{ code }}"
+)
 
 SMS_BUSCA_COMPRADOR = (
     "BuscaFornecedor: Veja o resultado da sua busca: {{ url }}"
@@ -325,5 +330,11 @@ def linhas_seed() -> list[tuple[str, str, str | None, str]]:
             CodigoTipoTemplate.BUSCA_COMPRADOR.value,
             None,
             SMS_BUSCA_COMPRADOR,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.CODIGO_VERIFICACAO],
+            CodigoTipoTemplate.CODIGO_VERIFICACAO.value,
+            None,
+            SMS_CODIGO_VERIFICACAO,
         ),
     ]
