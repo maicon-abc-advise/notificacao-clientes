@@ -7,6 +7,10 @@ from datetime import date, datetime, timedelta
 from typing import Annotated, Any
 from fastapi import APIRouter, Depends, HTTPException, Query, Response
 from app.config.postgres_identificadores import obter_identificadores_postgres
+from app.dashboard.servicos.conversoes_site_compradores_servico import (
+    contar_metricas_conversoes_site,
+    listar_conversoes_site_compradores,
+)
 from app.dashboard.servicos.exibicao import (
     enriquecer_linha_engajamento_comprador,
     enriquecer_linha_postgres,
@@ -2671,6 +2675,60 @@ async def lista_compradores_postgres(
     return {
         "origem": "postgres",
         "tabela_logica": "engajamento_compradores",
+        "itens": itens,
+        **_meta(total, page),
+    }
+
+
+@router.get("/compradores/conversoes-site/metricas")
+async def metricas_conversoes_site_compradores(
+    pool: PoolOrquestracao,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
+) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
+    shortlinks_site, conversoes = await contar_metricas_conversoes_site(pool, periodo)
+    taxa = _taxa_percentual(conversoes, shortlinks_site)
+    return {
+        **_meta_periodo_metricas(periodo),
+        "shortlinks_site_sem_cadastro": shortlinks_site,
+        "conversoes": conversoes,
+        "taxa_conversao_pct": taxa,
+        "cartoes": [
+            _cartao("shortlinks_site", shortlinks_site, "Shortlinks site (sem cadastro)"),
+            _cartao("conversoes", conversoes, "Conversões"),
+            _cartao("taxa_conversao", taxa, "Taxa de conversão (%)"),
+        ],
+    }
+
+
+@router.get("/compradores/conversoes-site/postgres")
+async def lista_conversoes_site_compradores(
+    pool: PoolOrquestracao,
+    page: Annotated[int, Query(ge=1)] = 1,
+    status: str | None = None,
+    convertidos: bool | None = None,
+    periodo_inicio: datetime | None = None,
+    periodo_fim: datetime | None = None,
+) -> dict[str, Any]:
+    periodo = _validar_periodo_metricas(periodo_inicio, periodo_fim)
+    page = _page_clamped(page)
+    status_f = _texto(status)
+    apenas_convertidos = convertidos
+    if status_f == "convertido":
+        apenas_convertidos = True
+    elif status_f == "pendente":
+        apenas_convertidos = False
+    itens, total = await listar_conversoes_site_compradores(
+        pool,
+        page=page,
+        page_size=PAGE_SIZE,
+        periodo=periodo,
+        apenas_convertidos=apenas_convertidos,
+    )
+    return {
+        "origem": "postgres",
+        "tabela_logica": "conversoes_site_compradores",
         "itens": itens,
         **_meta(total, page),
     }

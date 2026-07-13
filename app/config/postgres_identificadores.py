@@ -38,6 +38,8 @@ class PostgresIdentificadores:
         return base
 
     def qual(self, base: str) -> str:
+        if base == "consulta_shortlinks":
+            return f"{_q_ident('public')}.{_q_ident('consulta_shortlinks')}"
         return f"{_q_ident(self.schema)}.{_q_ident(self.nome_fisico_tabela(base))}"
 
 def substituir_sql_ddl(sql: str, p: PostgresIdentificadores) -> str:
