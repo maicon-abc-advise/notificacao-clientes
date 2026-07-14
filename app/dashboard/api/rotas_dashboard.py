@@ -11,6 +11,9 @@ from app.dashboard.servicos.conversoes_site_compradores_servico import (
     contar_metricas_conversoes_site,
     listar_conversoes_site_compradores,
 )
+from app.dashboard.servicos.painel_metricas_comprador_servico import (
+    montar_painel_metricas_comprador,
+)
 from app.dashboard.servicos.exibicao import (
     enriquecer_linha_engajamento_comprador,
     enriquecer_linha_postgres,
@@ -2678,6 +2681,22 @@ async def lista_compradores_postgres(
         "itens": itens,
         **_meta(total, page),
     }
+
+
+@router.get("/compradores/painel")
+async def painel_metricas_comprador(
+    pool: PoolOrquestracao,
+    data_inicio: date | None = None,
+    data_fim: date | None = None,
+) -> dict[str, Any]:
+    """Gráficos de métricas do comprador (conversões site + e-mail), estilo home."""
+    inicio, fim = _normalizar_periodo(data_inicio, data_fim)
+    if (fim - inicio).days > 92:
+        raise HTTPException(
+            status_code=400,
+            detail="Para os gráficos de métricas do comprador, selecione no máximo 3 meses.",
+        )
+    return await montar_painel_metricas_comprador(pool, inicio, fim)
 
 
 @router.get("/compradores/conversoes-site/metricas")
