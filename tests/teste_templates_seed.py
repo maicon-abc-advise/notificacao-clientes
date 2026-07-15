@@ -6,9 +6,32 @@ from app.templates.modelo import CodigoTipoTemplate
 
 def test_seed_cinco_linhas() -> None:
     linhas = linhas_seed()
-    assert len(linhas) == 8
+    assert len(linhas) == len(CodigoTipoTemplate)
     tipos = {t[1] for t in linhas}
     assert tipos == {e.value for e in CodigoTipoTemplate}
+
+
+def test_contato_fornecedor_tem_placeholders_email() -> None:
+    for id_, tipo, email, sms in linhas_seed():
+        if tipo == CodigoTipoTemplate.CONTATO_FORNECEDOR_SEM_CADASTRO.value:
+            assert email is not None
+            assert "{{ nome }}" in email
+            assert "{{ mensagem }}" in email
+            assert "{{ url_login }}" in email
+            assert "CADASTRAR" in email
+            assert sms == ""
+            return
+    raise AssertionError("tipo CONTATO_FORNECEDOR_SEM_CADASTRO ausente")
+
+
+def test_contato_fornecedor_cadastrado_cta() -> None:
+    for id_, tipo, email, sms in linhas_seed():
+        if tipo == CodigoTipoTemplate.CONTATO_FORNECEDOR_CADASTRADO.value:
+            assert email is not None
+            assert "VER INFORMAÇÕES" in email
+            assert "{{ url_login }}" in email
+            return
+    raise AssertionError("tipo CONTATO_FORNECEDOR_CADASTRADO ausente")
 
 
 def test_apresentacao_tem_corpo_email() -> None:

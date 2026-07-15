@@ -1,5 +1,7 @@
 """Textos literais dos templates (alinhado a analise-inicial/PLANO_TEMPLATES.md)."""
 
+from pathlib import Path
+
 from app.templates.modelo import CodigoTipoTemplate
 
 IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
@@ -11,7 +13,25 @@ IDS_POR_TIPO: dict[CodigoTipoTemplate, str] = {
     CodigoTipoTemplate.APRESENTACAO: "f1a2b3c4-d5e6-4789-a012-345678abcdef",
     CodigoTipoTemplate.BUSCA_COMPRADOR: "a7b8c9d0-e1f2-4345-a678-901234567890",
     CodigoTipoTemplate.CODIGO_VERIFICACAO: "b8c9d0e1-f2a3-4456-b789-012345678901",
+    CodigoTipoTemplate.CONTATO_FORNECEDOR_SEM_CADASTRO: "c9d0e1f2-a3b4-4567-c890-123456789012",
+    CodigoTipoTemplate.CONTATO_FORNECEDOR_CADASTRADO: "d0e1f2a3-b4c5-4678-d901-234567890123",
 }
+
+
+def _html_raiz_repo(nome: str) -> str:
+    """HTML dos e-mails de contato vivem na raiz do monorepo (junto aos .html de design)."""
+    raiz = Path(__file__).resolve().parents[3]
+    return (raiz / nome).read_text(encoding="utf-8")
+
+
+EMAIL_CONTATO_FORNECEDOR_SEM_CADASTRO = _html_raiz_repo(
+    "email-comprador-contato-cadastro.html"
+)
+EMAIL_CONTATO_FORNECEDOR_CADASTRADO = _html_raiz_repo(
+    "email-comprador-contato-ver-informacoes.html"
+)
+
+SMS_CONTATO_FORNECEDOR = ""
 
 SMS_CODIGO_VERIFICACAO = (
     "Seu código de verificação para BuscaFornecedor é: {{ code }}"
@@ -336,5 +356,17 @@ def linhas_seed() -> list[tuple[str, str, str | None, str]]:
             CodigoTipoTemplate.CODIGO_VERIFICACAO.value,
             None,
             SMS_CODIGO_VERIFICACAO,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.CONTATO_FORNECEDOR_SEM_CADASTRO],
+            CodigoTipoTemplate.CONTATO_FORNECEDOR_SEM_CADASTRO.value,
+            EMAIL_CONTATO_FORNECEDOR_SEM_CADASTRO,
+            SMS_CONTATO_FORNECEDOR,
+        ),
+        (
+            IDS_POR_TIPO[CodigoTipoTemplate.CONTATO_FORNECEDOR_CADASTRADO],
+            CodigoTipoTemplate.CONTATO_FORNECEDOR_CADASTRADO.value,
+            EMAIL_CONTATO_FORNECEDOR_CADASTRADO,
+            SMS_CONTATO_FORNECEDOR,
         ),
     ]

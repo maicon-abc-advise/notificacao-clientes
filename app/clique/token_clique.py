@@ -17,6 +17,12 @@ def gerar_id_externo() -> str:
     return "".join(secrets.choice(_ALFABETO) for _ in range(TAMANHO_ID_EXTERNO))
 
 
+def gerar_id_externo_deterministico(chave: str) -> str:
+    """Deriva ``id_externo`` de 12 chars a partir de uma chave estável (idempotência)."""
+    digest = hashlib.sha256(chave.encode("utf-8")).digest()
+    return "".join(_ALFABETO[b % len(_ALFABETO)] for b in digest[:TAMANHO_ID_EXTERNO])
+
+
 def _indices_chave(secret: str) -> list[int]:
     digest = hashlib.sha256(secret.encode("utf-8")).digest()
     return [digest[i] % len(_ALFABETO) for i in range(TAMANHO_TOKEN_URL)]
