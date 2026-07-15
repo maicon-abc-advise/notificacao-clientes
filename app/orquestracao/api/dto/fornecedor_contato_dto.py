@@ -6,7 +6,7 @@ from pydantic import BaseModel, Field
 
 
 class PedidoEmailFornecedorContato(BaseModel):
-    consulta_id: UUID
+    consulta_id: UUID | None = None
     cnpj_basico: str = Field(..., min_length=8, max_length=8)
     mensagem: str = Field(..., min_length=1, max_length=8000)
     nome: str = Field(..., min_length=1, max_length=256)

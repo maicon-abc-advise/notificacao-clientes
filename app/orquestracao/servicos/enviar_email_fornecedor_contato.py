@@ -41,6 +41,9 @@ from app.orquestracao.servicos.auxiliares.montar_pedido_mensagem import (
 from app.orquestracao.servicos.auxiliares.porta_enriquecimento_contato import (
     PortaEnriquecimentoContato,
 )
+from app.orquestracao.servicos.auxiliares.sanitizar_texto_contato import (
+    sanitizar_texto_contato,
+)
 from app.orquestracao.servicos.fornecedor_contato_constantes import id_externo_fornecedor_contato
 from app.reenvio.servicos.engajamento_contatos import agora_iso, contatos_iniciais_email
 from app.reenvio.servicos.engajamento_estado import EngajamentoEmailEstado
@@ -54,6 +57,7 @@ from app.templates.porta import PortaTemplates
 _log = logging.getLogger(__name__)
 
 _DETALHE_SEM_EMAIL = "e-mail do fornecedor não encontrado"
+_DETALHE_TEXTO_INVALIDO = "nome ou mensagem inválidos após sanitização"
 
 
 async def executar_envio_email_fornecedor_contato(
@@ -64,9 +68,21 @@ async def executar_envio_email_fornecedor_contato(
     porta: PortaEnvioMensagem,
     templates: PortaTemplates,
 ) -> RespostaEmailFornecedorContato:
-    await buscar_consulta_por_id(pool, corpo.consulta_id)
+    nome_seguro = sanitizar_texto_contato(corpo.nome, permitir_quebras=False)
+    mensagem_segura = sanitizar_texto_contato(corpo.mensagem, permitir_quebras=True)
+    if not nome_seguro or not mensagem_segura:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=_DETALHE_TEXTO_INVALIDO,
+        )
 
-    id_externo = id_externo_fornecedor_contato(corpo.consulta_id, corpo.cnpj_basico)
+    if corpo.consulta_id is not None:
+        await buscar_consulta_por_id(pool, corpo.consulta_id)
+
+    id_externo = id_externo_fornecedor_contato(
+        corpo.cnpj_basico,
+        consulta_id=corpo.consulta_id,
+    )
     existente = await buscar_email_por_id_externo(pool, id_externo)
     zid = existente["id_mensagem_zenvia"] if existente else None
     if id_provedor_valido_para_idempotencia(zid):
@@ -129,8 +145,8 @@ async def executar_envio_email_fornecedor_contato(
         else CodigoTipoTemplate.CONTATO_FORNECEDOR_SEM_CADASTRO
     )
     contexto = {
-        "nome": corpo.nome.strip(),
-        "mensagem": corpo.mensagem.strip(),
+        "nome": nome_seguro,
+        "mensagem": mensagem_segura,
         "url_login": url_login_rastreado_para_id(id_externo),
     }
     pedido = PedidoEnvioEmail(
